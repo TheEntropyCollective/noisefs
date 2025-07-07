@@ -61,6 +61,39 @@ NoiseFS is a privacy-focused distributed file system that implements the OFFSyst
    ./noisefs -download <descriptor_cid> -output downloaded_file.txt
    ```
 
+### Option 3: FUSE Filesystem (Transparent Integration)
+
+1. **Mount NoiseFS as a filesystem:**
+   ```bash
+   go build ./cmd/noisefs-mount
+   ./noisefs-mount -mount /mnt/noisefs
+   ```
+
+2. **Use standard file operations:**
+   ```bash
+   # Copy files (automatically uploaded and anonymized)
+   cp document.pdf /mnt/noisefs/files/
+   cp image.jpg /mnt/noisefs/files/photos/
+   
+   # List files
+   ls /mnt/noisefs/files/
+   
+   # Read files (automatically downloaded and reconstructed)
+   cat /mnt/noisefs/files/document.pdf > local_copy.pdf
+   
+   # View filesystem structure
+   tree /mnt/noisefs/
+   ```
+
+3. **Unmount when done:**
+   ```bash
+   ./noisefs-mount -unmount -mount /mnt/noisefs
+   ```
+
+**Requirements for FUSE:**
+- macFUSE (macOS) or FUSE (Linux) installed
+- Build with FUSE support: `go build -tags fuse ./cmd/noisefs-mount`
+
 ## How It Works
 
 NoiseFS implements the OFFSystem architecture:
@@ -101,7 +134,8 @@ pkg/
 ├── cache/      # Block caching system
 ├── descriptors/# File metadata management
 ├── ipfs/       # IPFS integration
-└── noisefs/    # High-level client API
+├── noisefs/    # High-level client API
+└── fuse/       # FUSE filesystem integration
 ```
 
 ### Running Tests
@@ -124,8 +158,8 @@ go test ./...
 
 ## Roadmap
 
-- [ ] Unit test coverage
-- [ ] FUSE filesystem integration
+- [x] Unit test coverage
+- [x] FUSE filesystem integration
 - [ ] Performance optimizations
 - [ ] Privacy analysis and documentation
 - [ ] Mobile applications
