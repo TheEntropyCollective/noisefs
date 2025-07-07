@@ -1,50 +1,52 @@
-# NoiseFS Implementation Plan
+# NoiseFS Testing & Robustness Implementation Plan
 
 ## Current Status
--  Basic project structure created
--  Block management (splitting, XOR, assembly)
--  IPFS integration for block storage
--  CLI with upload functionality
+✅ **Completed**: Critical security fixes (SHA-256 block IDs, crypto integrity, secure randomization)  
+✅ **Completed**: Full test coverage for blocks package  
+✅ **Completed**: Web UI with RandomFS aesthetic
+✅ **Completed**: Basic project structure and core functionality
 
-## Next Implementation Steps
+## Phase 1: Cache Package Testing (High Priority)
+- [x] Add comprehensive unit tests for cache interface
+- [x] Test memory cache implementation (LRU eviction, popularity tracking)  
+- [x] Test cache operations (store, get, remove, clear)
+- [x] Test randomizer selection logic
+- [x] Test popularity increment and GetRandomizers functionality
 
-### 1. Descriptor Management
-- [x] Create descriptor data structure in `pkg/descriptors/descriptor.go`
-- [x] Implement descriptor serialization/deserialization (JSON format)
-- [x] Add descriptor storage to IPFS
-- [x] Create descriptor retrieval functionality
+## Phase 2: Core Package Testing (High Priority)  
+- [x] Add unit tests for descriptors package (serialization, IPFS storage)
+- [ ] Add unit tests for IPFS client package (block storage/retrieval)
+- [ ] Add unit tests for noisefs client package (high-level operations)
+- [ ] Test error handling and edge cases for all packages
 
-### 2. File Download Implementation
-- [x] Implement descriptor parsing in CLI
-- [x] Add download command to CLI
-- [x] Implement file reconstruction from descriptor
-- [x] Test round-trip (upload then download)
+## Phase 3: Integration Testing (Medium Priority)
+- [ ] Create end-to-end upload/download test
+- [ ] Test multi-file scenarios with block reuse
+- [ ] Test cache efficiency with repeated operations
+- [ ] Test error recovery scenarios
 
-### 3. Cache Management Foundation
-- [x] Create cache interface in `pkg/cache/cache.go`
-- [x] Implement basic in-memory cache
-- [x] Add cache for popular randomizer blocks
-- [x] Integrate cache into upload process
+## Phase 4: Robustness Improvements (Medium Priority)
+- [ ] Add proper error handling for IPFS connection failures
+- [ ] Add timeout handling for long operations
+- [ ] Add graceful degradation when cache is full
+- [ ] Add input validation and sanitization
 
-### 4. Improve Block Selection
-- [x] Replace random randomizer selection with cache-based selection
-- [x] Implement popularity tracking for blocks
-- [x] Add block reuse metrics
+## Implementation Approach
+- **Simple & Incremental**: One package at a time, following existing patterns
+- **Test-Driven**: Write tests first to understand expected behavior
+- **Minimal Changes**: Focus on testing existing code, not rewriting
+- **Error Coverage**: Test both happy path and error conditions
 
-### 5. Basic Testing
-- [ ] Add unit tests for block operations
-- [ ] Add integration test for upload/download
-- [ ] Create test helper utilities
+## Previous Completed Work
 
-## Design Decisions
-- Start with JSON descriptors for simplicity
-- Use in-memory cache initially (can add persistence later)
-- Focus on correctness over optimization initially
-- Keep changes small and incremental
+### Security Improvements (Recently Completed)
+- [x] Replace length-based block IDs with proper SHA-256 content hashing
+- [x] Implement content-addressed storage for IPFS compatibility
+- [x] Add cryptographic integrity verification
+- [x] Implement proper randomizer selection algorithms
+- [x] Add unit tests for blocks package
 
-## Web Interface Implementation
-
-### Completed Features
+### Web Interface Implementation (Previously Completed)
 - [x] Complete web server foundation with Go HTTP server
 - [x] File upload/download interface with drag-and-drop support
 - [x] Real-time metrics dashboard with auto-refresh
@@ -53,40 +55,15 @@
 - [x] Progress indicators and error handling
 - [x] Interactive elements with copy-to-clipboard functionality
 
-### Web UI Features
-- **Upload Interface**: Support for various file types and configurable block sizes
-- **Download Interface**: CID-based file retrieval with automatic filename detection
-- **Metrics Dashboard**: Live statistics on block reuse, cache efficiency, and storage overhead
-- **Visual Education**: Interactive diagram explaining the OFFSystem anonymization process
-- **User Experience**: Modern, responsive design with progress feedback
+### Core Features (Previously Completed)
+- [x] Block Management - Files split into 128KB blocks, XORed with randomizers
+- [x] IPFS Integration - Seamless storage and retrieval of anonymized blocks
+- [x] Descriptor System - JSON-based metadata for file reconstruction
+- [x] Cache System - LRU cache with popularity tracking for efficient block reuse
+- [x] Smart Block Selection - Prioritizes popular cached blocks as randomizers
+- [x] Metrics Tracking - Comprehensive statistics on performance
+- [x] CLI Interface - Complete upload/download functionality
+- [x] Web Interface - Modern browser-based UI with real-time metrics
 
 ## Review
-
-### Completed Implementation Summary
-
-The NoiseFS distributed file system now has a fully functional core implementation with an accessible web interface:
-
-**Core Features Implemented:**
-1. **Block Management** - Files are split into 128KB blocks, XORed with randomizers for anonymization
-2. **IPFS Integration** - Seamless storage and retrieval of anonymized blocks via IPFS
-3. **Descriptor System** - JSON-based metadata for file reconstruction with IPFS storage
-4. **Cache System** - LRU cache with popularity tracking for efficient block reuse
-5. **Smart Block Selection** - Prioritizes popular cached blocks as randomizers over random generation
-6. **Metrics Tracking** - Comprehensive statistics on block reuse, cache efficiency, and storage overhead
-7. **CLI Interface** - Complete upload/download functionality with metrics display
-8. **Web Interface** - Modern browser-based UI with real-time metrics and visual flow diagram
-
-**Key Achievements:**
-- **Privacy**: All stored blocks appear as random data due to XOR anonymization
-- **Efficiency**: Smart caching reduces redundant block generation and storage
-- **Observability**: Real-time metrics show system performance and efficiency
-- **Testability**: Round-trip test script validates upload/download functionality
-
-**Architecture Highlights:**
-- Modular design with clear separation of concerns
-- Cache-first approach for block selection optimizes storage efficiency
-- Metrics provide visibility into OFFSystem performance characteristics
-- All components follow Go best practices with proper error handling
-
-**Next Steps:**
-The foundation is solid for advanced features like unit testing, FUSE integration, and performance optimizations. The current implementation successfully demonstrates the OFFSystem principles while maintaining practical usability.
+Will be updated as we complete the testing phases.

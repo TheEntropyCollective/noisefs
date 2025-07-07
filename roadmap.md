@@ -1,7 +1,5 @@
 ## Roadmap
 - Web UI to test and observe the system
-- Marketing page
-- FUSE filesystem integration (separate repo)
 - Think about optimizations
 - Think about privacy guarantees for uploaders, peer nodes and downloaders of content
 - Think about how an adversary (i.e. government) could go after users 
@@ -10,3 +8,5 @@
 - Think about ways to improve the system based on the simulations
 - Compare NoiseFS to existing systems that serve similar purposes. Consider privacy, performance and storage efficiency 
 - Consider ways to protect downloaders from legal scrutiny (maybe by routing download requests through peers. i.e. ask trusted peers to each request some of the blocks so that it's not easy to tell exactly all the blocks that a user is looking to combine)
+- Create a marketing page
+- FUSE filesystem integration (separate repo)
