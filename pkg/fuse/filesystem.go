@@ -15,8 +15,9 @@ import (
 
 // FS implements the FUSE filesystem interface for NoiseFS
 type FS struct {
-	client    *noisefs.Client
-	mountPath string
+	client      *noisefs.Client
+	mountPath   string
+	fileManager *FileManager
 	
 	// Virtual filesystem structure
 	mu    sync.RWMutex
@@ -34,10 +35,11 @@ type FS struct {
 // NewFS creates a new FUSE filesystem for NoiseFS
 func NewFS(client *noisefs.Client, mountPath string) *FS {
 	fs := &FS{
-		client:    client,
-		mountPath: mountPath,
-		nodes:     make(map[uint64]*Node),
-		nextInode: 1,
+		client:      client,
+		mountPath:   mountPath,
+		fileManager: NewFileManager(client),
+		nodes:       make(map[uint64]*Node),
+		nextInode:   1,
 	}
 	
 	// Create root directory structure

@@ -105,8 +105,8 @@ func (f *File) Open(ctx context.Context, req *fuse.OpenRequest, resp *fuse.OpenR
 
 // loadFromNoiseFS loads file content from NoiseFS using the descriptor CID
 func (f *File) loadFromNoiseFS() error {
-	// This will be implemented when we integrate with descriptors
-	// For now, return success for empty files
+	// File content should already be loaded when the File was created
+	// by the FileManager, so this is mostly a no-op
 	return nil
 }
 
@@ -237,16 +237,10 @@ func (fh *FileHandle) Flush(ctx context.Context, req *fuse.FlushRequest) error {
 
 // uploadToNoiseFS uploads the file content to NoiseFS
 func (fh *FileHandle) uploadToNoiseFS() error {
-	fh.file.mu.RLock()
-	data := make([]byte, len(fh.file.data))
-	copy(data, fh.file.data)
-	fh.file.mu.RUnlock()
-	
-	// This will be implemented when we integrate with NoiseFS client
-	// For now, just mark as uploaded
-	fh.file.mu.Lock()
-	fh.file.uploaded = true
-	fh.file.mu.Unlock()
+	// Queue file for upload using FileManager
+	if fh.file.fs != nil && fh.file.fs.fileManager != nil {
+		fh.file.fs.fileManager.QueueUpload(fh.file)
+	}
 	
 	return nil
 }

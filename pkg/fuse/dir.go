@@ -90,9 +90,32 @@ func (d *Dir) Lookup(ctx context.Context, name string) (fs.Node, error) {
 
 // loadFileFromNoiseFS attempts to load a file from NoiseFS descriptors
 func (d *Dir) loadFileFromNoiseFS(name string) (fs.Node, error) {
-	// This will be implemented when we add descriptor loading
-	// For now, return ENOENT
-	return nil, syscall.ENOENT
+	// Try to load file using FileManager
+	file, err := d.fs.fileManager.LoadFile(name)
+	if err != nil {
+		return nil, syscall.ENOENT
+	}
+	
+	// Set filesystem reference and inode
+	file.fs = d.fs
+	file.inode = d.fs.nextInode()
+	
+	// Add to directory children
+	d.children[name] = &Node{
+		Type: NodeTypeFile,
+		File: file,
+	}
+	
+	// Register in filesystem
+	d.fs.mu.Lock()
+	d.fs.nodes[file.inode] = d.children[name]
+	d.fs.mu.Unlock()
+	
+	// Register file path
+	fullPath := d.getFullPath() + "/" + name
+	d.fs.fileManager.RegisterFilePath(fullPath, name)
+	
+	return file, nil
 }
 
 // ReadDirAll returns all directory entries
@@ -258,6 +281,23 @@ func (d *Dir) isUnderFiles() bool {
 	// For now, assume any directory that's not a root directory is under files
 	return d != d.fs.filesRoot && d != d.fs.cacheRoot && 
 		   d != d.fs.descriptorsRoot && d != d.fs.metaRoot
+}
+
+// getFullPath returns the full path of this directory
+func (d *Dir) getFullPath() string {
+	if d == d.fs.filesRoot {
+		return "/files"
+	} else if d == d.fs.cacheRoot {
+		return "/cache"
+	} else if d == d.fs.descriptorsRoot {
+		return "/descriptors"
+	} else if d == d.fs.metaRoot {
+		return "/.noisefs"
+	}
+	
+	// For subdirectories, this is simplified - in a full implementation
+	// we'd walk up the tree to build the full path
+	return "/files/" + d.name
 }
 
 // Interface check
