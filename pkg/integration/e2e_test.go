@@ -66,14 +66,37 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 			return nil, err
 		}
 		
-		// Get randomizer
-		randBlock, randCID, err := client.SelectRandomizer(len(blockData))
+		// Get two randomizers for 3-tuple
+		randBlock1, randCID1, randBlock2, randCID2, err := client.SelectTwoRandomizers(len(blockData))
 		if err != nil {
 			return nil, err
 		}
 		
-		// XOR with randomizer
-		anonymizedBlock, err := dataBlock.XOR(randBlock)
+		// Ensure data block is different from randomizers (very unlikely but possible with repeated content)
+		if dataBlock.ID == randBlock1.ID || dataBlock.ID == randBlock2.ID {
+			// Regenerate randomizers if conflict detected
+			randBlock1, err = blocks.NewRandomBlock(len(blockData))
+			if err != nil {
+				return nil, err
+			}
+			randBlock2, err = blocks.NewRandomBlock(len(blockData))
+			if err != nil {
+				return nil, err
+			}
+			
+			// Store and cache the new randomizers
+			randCID1, err = client.StoreBlockWithCache(randBlock1)
+			if err != nil {
+				return nil, err
+			}
+			randCID2, err = client.StoreBlockWithCache(randBlock2)
+			if err != nil {
+				return nil, err
+			}
+		}
+		
+		// XOR with both randomizers (3-tuple)
+		anonymizedBlock, err := dataBlock.XOR3(randBlock1, randBlock2)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +108,7 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 		}
 		
 		// Add to descriptor
-		err = desc.AddBlockPair(dataCID, randCID)
+		err = desc.AddBlockTriple(dataCID, randCID1, randCID2)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +117,7 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 	}
 	
 	// Record upload metrics
-	client.RecordUpload(int64(len(data)), int64(len(data)*2)) // Assume 2x storage overhead
+	client.RecordUpload(int64(len(data)), int64(len(data)*15/10)) // 1.5x storage overhead for 3-tuple
 	
 	return desc, nil
 }
@@ -103,23 +126,45 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 func simulateDownload(client *noisefs.Client, desc *descriptors.Descriptor) ([]byte, error) {
 	var result bytes.Buffer
 	
-	for _, blockPair := range desc.Blocks {
+	for i, blockPair := range desc.Blocks {
 		// Retrieve anonymized data block
 		anonymizedBlock, err := client.RetrieveBlockWithCache(blockPair.DataCID)
 		if err != nil {
 			return nil, err
 		}
 		
-		// Retrieve randomizer block
-		randBlock, err := client.RetrieveBlockWithCache(blockPair.RandomizerCID)
+		// Get randomizer CIDs for this block
+		randCID1, randCID2, err := desc.GetRandomizerCIDs(i)
 		if err != nil {
 			return nil, err
 		}
 		
-		// XOR to recover original data
-		originalBlock, err := anonymizedBlock.XOR(randBlock)
+		// Retrieve first randomizer block
+		randBlock1, err := client.RetrieveBlockWithCache(randCID1)
 		if err != nil {
 			return nil, err
+		}
+		
+		var originalBlock *blocks.Block
+		
+		if desc.IsThreeTuple() {
+			// Retrieve second randomizer block for 3-tuple
+			randBlock2, err := client.RetrieveBlockWithCache(randCID2)
+			if err != nil {
+				return nil, err
+			}
+			
+			// XOR3 to recover original data
+			originalBlock, err = anonymizedBlock.XOR3(randBlock1, randBlock2)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// Legacy 2-tuple XOR
+			originalBlock, err = anonymizedBlock.XOR(randBlock1)
+			if err != nil {
+				return nil, err
+			}
 		}
 		
 		// Append to result

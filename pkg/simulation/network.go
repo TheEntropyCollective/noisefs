@@ -119,9 +119,12 @@ func (sim *NetworkSimulation) Run() error {
 	}
 }
 
-// generateInitialFiles creates initial files following a popularity distribution
+// generateInitialFiles creates initial files following realistic content patterns
 func (sim *NetworkSimulation) generateInitialFiles() {
-	fmt.Printf("Generating %d initial files...\n", sim.config.NumFiles)
+	fmt.Printf("Generating %d initial files with realistic content patterns...\n", sim.config.NumFiles)
+	
+	// Create common content patterns that will be shared across files
+	commonPatterns := sim.generateCommonContentPatterns()
 	
 	for i := 0; i < sim.config.NumFiles; i++ {
 		// Generate file with random size within range
@@ -130,6 +133,9 @@ func (sim *NetworkSimulation) generateInitialFiles() {
 		// Assign popularity using Zipf distribution
 		popularity := sim.calculatePopularity(i)
 		
+		// Determine content type based on realistic distribution
+		contentType := sim.selectContentType(i)
+		
 		file := &SimulatedFile{
 			id:           fmt.Sprintf("file-%d", i),
 			originalSize: int64(size),
@@ -137,8 +143,8 @@ func (sim *NetworkSimulation) generateInitialFiles() {
 			uploadTime:   time.Now(),
 		}
 		
-		// Generate blocks for file
-		sim.generateBlocksForFile(file)
+		// Generate blocks for file using realistic content patterns
+		sim.generateRealisticBlocksForFile(file, contentType, commonPatterns)
 		
 		// Assign file to a random node
 		nodeIndex := rand.Intn(len(sim.nodes))
@@ -165,8 +171,9 @@ func (sim *NetworkSimulation) generateBlocksForFile(file *SimulatedFile) {
 			size = file.originalSize - (i * blockSize)
 		}
 		
-		// Simulate block reuse probability based on file popularity
-		reuseProb := file.popularity * 0.1 // More popular files have higher reuse
+		// Simulate block reuse probability based on file popularity (3-tuple)
+		// With 3-tuple, we need 2 randomizers per block, so reuse is more likely
+		reuseProb := file.popularity * 0.3 // Higher reuse probability for 3-tuple
 		isReused := rand.Float64() < reuseProb
 		
 		file.blocks[i] = SimulatedBlock{
@@ -183,14 +190,22 @@ func (sim *NetworkSimulation) calculatePopularity(rank int) float64 {
 	return 1.0 / (float64(rank+1) * sim.config.PopularityFactor)
 }
 
-// calculateStoredSize calculates total storage needed for a file
+// calculateStoredSize calculates total storage needed for a file (3-tuple implementation)
 func (sim *NetworkSimulation) calculateStoredSize(file *SimulatedFile) int64 {
 	var totalSize int64
 	for _, block := range file.blocks {
-		if !block.isReused {
-			totalSize += block.size * 2 // Original block + randomizer
+		// 3-tuple storage calculation:
+		// - Each block needs 2 randomizers
+		// - With reuse, we approach the theoretical 1.5x overhead
+		
+		if block.isReused {
+			// Reused blocks: randomizers are likely to be found in cache
+			// Optimal case approaches 1.5x overhead as per OFFSystem theory
+			totalSize += block.size * 15 / 10 // 1.5x
 		} else {
-			totalSize += block.size // Only original block (randomizer reused)
+			// New blocks: need to store new randomizers initially
+			// But this will improve as the network grows and cache fills
+			totalSize += block.size * 2 // Conservative 2x for new blocks
 		}
 	}
 	return totalSize
@@ -378,4 +393,240 @@ func (sim *NetworkSimulation) GetGlobalMetrics() *GlobalMetrics {
 	}
 	
 	return metrics
+}
+
+// ContentType represents different types of content
+type ContentType int
+
+const (
+	TextDocument ContentType = iota
+	MediaFile
+	ArchiveFile
+	CodeRepository
+	ConfigFile
+)
+
+// CommonContentPattern represents shared content patterns
+type CommonContentPattern struct {
+	id      string
+	content []byte
+	usage   int // How many times this pattern has been used
+}
+
+// generateCommonContentPatterns creates realistic shared content
+func (sim *NetworkSimulation) generateCommonContentPatterns() []*CommonContentPattern {
+	patterns := []*CommonContentPattern{
+		// Common file headers
+		{id: "pdf-header", content: []byte("%PDF-1.4\n%âãÏÓ"), usage: 0},
+		{id: "zip-header", content: []byte("PK\x03\x04"), usage: 0},
+		{id: "jpeg-header", content: []byte("\xFF\xD8\xFF\xE0"), usage: 0},
+		{id: "png-header", content: []byte("\x89PNG\r\n\x1a\n"), usage: 0},
+		
+		// Common text patterns
+		{id: "lorem-ipsum", content: []byte("Lorem ipsum dolor sit amet, consectetur adipiscing elit. "), usage: 0},
+		{id: "copyright", content: []byte("Copyright (c) 2024 All rights reserved. "), usage: 0},
+		{id: "config-header", content: []byte("# Configuration File\n# Generated automatically\n"), usage: 0},
+		
+		// Common code patterns
+		{id: "import-common", content: []byte("import (\n\t\"fmt\"\n\t\"log\"\n\t\"os\"\n)"), usage: 0},
+		{id: "struct-common", content: []byte("type Config struct {\n\tHost string\n\tPort int\n}"), usage: 0},
+		
+		// Common data patterns
+		{id: "json-template", content: []byte("{\"version\":\"1.0\",\"timestamp\":"), usage: 0},
+		{id: "xml-header", content: []byte("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"), usage: 0},
+		
+		// Padding patterns (very common in files)
+		{id: "zeros", content: make([]byte, 64), usage: 0}, // 64 bytes of zeros
+		{id: "spaces", content: []byte("                                                                "), usage: 0}, // 64 spaces
+	}
+	
+	return patterns
+}
+
+// selectContentType determines content type based on realistic distribution
+func (sim *NetworkSimulation) selectContentType(fileIndex int) ContentType {
+	// Realistic distribution of file types
+	switch fileIndex % 10 {
+	case 0, 1, 2: // 30% text documents
+		return TextDocument
+	case 3, 4: // 20% media files
+		return MediaFile
+	case 5, 6: // 20% archives
+		return ArchiveFile
+	case 7, 8: // 20% code repositories
+		return CodeRepository
+	default: // 10% config files
+		return ConfigFile
+	}
+}
+
+// generateRealisticBlocksForFile creates blocks with realistic content patterns
+func (sim *NetworkSimulation) generateRealisticBlocksForFile(file *SimulatedFile, contentType ContentType, patterns []*CommonContentPattern) {
+	blockSize := int64(128 * 1024) // 128KB blocks
+	numBlocks := (file.originalSize + blockSize - 1) / blockSize
+	
+	file.blocks = make([]SimulatedBlock, numBlocks)
+	
+	for i := int64(0); i < numBlocks; i++ {
+		size := blockSize
+		if i == numBlocks-1 {
+			size = file.originalSize - (i * blockSize)
+		}
+		
+		// Determine if this block should reuse existing content
+		var isReused bool
+		var blockId string
+		
+		// First block often contains headers/metadata (high reuse probability)
+		if i == 0 {
+			headerPattern := sim.selectHeaderPattern(contentType, patterns)
+			if headerPattern != nil {
+				blockId = fmt.Sprintf("shared-%s", headerPattern.id)
+				isReused = true
+				headerPattern.usage++
+			}
+		}
+		
+		// Common content blocks have higher reuse probability
+		if !isReused {
+			reuseProb := sim.calculateBlockReuseProb(file, contentType, i, numBlocks)
+			if rand.Float64() < reuseProb {
+				// Select a common pattern to reuse
+				pattern := sim.selectCommonPattern(patterns, contentType)
+				if pattern != nil {
+					blockId = fmt.Sprintf("shared-%s-%d", pattern.id, pattern.usage/5) // Group by usage frequency
+					isReused = true
+					pattern.usage++
+				}
+			}
+		}
+		
+		// If not reused, generate unique block ID
+		if !isReused {
+			blockId = fmt.Sprintf("unique-%s-%d", file.id, i)
+		}
+		
+		file.blocks[i] = SimulatedBlock{
+			id:       blockId,
+			size:     size,
+			isReused: isReused,
+		}
+	}
+}
+
+// selectHeaderPattern selects appropriate header pattern for content type
+func (sim *NetworkSimulation) selectHeaderPattern(contentType ContentType, patterns []*CommonContentPattern) *CommonContentPattern {
+	switch contentType {
+	case MediaFile:
+		// Randomly select image/media header
+		options := []string{"pdf-header", "jpeg-header", "png-header"}
+		selected := options[rand.Intn(len(options))]
+		for _, pattern := range patterns {
+			if pattern.id == selected {
+				return pattern
+			}
+		}
+	case ArchiveFile:
+		for _, pattern := range patterns {
+			if pattern.id == "zip-header" {
+				return pattern
+			}
+		}
+	case CodeRepository:
+		for _, pattern := range patterns {
+			if pattern.id == "import-common" {
+				return pattern
+			}
+		}
+	case ConfigFile:
+		for _, pattern := range patterns {
+			if pattern.id == "config-header" {
+				return pattern
+			}
+		}
+	}
+	return nil
+}
+
+// selectCommonPattern selects a common content pattern for reuse
+func (sim *NetworkSimulation) selectCommonPattern(patterns []*CommonContentPattern, contentType ContentType) *CommonContentPattern {
+	// Filter patterns relevant to content type
+	var candidates []*CommonContentPattern
+	
+	switch contentType {
+	case TextDocument:
+		for _, pattern := range patterns {
+			if pattern.id == "lorem-ipsum" || pattern.id == "copyright" || pattern.id == "spaces" {
+				candidates = append(candidates, pattern)
+			}
+		}
+	case CodeRepository:
+		for _, pattern := range patterns {
+			if pattern.id == "struct-common" || pattern.id == "import-common" || pattern.id == "spaces" {
+				candidates = append(candidates, pattern)
+			}
+		}
+	case ConfigFile:
+		for _, pattern := range patterns {
+			if pattern.id == "json-template" || pattern.id == "xml-header" || pattern.id == "config-header" {
+				candidates = append(candidates, pattern)
+			}
+		}
+	default:
+		// For other types, use padding patterns
+		for _, pattern := range patterns {
+			if pattern.id == "zeros" || pattern.id == "spaces" {
+				candidates = append(candidates, pattern)
+			}
+		}
+	}
+	
+	if len(candidates) == 0 {
+		return nil
+	}
+	
+	return candidates[rand.Intn(len(candidates))]
+}
+
+// calculateBlockReuseProb calculates probability of block reuse based on realistic factors
+func (sim *NetworkSimulation) calculateBlockReuseProb(file *SimulatedFile, contentType ContentType, blockIndex, totalBlocks int64) float64 {
+	baseProb := 0.1 // Base 10% chance
+	
+	// File popularity increases reuse probability
+	popularityBonus := file.popularity * 0.4
+	
+	// Content type affects reuse probability
+	var contentBonus float64
+	switch contentType {
+	case TextDocument:
+		contentBonus = 0.3 // Text files often have repeated content
+	case CodeRepository:
+		contentBonus = 0.25 // Code has common patterns
+	case ConfigFile:
+		contentBonus = 0.4 // Config files are very repetitive
+	case ArchiveFile:
+		contentBonus = 0.1 // Archives are typically unique
+	case MediaFile:
+		contentBonus = 0.05 // Media files are mostly unique
+	}
+	
+	// Position-based probability (middle blocks more likely to be padding/common content)
+	var positionBonus float64
+	if blockIndex > 0 && blockIndex < totalBlocks-1 {
+		positionBonus = 0.2 // Middle blocks
+	} else {
+		positionBonus = 0.1 // First/last blocks
+	}
+	
+	// 3-tuple implementation: higher reuse due to randomizer requirements
+	tupleBonus := 0.15
+	
+	totalProb := baseProb + popularityBonus + contentBonus + positionBonus + tupleBonus
+	
+	// Cap at reasonable maximum
+	if totalProb > 0.8 {
+		totalProb = 0.8
+	}
+	
+	return totalProb
 }

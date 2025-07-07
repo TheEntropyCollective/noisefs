@@ -35,7 +35,7 @@ func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, err
 	}, nil
 }
 
-// SelectRandomizer selects a randomizer block for the given block size
+// SelectRandomizer selects a randomizer block for the given block size (legacy 2-tuple support)
 func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) {
 	// Try to get popular blocks from cache first
 	randomizers, err := c.cache.GetRandomizers(10)
@@ -80,6 +80,128 @@ func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) 
 	c.metrics.RecordBlockGeneration()
 	
 	return randBlock, cid, nil
+}
+
+// SelectTwoRandomizers selects two randomizer blocks for 3-tuple anonymization
+func (c *Client) SelectTwoRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
+	// Try to get popular blocks from cache first
+	randomizers, err := c.cache.GetRandomizers(20) // Get more blocks for better selection
+	if err == nil && len(randomizers) > 0 {
+		// Filter by matching size
+		suitableBlocks := make([]*cache.BlockInfo, 0)
+		for _, info := range randomizers {
+			if info.Size == blockSize {
+				suitableBlocks = append(suitableBlocks, info)
+			}
+		}
+		
+		// If we have at least 2 suitable cached blocks, use them
+		if len(suitableBlocks) >= 2 {
+			// Select first randomizer
+			index1, err := rand.Int(rand.Reader, big.NewInt(int64(len(suitableBlocks))))
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to generate random index for first randomizer: %w", err)
+			}
+			
+			selected1 := suitableBlocks[index1.Int64()]
+			
+			// Remove selected block from pool and select second randomizer
+			remainingBlocks := make([]*cache.BlockInfo, 0, len(suitableBlocks)-1)
+			for i, block := range suitableBlocks {
+				if i != int(index1.Int64()) {
+					remainingBlocks = append(remainingBlocks, block)
+				}
+			}
+			
+			index2, err := rand.Int(rand.Reader, big.NewInt(int64(len(remainingBlocks))))
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to generate random index for second randomizer: %w", err)
+			}
+			
+			selected2 := remainingBlocks[index2.Int64()]
+			
+			// Update popularity and metrics
+			c.cache.IncrementPopularity(selected1.CID)
+			c.cache.IncrementPopularity(selected2.CID)
+			c.metrics.RecordBlockReuse()
+			c.metrics.RecordBlockReuse()
+			
+			return selected1.Block, selected1.CID, selected2.Block, selected2.CID, nil
+		}
+		
+		// If we have exactly 1 suitable cached block, use it and generate another
+		if len(suitableBlocks) == 1 {
+			selected1 := suitableBlocks[0]
+			c.cache.IncrementPopularity(selected1.CID)
+			c.metrics.RecordBlockReuse()
+			
+			// Generate second randomizer
+			randBlock2, err := blocks.NewRandomBlock(blockSize)
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+			}
+			
+			cid2, err := c.ipfsClient.StoreBlock(randBlock2)
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+			}
+			
+			c.cache.Store(cid2, randBlock2)
+			c.metrics.RecordBlockGeneration()
+			
+			return selected1.Block, selected1.CID, randBlock2, cid2, nil
+		}
+	}
+	
+	// No suitable cached blocks or insufficient blocks, generate both randomizers
+	// Ensure they're different by generating different random data
+	randBlock1, err := blocks.NewRandomBlock(blockSize)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to create first randomizer: %w", err)
+	}
+	
+	// Generate second randomizer, retry if identical to first (extremely unlikely but possible)
+	var randBlock2 *blocks.Block
+	for attempts := 0; attempts < 10; attempts++ {
+		randBlock2, err = blocks.NewRandomBlock(blockSize)
+		if err != nil {
+			return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+		}
+		
+		// Check if blocks are different (compare IDs which are content hashes)
+		if randBlock1.ID != randBlock2.ID {
+			break
+		}
+		
+		// If we reach max attempts, this is extremely unlikely with crypto random
+		if attempts == 9 {
+			return nil, "", nil, "", fmt.Errorf("failed to generate different randomizer blocks after 10 attempts")
+		}
+	}
+	
+	// Store both in IPFS
+	cid1, err := c.ipfsClient.StoreBlock(randBlock1)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to store first randomizer: %w", err)
+	}
+	
+	cid2, err := c.ipfsClient.StoreBlock(randBlock2)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+	}
+	
+	// Ensure CIDs are different (they should be since block content is different)
+	if cid1 == cid2 {
+		return nil, "", nil, "", fmt.Errorf("generated randomizers have identical CIDs")
+	}
+	
+	// Cache both randomizers
+	c.cache.Store(cid1, randBlock1)
+	c.cache.Store(cid2, randBlock2)
+	c.metrics.RecordBlockGeneration()
+	c.metrics.RecordBlockGeneration()
+	
+	return randBlock1, cid1, randBlock2, cid2, nil
 }
 
 // StoreBlockWithCache stores a block in IPFS and caches it

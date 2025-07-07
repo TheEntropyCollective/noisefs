@@ -59,6 +59,24 @@ func (b *Block) XOR(other *Block) (*Block, error) {
 	return NewBlock(result)
 }
 
+// XOR3 performs XOR operation between three blocks (data XOR randomizer1 XOR randomizer2)
+// This implements the 3-tuple anonymization used in OFFSystem
+func (b *Block) XOR3(randomizer1, randomizer2 *Block) (*Block, error) {
+	if len(b.Data) != len(randomizer1.Data) {
+		return nil, errors.New("data block and randomizer1 must have the same size")
+	}
+	if len(b.Data) != len(randomizer2.Data) {
+		return nil, errors.New("data block and randomizer2 must have the same size")
+	}
+	
+	result := make([]byte, len(b.Data))
+	for i := range b.Data {
+		result[i] = b.Data[i] ^ randomizer1.Data[i] ^ randomizer2.Data[i]
+	}
+	
+	return NewBlock(result)
+}
+
 // Size returns the size of the block data
 func (b *Block) Size() int {
 	return len(b.Data)
