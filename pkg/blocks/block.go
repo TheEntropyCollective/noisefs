@@ -2,6 +2,8 @@ package blocks
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
@@ -62,9 +64,14 @@ func (b *Block) Size() int {
 	return len(b.Data)
 }
 
-// generateBlockID generates a unique identifier for a block
+// VerifyIntegrity checks if the block ID matches the content hash
+func (b *Block) VerifyIntegrity() bool {
+	expectedID := generateBlockID(b.Data)
+	return b.ID == expectedID
+}
+
+// generateBlockID generates a content-addressed identifier for a block
 func generateBlockID(data []byte) string {
-	// For now, using a simple approach
-	// In production, this would use a proper content-addressed hash
-	return fmt.Sprintf("block_%d", len(data))
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
 }

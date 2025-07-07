@@ -1,9 +1,10 @@
 package noisefs
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
@@ -49,7 +50,13 @@ func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) 
 		
 		// If we have suitable cached blocks, use one
 		if len(suitableBlocks) > 0 {
-			selected := suitableBlocks[rand.Intn(len(suitableBlocks))]
+			// Use cryptographically secure random selection
+			index, err := rand.Int(rand.Reader, big.NewInt(int64(len(suitableBlocks))))
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to generate random index: %w", err)
+			}
+			
+			selected := suitableBlocks[index.Int64()]
 			c.cache.IncrementPopularity(selected.CID)
 			c.metrics.RecordBlockReuse()
 			return selected.Block, selected.CID, nil
