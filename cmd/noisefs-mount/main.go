@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
@@ -27,6 +29,13 @@ func main() {
 		unmount      = flag.Bool("unmount", false, "Unmount filesystem")
 		list         = flag.Bool("list", false, "List mounted filesystems")
 		help         = flag.Bool("help", false, "Show help message")
+		
+		// Index management flags
+		indexFile    = flag.String("index", "", "Custom index file path (default: ~/.noisefs/index.json)")
+		addFile      = flag.String("add-file", "", "Add file to index: filename:descriptor_cid:size")
+		removeFile   = flag.String("remove-file", "", "Remove file from index")
+		listFiles    = flag.Bool("list-files", false, "List files in index")
+		showIndex    = flag.Bool("show-index", false, "Show index file path and stats")
 	)
 	flag.Parse()
 
@@ -48,12 +57,18 @@ func main() {
 		return
 	}
 
+	// Handle index management operations
+	if *showIndex || *listFiles || *addFile != "" || *removeFile != "" {
+		handleIndexOperations(*indexFile, *showIndex, *listFiles, *addFile, *removeFile)
+		return
+	}
+
 	if *mountPath == "" {
 		log.Fatal("Mount path is required")
 	}
 
 	// Mount filesystem
-	mountFS(*mountPath, *volumeName, *ipfsAPI, *cacheSize, *readOnly, *allowOther, *debug, *daemon, *pidFile)
+	mountFS(*mountPath, *volumeName, *ipfsAPI, *cacheSize, *readOnly, *allowOther, *debug, *daemon, *pidFile, *indexFile)
 }
 
 func showHelp() {
@@ -84,6 +99,19 @@ func showHelp() {
 	fmt.Println("  # List mounted filesystems")
 	fmt.Println("  noisefs-mount -list")
 	fmt.Println()
+	fmt.Println("Index Management:")
+	fmt.Println("  # Show index info")
+	fmt.Println("  noisefs-mount -show-index")
+	fmt.Println()
+	fmt.Println("  # List files in index")
+	fmt.Println("  noisefs-mount -list-files")
+	fmt.Println()
+	fmt.Println("  # Add file to index")
+	fmt.Println("  noisefs-mount -add-file filename.txt:QmXXX...:1024")
+	fmt.Println()
+	fmt.Println("  # Remove file from index")
+	fmt.Println("  noisefs-mount -remove-file filename.txt")
+	fmt.Println()
 	fmt.Println("Requirements:")
 	fmt.Println("  - IPFS daemon running at specified endpoint")
 	fmt.Println("  - macFUSE or FUSE installed (macOS/Linux)")
@@ -95,7 +123,7 @@ func showHelp() {
 	fmt.Println("  cat /mnt/noisefs/files/file.txt")
 }
 
-func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile string) {
+func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile string) {
 	// Clean mount path
 	mountPath = filepath.Clean(mountPath)
 
@@ -133,9 +161,9 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 		if pidFile != "" {
 			fmt.Printf("PID file: %s\n", pidFile)
 		}
-		err = fuse.Daemon(client, opts, pidFile)
+		err = fuse.DaemonWithIndex(client, ipfsClient, opts, pidFile, indexFile)
 	} else {
-		err = fuse.Mount(client, opts)
+		err = fuse.MountWithIndex(client, ipfsClient, opts, indexFile)
 	}
 
 	if err != nil {
@@ -176,6 +204,82 @@ func listMounts() {
 		fmt.Printf("Read-Only:  %v\n", mount.ReadOnly)
 		fmt.Printf("PID:        %d\n", mount.PID)
 		fmt.Println()
+	}
+}
+
+func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile, removeFile string) {
+	// Get index path
+	var indexPath string
+	var err error
+	
+	if indexFile != "" {
+		indexPath = indexFile
+	} else {
+		indexPath, err = fuse.GetDefaultIndexPath()
+		if err != nil {
+			log.Fatalf("Failed to get index path: %v", err)
+		}
+	}
+	
+	// Create and load index
+	index := fuse.NewFileIndex(indexPath)
+	if err := index.LoadIndex(); err != nil {
+		log.Fatalf("Failed to load index: %v", err)
+	}
+	
+	// Handle operations
+	if showIndex {
+		fmt.Printf("Index file: %s\n", indexPath)
+		fmt.Printf("Files: %d\n", index.GetSize())
+		if index.IsDirty() {
+			fmt.Println("Status: Has unsaved changes")
+		} else {
+			fmt.Println("Status: Saved")
+		}
+	}
+	
+	if listFiles {
+		files := index.ListFiles()
+		if len(files) == 0 {
+			fmt.Println("No files in index")
+		} else {
+			fmt.Printf("Files in index (%d):\n", len(files))
+			for path, entry := range files {
+				fmt.Printf("  %s -> %s (%d bytes, %s)\n", 
+					path, entry.DescriptorCID, entry.FileSize, entry.CreatedAt.Format("2006-01-02 15:04:05"))
+			}
+		}
+	}
+	
+	if addFile != "" {
+		parts := strings.Split(addFile, ":")
+		if len(parts) != 3 {
+			log.Fatal("add-file format: filename:descriptor_cid:size")
+		}
+		
+		filename := parts[0]
+		descriptorCID := parts[1]
+		fileSize, err := strconv.ParseInt(parts[2], 10, 64)
+		if err != nil {
+			log.Fatalf("Invalid file size: %v", err)
+		}
+		
+		index.AddFile(filename, descriptorCID, fileSize)
+		if err := index.SaveIndex(); err != nil {
+			log.Fatalf("Failed to save index: %v", err)
+		}
+		fmt.Printf("Added file: %s\n", filename)
+	}
+	
+	if removeFile != "" {
+		if index.RemoveFile(removeFile) {
+			if err := index.SaveIndex(); err != nil {
+				log.Fatalf("Failed to save index: %v", err)
+			}
+			fmt.Printf("Removed file: %s\n", removeFile)
+		} else {
+			fmt.Printf("File not found: %s\n", removeFile)
+		}
 	}
 }
 
