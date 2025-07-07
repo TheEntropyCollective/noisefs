@@ -11,6 +11,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
 )
 
@@ -33,6 +34,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Initialize logging
+	if err := logging.InitFromConfig(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.Output, cfg.Logging.File); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		os.Exit(1)
+	}
+	
+	logger := logging.GetGlobalLogger().WithComponent("noisefs")
 	
 	// Apply command-line overrides
 	if *ipfsAPI != "" {
@@ -46,38 +55,64 @@ func main() {
 	}
 	
 	// Create IPFS client
+	logger.Info("Connecting to IPFS", map[string]interface{}{
+		"endpoint": cfg.IPFS.APIEndpoint,
+	})
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to IPFS: %v\n", err)
+		logger.Error("Failed to connect to IPFS", map[string]interface{}{
+			"endpoint": cfg.IPFS.APIEndpoint,
+			"error":    err.Error(),
+		})
 		os.Exit(1)
 	}
 	
 	// Create cache
+	logger.Debug("Initializing block cache", map[string]interface{}{
+		"cache_size": cfg.Cache.BlockCacheSize,
+	})
 	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
 	
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(ipfsClient, blockCache)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create NoiseFS client: %v\n", err)
+		logger.Error("Failed to create NoiseFS client", map[string]interface{}{
+			"error": err.Error(),
+		})
 		os.Exit(1)
 	}
 	
 	if *upload != "" {
-		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize); err != nil {
-			fmt.Fprintf(os.Stderr, "Upload failed: %v\n", err)
+		logger.Info("Starting file upload", map[string]interface{}{
+			"file":       *upload,
+			"block_size": cfg.Performance.BlockSize,
+		})
+		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, logger); err != nil {
+			logger.Error("Upload failed", map[string]interface{}{
+				"file":  *upload,
+				"error": err.Error(),
+			})
 			os.Exit(1)
 		}
-		showMetrics(client)
+		showMetrics(client, logger)
 	} else if *download != "" {
 		if *output == "" {
-			fmt.Fprintf(os.Stderr, "Output file path required for download\n")
+			logger.Error("Output file path required for download", nil)
 			os.Exit(1)
 		}
-		if err := downloadFile(ipfsClient, client, *download, *output); err != nil {
-			fmt.Fprintf(os.Stderr, "Download failed: %v\n", err)
+		logger.Info("Starting file download", map[string]interface{}{
+			"descriptor_cid": *download,
+			"output_file":    *output,
+		})
+		if err := downloadFile(ipfsClient, client, *download, *output, logger); err != nil {
+			logger.Error("Download failed", map[string]interface{}{
+				"descriptor_cid": *download,
+				"output_file":    *output,
+				"error":          err.Error(),
+			})
 			os.Exit(1)
 		}
-		showMetrics(client)
+		showMetrics(client, logger)
 	} else {
 		flag.Usage()
 	}
@@ -96,7 +131,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int) error {
+func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, logger *logging.Logger) error {
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -117,13 +152,17 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	}
 	
 	// Split file into blocks
-	fmt.Printf("Splitting file into %d byte blocks...\n", blockSize)
+	logger.Info("Splitting file into blocks", map[string]interface{}{
+		"block_size": blockSize,
+	})
 	fileBlocks, err := splitter.Split(file)
 	if err != nil {
 		return fmt.Errorf("failed to split file: %w", err)
 	}
 	
-	fmt.Printf("Created %d blocks\n", len(fileBlocks))
+	logger.Info("File split into blocks", map[string]interface{}{
+		"block_count": len(fileBlocks),
+	})
 	
 	// Create descriptor
 	descriptor := descriptors.NewDescriptor(
@@ -189,13 +228,17 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		return fmt.Errorf("failed to store descriptor: %w", err)
 	}
 	
-	// Display results
+	// Log upload completion
+	logger.Info("Upload completed successfully", map[string]interface{}{
+		"descriptor_cid": descriptorCID,
+		"file_name":      filepath.Base(filePath),
+		"file_size":      fileInfo.Size(),
+		"block_count":    len(fileBlocks),
+	})
+	
+	// Display results for user (keep some console output for UX)
 	fmt.Println("\nUpload complete!")
 	fmt.Printf("Descriptor CID: %s\n", descriptorCID)
-	fmt.Println("\nDescriptor content:")
-	
-	descJSON, _ := descriptor.ToJSON()
-	fmt.Println(string(descJSON))
 	
 	// Record upload metrics
 	totalStoredBytes := int64(0)
@@ -209,7 +252,7 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	return nil
 }
 
-func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string) error {
+func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, logger *logging.Logger) error {
 	// Create descriptor store
 	store, err := descriptors.NewStore(ipfsClient)
 	if err != nil {
@@ -305,9 +348,25 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 }
 
 // showMetrics displays current NoiseFS metrics
-func showMetrics(client *noisefs.Client) {
+func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 	metrics := client.GetMetrics()
 	
+	// Log performance metrics for analysis
+	logger.Info("Performance metrics", map[string]interface{}{
+		"block_reuse_rate":        metrics.BlockReuseRate,
+		"blocks_reused":           metrics.BlocksReused,
+		"blocks_generated":        metrics.BlocksGenerated,
+		"cache_hit_rate":          metrics.CacheHitRate,
+		"cache_hits":              metrics.CacheHits,
+		"cache_misses":            metrics.CacheMisses,
+		"storage_efficiency":      metrics.StorageEfficiency,
+		"total_uploads":           metrics.TotalUploads,
+		"total_downloads":         metrics.TotalDownloads,
+		"bytes_uploaded_original": metrics.BytesUploadedOriginal,
+		"bytes_stored_ipfs":       metrics.BytesStoredIPFS,
+	})
+	
+	// Keep console output for user visibility
 	fmt.Println("\n--- NoiseFS Metrics ---")
 	fmt.Printf("Block Reuse Rate: %.1f%% (%d reused, %d generated)\n", 
 		metrics.BlockReuseRate, metrics.BlocksReused, metrics.BlocksGenerated)

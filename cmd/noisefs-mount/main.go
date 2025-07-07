@@ -13,6 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
 )
 
@@ -71,6 +72,13 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Initialize logging
+	if err := logging.InitFromConfig(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.Output, cfg.Logging.File); err != nil {
+		log.Fatalf("Failed to initialize logging: %v", err)
+	}
+	
+	logger := logging.GetGlobalLogger().WithComponent("noisefs-mount")
+
 	// Apply command-line overrides
 	if *mountPath != "" {
 		cfg.FUSE.MountPath = *mountPath
@@ -93,12 +101,22 @@ func main() {
 	cfg.FUSE.Debug = *debug
 
 	if cfg.FUSE.MountPath == "" {
-		log.Fatal("Mount path is required")
+		logger.Error("Mount path is required", nil)
+		os.Exit(1)
 	}
+
+	logger.Info("Starting NoiseFS mount", map[string]interface{}{
+		"mount_path":  cfg.FUSE.MountPath,
+		"volume_name": cfg.FUSE.VolumeName,
+		"ipfs_api":    cfg.IPFS.APIEndpoint,
+		"read_only":   cfg.FUSE.ReadOnly,
+		"debug":       cfg.FUSE.Debug,
+		"daemon":      *daemon,
+	})
 
 	// Mount filesystem
 	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
-		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath)
+		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, logger)
 }
 
 func showHelp() {
@@ -166,23 +184,36 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile string) {
+func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile string, logger *logging.Logger) {
 	// Clean mount path
 	mountPath = filepath.Clean(mountPath)
 
 	// Create IPFS client
+	logger.Info("Connecting to IPFS for mount", map[string]interface{}{
+		"ipfs_api": ipfsAPI,
+	})
 	ipfsClient, err := ipfs.NewClient(ipfsAPI)
 	if err != nil {
-		log.Fatalf("Failed to create IPFS client: %v", err)
+		logger.Error("Failed to create IPFS client", map[string]interface{}{
+			"ipfs_api": ipfsAPI,
+			"error":    err.Error(),
+		})
+		os.Exit(1)
 	}
 
 	// Create cache
+	logger.Debug("Initializing cache for mount", map[string]interface{}{
+		"cache_size": cacheSize,
+	})
 	blockCache := cache.NewMemoryCache(cacheSize)
 
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(ipfsClient, blockCache)
 	if err != nil {
-		log.Fatalf("Failed to create NoiseFS client: %v", err)
+		logger.Error("Failed to create NoiseFS client", map[string]interface{}{
+			"error": err.Error(),
+		})
+		os.Exit(1)
 	}
 
 	// Mount options
