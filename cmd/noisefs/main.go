@@ -47,15 +47,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Upload failed: %v\n", err)
 			os.Exit(1)
 		}
+		showMetrics(client)
 	} else if *download != "" {
 		if *output == "" {
 			fmt.Fprintf(os.Stderr, "Output file path required for download\n")
 			os.Exit(1)
 		}
-		if err := downloadFile(ipfsClient, *download, *output); err != nil {
+		if err := downloadFile(ipfsClient, client, *download, *output); err != nil {
 			fmt.Fprintf(os.Stderr, "Download failed: %v\n", err)
 			os.Exit(1)
 		}
+		showMetrics(client)
 	} else {
 		flag.Usage()
 	}
@@ -158,12 +160,20 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	descJSON, _ := descriptor.ToJSON()
 	fmt.Println(string(descJSON))
 	
+	// Record upload metrics
+	totalStoredBytes := int64(0)
+	for _, block := range anonymizedBlocks {
+		totalStoredBytes += int64(len(block.Data))
+	}
+	// Add randomizer blocks size (they're stored but already exist)
+	client.RecordUpload(fileInfo.Size(), totalStoredBytes*2) // *2 for data + randomizer blocks
+	
 	return nil
 }
 
-func downloadFile(client *ipfs.Client, descriptorCID string, outputPath string) error {
+func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string) error {
 	// Create descriptor store
-	store, err := descriptors.NewStore(client)
+	store, err := descriptors.NewStore(ipfsClient)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -189,14 +199,14 @@ func downloadFile(client *ipfs.Client, descriptorCID string, outputPath string) 
 	
 	// Retrieve anonymized data blocks
 	fmt.Println("Retrieving anonymized data blocks...")
-	dataBlocks, err := client.RetrieveBlocks(dataCIDs)
+	dataBlocks, err := ipfsClient.RetrieveBlocks(dataCIDs)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve data blocks: %w", err)
 	}
 	
 	// Retrieve randomizer blocks
 	fmt.Println("Retrieving randomizer blocks...")
-	randomizerBlocks, err := client.RetrieveBlocks(randomizerCIDs)
+	randomizerBlocks, err := ipfsClient.RetrieveBlocks(randomizerCIDs)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve randomizer blocks: %w", err)
 	}
@@ -227,5 +237,27 @@ func downloadFile(client *ipfs.Client, descriptorCID string, outputPath string) 
 	
 	fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
 	
+	// Record download
+	client.RecordDownload()
+	
 	return nil
+}
+
+// showMetrics displays current NoiseFS metrics
+func showMetrics(client *noisefs.Client) {
+	metrics := client.GetMetrics()
+	
+	fmt.Println("\n--- NoiseFS Metrics ---")
+	fmt.Printf("Block Reuse Rate: %.1f%% (%d reused, %d generated)\n", 
+		metrics.BlockReuseRate, metrics.BlocksReused, metrics.BlocksGenerated)
+	fmt.Printf("Cache Hit Rate: %.1f%% (%d hits, %d misses)\n", 
+		metrics.CacheHitRate, metrics.CacheHits, metrics.CacheMisses)
+	fmt.Printf("Storage Efficiency: %.1f%% overhead\n", metrics.StorageEfficiency)
+	fmt.Printf("Total Operations: %d uploads, %d downloads\n", 
+		metrics.TotalUploads, metrics.TotalDownloads)
+	
+	if metrics.BytesUploadedOriginal > 0 {
+		fmt.Printf("Data: %d bytes original → %d bytes stored\n", 
+			metrics.BytesUploadedOriginal, metrics.BytesStoredIPFS)
+	}
 }

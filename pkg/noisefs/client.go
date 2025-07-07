@@ -14,6 +14,7 @@ import (
 type Client struct {
 	ipfsClient *ipfs.Client
 	cache      cache.Cache
+	metrics    *Metrics
 }
 
 // NewClient creates a new NoiseFS client
@@ -29,6 +30,7 @@ func NewClient(ipfsClient *ipfs.Client, blockCache cache.Cache) (*Client, error)
 	return &Client{
 		ipfsClient: ipfsClient,
 		cache:      blockCache,
+		metrics:    NewMetrics(),
 	}, nil
 }
 
@@ -49,6 +51,7 @@ func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) 
 		if len(suitableBlocks) > 0 {
 			selected := suitableBlocks[rand.Intn(len(suitableBlocks))]
 			c.cache.IncrementPopularity(selected.CID)
+			c.metrics.RecordBlockReuse()
 			return selected.Block, selected.CID, nil
 		}
 	}
@@ -67,6 +70,7 @@ func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) 
 	
 	// Cache the new randomizer
 	c.cache.Store(cid, randBlock)
+	c.metrics.RecordBlockGeneration()
 	
 	return randBlock, cid, nil
 }
@@ -91,10 +95,12 @@ func (c *Client) RetrieveBlockWithCache(cid string) (*blocks.Block, error) {
 	// Check cache first
 	if block, err := c.cache.Get(cid); err == nil {
 		c.cache.IncrementPopularity(cid)
+		c.metrics.RecordCacheHit()
 		return block, nil
 	}
 	
 	// Not in cache, retrieve from IPFS
+	c.metrics.RecordCacheMiss()
 	block, err := c.ipfsClient.RetrieveBlock(cid)
 	if err != nil {
 		return nil, err
@@ -104,4 +110,19 @@ func (c *Client) RetrieveBlockWithCache(cid string) (*blocks.Block, error) {
 	c.cache.Store(cid, block)
 	
 	return block, nil
+}
+
+// GetMetrics returns current metrics
+func (c *Client) GetMetrics() MetricsSnapshot {
+	return c.metrics.GetStats()
+}
+
+// RecordUpload records upload metrics
+func (c *Client) RecordUpload(originalBytes, storedBytes int64) {
+	c.metrics.RecordUpload(originalBytes, storedBytes)
+}
+
+// RecordDownload records download metrics
+func (c *Client) RecordDownload() {
+	c.metrics.RecordDownload()
 }

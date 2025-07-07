@@ -18,7 +18,7 @@
 - [x] Implement descriptor parsing in CLI
 - [x] Add download command to CLI
 - [x] Implement file reconstruction from descriptor
-- [ ] Test round-trip (upload then download)
+- [x] Test round-trip (upload then download)
 
 ### 3. Cache Management Foundation
 - [x] Create cache interface in `pkg/cache/cache.go`
@@ -29,7 +29,7 @@
 ### 4. Improve Block Selection
 - [x] Replace random randomizer selection with cache-based selection
 - [x] Implement popularity tracking for blocks
-- [ ] Add block reuse metrics
+- [x] Add block reuse metrics
 
 ### 5. Basic Testing
 - [ ] Add unit tests for block operations
