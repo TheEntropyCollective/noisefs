@@ -1,4 +1,6 @@
 ## Roadmap
+- clean up
+- Use 3-tuples
 - Web UI to test and observe the system
 - Think about optimizations
 - Think about privacy guarantees for uploaders, peer nodes and downloaders of content
@@ -10,3 +12,5 @@
 - Consider ways to protect downloaders from legal scrutiny (maybe by routing download requests through peers. i.e. ask trusted peers to each request some of the blocks so that it's not easy to tell exactly all the blocks that a user is looking to combine)
 - Create a marketing page
 - FUSE filesystem integration (separate repo)
+- Think about ways to bootstrap this system
+- Create documentation

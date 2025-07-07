@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 **NoiseFS** is a P2P distributed file system that implements the OFFSystem architecture on top of IPFS, prioritizing privacy and plausible deniability for uploaders and hosts while maximizing performance and storage efficiency.
@@ -68,11 +66,16 @@ pkg/
 ├── ipfs/           # IPFS integration layer
 ├── descriptors/    # File reconstruction metadata
 ├── cache/          # Block caching and optimization
+├── noisefs/        # High-level client API
+├── fuse/           # FUSE filesystem integration
+├── integration/    # Integration test suites
 ├── crypto/         # Cryptographic utilities
 └── p2p/           # Peer-to-peer networking
 
 cmd/
 ├── noisefs/        # Main CLI application
+├── noisefs-mount/  # FUSE filesystem mount tool
+├── webui/          # Web interface server
 ├── daemon/         # Background service
 └── tools/          # Development utilities
 ```
@@ -113,8 +116,8 @@ cmd/
 - Streaming support for large files
 - Dedupe storage, take advantage of the strengths of IPFS
 
-## Standard Workflow
-1. First think through the problem, read the codebase for relevant files, and write a plan to todo.md.
+## Standard Workflow - YOU MUST ALWAYS FOLLOW
+1. First think hard through the problem, read the codebase for relevant files, and write a plan to todo.md.
 2. The plan should have a list of todo items that you can check off as you complete them
 3. Before you begin working, check in with me and I will verify the plan.
 4. Then, begin working on the todo items, marking them as complete as you go.
