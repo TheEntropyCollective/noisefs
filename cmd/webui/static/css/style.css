@@ -233,3 +233,26 @@ button:disabled {
 .copy-button:hover {
     background: #3182ce;
 }
+
+.full-width {
+    grid-column: 1 / -1;
+}
+
+.flow-diagram {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.flow-diagram svg {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f7fafc;
+}
+
+@media (max-width: 768px) {
+    .flow-diagram svg {
+        height: 300px;
+    }
+}

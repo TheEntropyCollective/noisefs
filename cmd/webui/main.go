@@ -127,6 +127,117 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                     <p>Loading metrics...</p>
                 </div>
             </div>
+
+            <div class="section full-width">
+                <h2>How NoiseFS Works</h2>
+                <p>NoiseFS implements the OFFSystem architecture to provide anonymous, distributed file storage:</p>
+                <div class="flow-diagram" id="flowDiagram">
+                    <svg viewBox="0 0 800 400" width="100%" height="400">
+                        <!-- File Input -->
+                        <rect x="20" y="50" width="80" height="40" rx="5" fill="#4299e1" stroke="#2b6cb0"/>
+                        <text x="60" y="75" text-anchor="middle" fill="white" font-size="12">Original File</text>
+                        
+                        <!-- Arrow 1 -->
+                        <path d="M 110 70 L 140 70" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="125" y="65" text-anchor="middle" font-size="10" fill="#4a5568">Split</text>
+                        
+                        <!-- File Blocks -->
+                        <g id="fileBlocks">
+                            <rect x="150" y="30" width="40" height="30" rx="3" fill="#48bb78" stroke="#2f855a"/>
+                            <text x="170" y="50" text-anchor="middle" fill="white" font-size="10">Block 1</text>
+                            
+                            <rect x="150" y="70" width="40" height="30" rx="3" fill="#48bb78" stroke="#2f855a"/>
+                            <text x="170" y="90" text-anchor="middle" fill="white" font-size="10">Block 2</text>
+                            
+                            <rect x="150" y="110" width="40" height="30" rx="3" fill="#48bb78" stroke="#2f855a"/>
+                            <text x="170" y="130" text-anchor="middle" fill="white" font-size="10">Block 3</text>
+                        </g>
+                        
+                        <!-- Arrow 2 -->
+                        <path d="M 200 70 L 230 70" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="215" y="65" text-anchor="middle" font-size="10" fill="#4a5568">XOR</text>
+                        
+                        <!-- Randomizer Blocks -->
+                        <g id="randomizerBlocks">
+                            <rect x="240" y="180" width="40" height="30" rx="3" fill="#ed8936" stroke="#c05621"/>
+                            <text x="260" y="195" text-anchor="middle" fill="white" font-size="8">Random 1</text>
+                            <text x="260" y="205" text-anchor="middle" fill="white" font-size="8">(cached)</text>
+                            
+                            <rect x="290" y="180" width="40" height="30" rx="3" fill="#ed8936" stroke="#c05621"/>
+                            <text x="310" y="195" text-anchor="middle" fill="white" font-size="8">Random 2</text>
+                            <text x="310" y="205" text-anchor="middle" fill="white" font-size="8">(cached)</text>
+                            
+                            <rect x="340" y="180" width="40" height="30" rx="3" fill="#ed8936" stroke="#c05621"/>
+                            <text x="360" y="195" text-anchor="middle" fill="white" font-size="8">Random 3</text>
+                            <text x="360" y="205" text-anchor="middle" fill="white" font-size="8">(new)</text>
+                        </g>
+                        
+                        <!-- XOR Operation Indicators -->
+                        <path d="M 260 170 L 170 110" stroke="#9f7aea" stroke-width="2" stroke-dasharray="3,3"/>
+                        <path d="M 310 170 L 170 90" stroke="#9f7aea" stroke-width="2" stroke-dasharray="3,3"/>
+                        <path d="M 360 170 L 170 50" stroke="#9f7aea" stroke-width="2" stroke-dasharray="3,3"/>
+                        
+                        <!-- XOR Symbol -->
+                        <circle cx="300" cy="120" r="15" fill="#9f7aea" stroke="#6b46c1"/>
+                        <text x="300" y="127" text-anchor="middle" fill="white" font-size="14" font-weight="bold">⊕</text>
+                        
+                        <!-- Arrow 3 -->
+                        <path d="M 400 70 L 430 70" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="415" y="65" text-anchor="middle" font-size="10" fill="#4a5568">Store</text>
+                        
+                        <!-- Anonymized Blocks -->
+                        <g id="anonymizedBlocks">
+                            <rect x="440" y="30" width="50" height="30" rx="3" fill="#e53e3e" stroke="#c53030"/>
+                            <text x="465" y="45" text-anchor="middle" fill="white" font-size="8">Anonymous</text>
+                            <text x="465" y="55" text-anchor="middle" fill="white" font-size="8">Block 1</text>
+                            
+                            <rect x="440" y="70" width="50" height="30" rx="3" fill="#e53e3e" stroke="#c53030"/>
+                            <text x="465" y="85" text-anchor="middle" fill="white" font-size="8">Anonymous</text>
+                            <text x="465" y="95" text-anchor="middle" fill="white" font-size="8">Block 2</text>
+                            
+                            <rect x="440" y="110" width="50" height="30" rx="3" fill="#e53e3e" stroke="#c53030"/>
+                            <text x="465" y="125" text-anchor="middle" fill="white" font-size="8">Anonymous</text>
+                            <text x="465" y="135" text-anchor="middle" fill="white" font-size="8">Block 3</text>
+                        </g>
+                        
+                        <!-- Arrow 4 -->
+                        <path d="M 500 70 L 530 70" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        
+                        <!-- IPFS -->
+                        <rect x="540" y="50" width="80" height="40" rx="5" fill="#2d3748" stroke="#1a202c"/>
+                        <text x="580" y="75" text-anchor="middle" fill="white" font-size="12">IPFS Network</text>
+                        
+                        <!-- Descriptor -->
+                        <rect x="540" y="250" width="100" height="60" rx="5" fill="#805ad5" stroke="#553c9a"/>
+                        <text x="590" y="270" text-anchor="middle" fill="white" font-size="10">File Descriptor</text>
+                        <text x="590" y="285" text-anchor="middle" fill="white" font-size="8">Contains CIDs for</text>
+                        <text x="590" y="295" text-anchor="middle" fill="white" font-size="8">data + randomizer</text>
+                        <text x="590" y="305" text-anchor="middle" fill="white" font-size="8">blocks</text>
+                        
+                        <!-- Arrow to descriptor -->
+                        <path d="M 590 100 L 590 240" stroke="#4a5568" stroke-width="2" marker-end="url(#arrowhead)"/>
+                        <text x="610" y="170" font-size="10" fill="#4a5568">Create</text>
+                        <text x="610" y="185" font-size="10" fill="#4a5568">Descriptor</text>
+                        
+                        <!-- Key/Legend -->
+                        <g id="legend">
+                            <text x="50" y="280" font-size="14" font-weight="bold" fill="#2d3748">Key Benefits:</text>
+                            <text x="50" y="300" font-size="12" fill="#4a5568">• All stored blocks appear as random data</text>
+                            <text x="50" y="315" font-size="12" fill="#4a5568">• Randomizers are reused for efficiency</text>
+                            <text x="50" y="330" font-size="12" fill="#4a5568">• No original content is ever stored</text>
+                            <text x="50" y="345" font-size="12" fill="#4a5568">• Plausible deniability for all participants</text>
+                        </g>
+                        
+                        <!-- Arrow marker definition -->
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                    refX="9" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#4a5568"/>
+                            </marker>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
         </main>
     </div>
 
