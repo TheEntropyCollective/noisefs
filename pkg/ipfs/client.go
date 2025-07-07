@@ -10,6 +10,12 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 )
 
+// BlockStore defines the interface for IPFS block operations
+type BlockStore interface {
+	StoreBlock(block *blocks.Block) (string, error)
+	RetrieveBlock(cid string) (*blocks.Block, error)
+}
+
 // Client handles interaction with IPFS
 type Client struct {
 	shell *shell.Shell

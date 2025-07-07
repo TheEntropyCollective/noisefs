@@ -13,13 +13,13 @@ import (
 
 // Client provides high-level NoiseFS operations with caching
 type Client struct {
-	ipfsClient *ipfs.Client
+	ipfsClient ipfs.BlockStore
 	cache      cache.Cache
 	metrics    *Metrics
 }
 
 // NewClient creates a new NoiseFS client
-func NewClient(ipfsClient *ipfs.Client, blockCache cache.Cache) (*Client, error) {
+func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, error) {
 	if ipfsClient == nil {
 		return nil, errors.New("IPFS client is required")
 	}
