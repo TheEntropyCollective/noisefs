@@ -314,7 +314,7 @@ func (w *WebUI) downloadHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set headers for file download
-	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	rw.Header().Set("Content-Type", "application/octet-stream")
 	rw.Header().Set("Content-Length", strconv.Itoa(len(data)))
 

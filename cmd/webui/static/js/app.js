@@ -90,7 +90,7 @@ async function handleDownload(event) {
             const contentDisposition = response.headers.get('Content-Disposition');
             let filename = 'download';
             if (contentDisposition) {
-                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
                 if (filenameMatch) {
                     filename = filenameMatch[1];
                 }
