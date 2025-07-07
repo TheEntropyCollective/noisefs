@@ -116,7 +116,8 @@ cmd/
 - Streaming support for large files
 - Dedupe storage, take advantage of the strengths of IPFS
 
-## Standard Workflow - YOU MUST ALWAYS FOLLOW
+YOU MUST ALWAYS FOLLOW the standard workflow
+## Standard Workflow 
 1. First think hard through the problem, read the codebase for relevant files, and write a plan to todo.md.
 2. The plan should have a list of todo items that you can check off as you complete them
 3. Before you begin working, check in with me and I will verify the plan.

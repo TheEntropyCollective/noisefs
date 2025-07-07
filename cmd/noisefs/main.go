@@ -99,24 +99,28 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		blockSize,
 	)
 	
-	// Generate or select randomizer blocks
-	randomizerBlocks := make([]*blocks.Block, len(fileBlocks))
-	randomizerCIDs := make([]string, len(fileBlocks))
+	// Generate or select randomizer blocks (using 3-tuple format)
+	randomizer1Blocks := make([]*blocks.Block, len(fileBlocks))
+	randomizer1CIDs := make([]string, len(fileBlocks))
+	randomizer2Blocks := make([]*blocks.Block, len(fileBlocks))
+	randomizer2CIDs := make([]string, len(fileBlocks))
 	
-	fmt.Println("Selecting randomizer blocks...")
+	fmt.Println("Selecting randomizer blocks (3-tuple format)...")
 	for i := range fileBlocks {
-		randBlock, cid, err := client.SelectRandomizer(fileBlocks[i].Size())
+		randBlock1, cid1, randBlock2, cid2, err := client.SelectTwoRandomizers(fileBlocks[i].Size())
 		if err != nil {
-			return fmt.Errorf("failed to select randomizer block: %w", err)
+			return fmt.Errorf("failed to select randomizer blocks: %w", err)
 		}
-		randomizerBlocks[i] = randBlock
-		randomizerCIDs[i] = cid
+		randomizer1Blocks[i] = randBlock1
+		randomizer1CIDs[i] = cid1
+		randomizer2Blocks[i] = randBlock2
+		randomizer2CIDs[i] = cid2
 	}
 	
-	// XOR blocks with randomizers
+	// XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
 	anonymizedBlocks := make([]*blocks.Block, len(fileBlocks))
 	for i := range fileBlocks {
-		xorBlock, err := fileBlocks[i].XOR(randomizerBlocks[i])
+		xorBlock, err := fileBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}
@@ -134,10 +138,10 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		dataCIDs[i] = cid
 	}
 	
-	// Add block pairs to descriptor
+	// Add block triples to descriptor (3-tuple format)
 	for i := range dataCIDs {
-		if err := descriptor.AddBlockPair(dataCIDs[i], randomizerCIDs[i]); err != nil {
-			return fmt.Errorf("failed to add block pair to descriptor: %w", err)
+		if err := descriptor.AddBlockTriple(dataCIDs[i], randomizer1CIDs[i], randomizer2CIDs[i]); err != nil {
+			return fmt.Errorf("failed to add block triple to descriptor: %w", err)
 		}
 	}
 	
@@ -166,7 +170,8 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		totalStoredBytes += int64(len(block.Data))
 	}
 	// Add randomizer blocks size (they're stored but already exist)
-	client.RecordUpload(fileInfo.Size(), totalStoredBytes*2) // *2 for data + randomizer blocks
+	// For 3-tuple: data + randomizer1 + randomizer2 = 3x the data size
+	client.RecordUpload(fileInfo.Size(), totalStoredBytes*3) // *3 for data + 2 randomizer blocks
 	
 	return nil
 }
@@ -190,11 +195,15 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 	
 	// Retrieve all data blocks
 	dataCIDs := make([]string, len(descriptor.Blocks))
-	randomizerCIDs := make([]string, len(descriptor.Blocks))
+	randomizer1CIDs := make([]string, len(descriptor.Blocks))
+	randomizer2CIDs := make([]string, len(descriptor.Blocks))
 	
 	for i, block := range descriptor.Blocks {
 		dataCIDs[i] = block.DataCID
-		randomizerCIDs[i] = block.RandomizerCID
+		randomizer1CIDs[i] = block.RandomizerCID1
+		if descriptor.IsThreeTuple() {
+			randomizer2CIDs[i] = block.RandomizerCID2
+		}
 	}
 	
 	// Retrieve anonymized data blocks
@@ -204,18 +213,37 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 		return fmt.Errorf("failed to retrieve data blocks: %w", err)
 	}
 	
-	// Retrieve randomizer blocks
+	// Retrieve first randomizer blocks
 	fmt.Println("Retrieving randomizer blocks...")
-	randomizerBlocks, err := ipfsClient.RetrieveBlocks(randomizerCIDs)
+	randomizer1Blocks, err := ipfsClient.RetrieveBlocks(randomizer1CIDs)
 	if err != nil {
-		return fmt.Errorf("failed to retrieve randomizer blocks: %w", err)
+		return fmt.Errorf("failed to retrieve randomizer1 blocks: %w", err)
+	}
+	
+	// Retrieve second randomizer blocks if using 3-tuple format
+	var randomizer2Blocks []*blocks.Block
+	if descriptor.IsThreeTuple() {
+		randomizer2Blocks, err = ipfsClient.RetrieveBlocks(randomizer2CIDs)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve randomizer2 blocks: %w", err)
+		}
 	}
 	
 	// XOR blocks to reconstruct original data
 	fmt.Println("Reconstructing original blocks...")
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
-		origBlock, err := dataBlocks[i].XOR(randomizerBlocks[i])
+		var origBlock *blocks.Block
+		var err error
+		
+		if descriptor.IsThreeTuple() && randomizer2Blocks != nil {
+			// Use 3-tuple XOR for version 2.0
+			origBlock, err = dataBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
+		} else {
+			// Use 2-tuple XOR for legacy format
+			origBlock, err = dataBlocks[i].XOR(randomizer1Blocks[i])
+		}
+		
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}

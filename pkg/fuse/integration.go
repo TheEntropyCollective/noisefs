@@ -116,10 +116,10 @@ func (fm *FileManager) processUpload(file *File) {
 	file.mu.Unlock()
 	
 	// Record upload metrics
-	fm.client.RecordUpload(int64(len(data)), int64(len(data)*2)) // Estimate 2x storage overhead
+	fm.client.RecordUpload(int64(len(data)), int64(len(data)*3)) // Estimate 3x storage overhead for 3-tuple
 }
 
-// uploadBlock uploads a single block to NoiseFS with anonymization
+// uploadBlock uploads a single block to NoiseFS with anonymization (3-tuple format)
 func (fm *FileManager) uploadBlock(blockData []byte, desc *descriptors.Descriptor) error {
 	// Create data block
 	dataBlock, err := blocks.NewBlock(blockData)
@@ -127,16 +127,16 @@ func (fm *FileManager) uploadBlock(blockData []byte, desc *descriptors.Descripto
 		return fmt.Errorf("failed to create data block: %w", err)
 	}
 	
-	// Get randomizer block
-	randBlock, randCID, err := fm.client.SelectRandomizer(len(blockData))
+	// Get two randomizer blocks for 3-tuple
+	randBlock1, randCID1, randBlock2, randCID2, err := fm.client.SelectTwoRandomizers(len(blockData))
 	if err != nil {
-		return fmt.Errorf("failed to select randomizer: %w", err)
+		return fmt.Errorf("failed to select randomizers: %w", err)
 	}
 	
-	// XOR with randomizer to anonymize
-	anonymizedBlock, err := dataBlock.XOR(randBlock)
+	// XOR with both randomizers to anonymize (3-tuple: data XOR randomizer1 XOR randomizer2)
+	anonymizedBlock, err := dataBlock.XOR3(randBlock1, randBlock2)
 	if err != nil {
-		return fmt.Errorf("failed to anonymize block: %w", err)
+		return fmt.Errorf("failed to anonymize block with 3-tuple: %w", err)
 	}
 	
 	// Store anonymized block
@@ -145,10 +145,10 @@ func (fm *FileManager) uploadBlock(blockData []byte, desc *descriptors.Descripto
 		return fmt.Errorf("failed to store anonymized block: %w", err)
 	}
 	
-	// Add block pair to descriptor
-	err = desc.AddBlockPair(dataCID, randCID)
+	// Add block triple to descriptor
+	err = desc.AddBlockTriple(dataCID, randCID1, randCID2)
 	if err != nil {
-		return fmt.Errorf("failed to add block pair to descriptor: %w", err)
+		return fmt.Errorf("failed to add block triple to descriptor: %w", err)
 	}
 	
 	return nil
@@ -205,16 +205,33 @@ func (fm *FileManager) downloadFile(desc *descriptors.Descriptor) ([]byte, error
 			return nil, fmt.Errorf("failed to retrieve data block %s: %w", blockPair.DataCID, err)
 		}
 		
-		// Retrieve randomizer block
-		randBlock, err := fm.client.RetrieveBlockWithCache(blockPair.RandomizerCID)
+		// Retrieve first randomizer block
+		randBlock1, err := fm.client.RetrieveBlockWithCache(blockPair.RandomizerCID1)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve randomizer block %s: %w", blockPair.RandomizerCID, err)
+			return nil, fmt.Errorf("failed to retrieve randomizer1 block %s: %w", blockPair.RandomizerCID1, err)
 		}
 		
-		// XOR to recover original data
-		originalBlock, err := anonymizedBlock.XOR(randBlock)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt block: %w", err)
+		var originalBlock *blocks.Block
+		
+		// Check if using 3-tuple format
+		if desc.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
+			// Retrieve second randomizer block
+			randBlock2, err := fm.client.RetrieveBlockWithCache(blockPair.RandomizerCID2)
+			if err != nil {
+				return nil, fmt.Errorf("failed to retrieve randomizer2 block %s: %w", blockPair.RandomizerCID2, err)
+			}
+			
+			// XOR3 to recover original data
+			originalBlock, err = anonymizedBlock.XOR3(randBlock1, randBlock2)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt block with 3-tuple: %w", err)
+			}
+		} else {
+			// Legacy 2-tuple format
+			originalBlock, err = anonymizedBlock.XOR(randBlock1)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt block with 2-tuple: %w", err)
+			}
 		}
 		
 		// Append to result
