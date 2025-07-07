@@ -1,11 +1,36 @@
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the application
+    initializeTheme();
     initializeEventListeners();
     loadMetrics();
     
     // Auto-refresh metrics every 5 seconds
     setInterval(loadMetrics, 5000);
 });
+
+function initializeTheme() {
+    const themeToggle = document.getElementById('themeToggle');
+    const savedTheme = localStorage.getItem('noisefs-theme') || 'light';
+    
+    // Apply saved theme
+    document.body.setAttribute('data-theme', savedTheme);
+    updateThemeToggle(savedTheme);
+    
+    // Theme toggle event listener
+    themeToggle.addEventListener('click', function() {
+        const currentTheme = document.body.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        
+        document.body.setAttribute('data-theme', newTheme);
+        localStorage.setItem('noisefs-theme', newTheme);
+        updateThemeToggle(newTheme);
+    });
+}
+
+function updateThemeToggle(theme) {
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.textContent = theme === 'light' ? '🌙' : '☀️';
+}
 
 function initializeEventListeners() {
     // Upload form handler

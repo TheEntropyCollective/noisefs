@@ -80,6 +80,10 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+        🌙
+    </button>
+    
     <div class="container">
         <header>
             <h1>NoiseFS</h1>
