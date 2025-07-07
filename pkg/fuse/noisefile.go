@@ -41,6 +41,10 @@ type NoiseFile struct {
 	
 	// Index management
 	index *FileIndex
+	
+	// File locking
+	lockType int32
+	lockOwner uint64
 }
 
 // NewNoiseFile creates a new NoiseFS file handle
@@ -412,4 +416,84 @@ func (f *NoiseFile) Release() {
 	f.content = nil
 	f.writeBuffer = nil
 	f.loaded = false
+	f.lockType = 0
+	f.lockOwner = 0
+}
+
+// Flock implements nodefs.File for file locking
+func (f *NoiseFile) Flock(flags int) fuse.Status {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	
+	// Simple locking implementation
+	switch flags {
+	case 1: // LOCK_SH (shared lock)
+		if f.lockType == 2 { // Already exclusively locked
+			return fuse.EAGAIN
+		}
+		f.lockType = 1
+		return fuse.OK
+	case 2: // LOCK_EX (exclusive lock)
+		if f.lockType != 0 { // Already locked
+			return fuse.EAGAIN
+		}
+		f.lockType = 2
+		return fuse.OK
+	case 8: // LOCK_UN (unlock)
+		f.lockType = 0
+		f.lockOwner = 0
+		return fuse.OK
+	default:
+		return fuse.EINVAL
+	}
+}
+
+// GetLk implements nodefs.File for lock testing
+func (f *NoiseFile) GetLk(owner uint64, lk *fuse.FileLock, flags uint32, out *fuse.FileLock) (fuse.Status) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	
+	// Check if there's a conflicting lock
+	if f.lockType != 0 && f.lockOwner != owner {
+		out.Typ = uint32(f.lockType)
+		out.Pid = uint32(f.lockOwner)
+		out.Start = lk.Start
+		out.End = lk.End
+		return fuse.OK
+	}
+	
+	// No conflicting lock
+	out.Typ = 3 // F_UNLCK
+	return fuse.OK
+}
+
+// SetLk implements nodefs.File for setting locks
+func (f *NoiseFile) SetLk(owner uint64, lk *fuse.FileLock, flags uint32) (fuse.Status) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	
+	switch lk.Typ {
+	case 0: // F_RDLCK (shared lock)
+		if f.lockType == 2 && f.lockOwner != owner {
+			return fuse.EAGAIN
+		}
+		f.lockType = 1
+		f.lockOwner = owner
+		return fuse.OK
+	case 1: // F_WRLCK (exclusive lock)
+		if f.lockType != 0 && f.lockOwner != owner {
+			return fuse.EAGAIN
+		}
+		f.lockType = 2
+		f.lockOwner = owner
+		return fuse.OK
+	case 2: // F_UNLCK (unlock)
+		if f.lockOwner == owner {
+			f.lockType = 0
+			f.lockOwner = 0
+		}
+		return fuse.OK
+	default:
+		return fuse.EINVAL
+	}
 }

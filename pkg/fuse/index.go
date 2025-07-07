@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -239,6 +240,24 @@ func (idx *FileIndex) IsDirty() bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.dirty
+}
+
+// IsDirectory checks if a path represents a directory by looking for files within it
+func (idx *FileIndex) IsDirectory(path string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	
+	// Check if any files have this path as their directory
+	for _, entry := range idx.Entries {
+		if entry.Directory == path {
+			return true
+		}
+		// Also check if any file path starts with this directory
+		if strings.HasPrefix(entry.Directory, path+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // GetIndexPath returns the file path of the index

@@ -163,10 +163,11 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 			}, fuse.OK
 		}
 		
-		// Check if it's a known file
+		// Get relative path
 		relativePath := strings.TrimPrefix(name, "files/")
-		entry, exists := fs.index.GetFile(relativePath)
 		
+		// Check if it's a known file
+		entry, exists := fs.index.GetFile(relativePath)
 		if exists {
 			// Return file attributes from index
 			return &fuse.Attr{
@@ -175,6 +176,13 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 				Mtime: uint64(entry.ModifiedAt.Unix()),
 				Atime: uint64(entry.ModifiedAt.Unix()),
 				Ctime: uint64(entry.CreatedAt.Unix()),
+			}, fuse.OK
+		}
+		
+		// Check if it's a directory by looking for files in subdirectories
+		if fs.index.IsDirectory(relativePath) {
+			return &fuse.Attr{
+				Mode: fuse.S_IFDIR | 0755,
 			}, fuse.OK
 		}
 	}
@@ -191,11 +199,55 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 		}, fuse.OK
 	}
 
-	if name == "files" {
-		// List all files in the index
-		files := fs.index.GetFilesInDirectory("")
-		entries := make([]fuse.DirEntry, 0, len(files))
+	if strings.HasPrefix(name, "files") {
+		// Get relative directory path
+		var dirPath string
+		if name == "files" {
+			dirPath = ""
+		} else {
+			dirPath = strings.TrimPrefix(name, "files/")
+		}
 		
+		// Get files in this directory
+		files := fs.index.GetFilesInDirectory(dirPath)
+		
+		// Track subdirectories we've seen
+		subdirs := make(map[string]bool)
+		
+		// Find subdirectories by examining file paths
+		for _, entry := range fs.index.ListFiles() {
+			if strings.HasPrefix(entry.Directory, dirPath) {
+				// Calculate relative path from current directory
+				relDir := entry.Directory
+				if dirPath != "" {
+					if !strings.HasPrefix(relDir, dirPath+"/") {
+						continue
+					}
+					relDir = strings.TrimPrefix(relDir, dirPath+"/")
+				}
+				
+				// Get the first component of the relative directory
+				if relDir != "" {
+					parts := strings.Split(relDir, "/")
+					if len(parts) > 0 && parts[0] != "" {
+						subdirs[parts[0]] = true
+					}
+				}
+			}
+		}
+		
+		// Build directory entries
+		entries := make([]fuse.DirEntry, 0, len(files)+len(subdirs))
+		
+		// Add subdirectories
+		for subdir := range subdirs {
+			entries = append(entries, fuse.DirEntry{
+				Name: subdir,
+				Mode: fuse.S_IFDIR,
+			})
+		}
+		
+		// Add files
 		for _, entry := range files {
 			entries = append(entries, fuse.DirEntry{
 				Name: entry.Filename,
@@ -257,6 +309,20 @@ func (fs *NoiseFS) Mkdir(name string, mode uint32, context *fuse.Context) fuse.S
 	if fs.readOnly {
 		return fuse.EROFS
 	}
+	
+	// Only allow directories under files/
+	if !strings.HasPrefix(name, "files/") {
+		return fuse.EINVAL
+	}
+	
+	// Check if directory already exists
+	relativePath := strings.TrimPrefix(name, "files/")
+	if fs.index.IsDirectory(relativePath) {
+		return fuse.Status(17) // EEXIST
+	}
+	
+	// For now, directories are created implicitly when files are added to them
+	// No explicit directory creation needed in the index
 	return fuse.OK
 }
 
@@ -265,6 +331,252 @@ func (fs *NoiseFS) Unlink(name string, context *fuse.Context) fuse.Status {
 	if fs.readOnly {
 		return fuse.EROFS
 	}
+	
+	// Only handle files under files/
+	if !strings.HasPrefix(name, "files/") {
+		return fuse.EINVAL
+	}
+	
+	// Get relative path
+	relativePath := strings.TrimPrefix(name, "files/")
+	
+	// Remove file from index
+	if !fs.index.RemoveFile(relativePath) {
+		return fuse.ENOENT
+	}
+	
+	// Save index
+	if err := fs.index.SaveIndex(); err != nil {
+		return fuse.EIO
+	}
+	
+	return fuse.OK
+}
+
+// Rmdir implements pathfs.FileSystem
+func (fs *NoiseFS) Rmdir(name string, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// Only handle directories under files/
+	if !strings.HasPrefix(name, "files/") || name == "files" {
+		return fuse.EINVAL
+	}
+	
+	// Get relative path
+	relativePath := strings.TrimPrefix(name, "files/")
+	
+	// Check if directory exists
+	if !fs.index.IsDirectory(relativePath) {
+		return fuse.ENOENT
+	}
+	
+	// Check if directory is empty
+	files := fs.index.GetFilesInDirectory(relativePath)
+	if len(files) > 0 {
+		return fuse.Status(39) // ENOTEMPTY
+	}
+	
+	// Check for subdirectories
+	for _, entry := range fs.index.ListFiles() {
+		if strings.HasPrefix(entry.Directory, relativePath+"/") {
+			return fuse.Status(39) // ENOTEMPTY
+		}
+	}
+	
+	// Directory is empty, removal is implicit since we don't store empty directories
+	return fuse.OK
+}
+
+// Rename implements pathfs.FileSystem
+func (fs *NoiseFS) Rename(oldName string, newName string, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// Both paths must be under files/
+	if !strings.HasPrefix(oldName, "files/") || !strings.HasPrefix(newName, "files/") {
+		return fuse.EINVAL
+	}
+	
+	// Get relative paths
+	oldPath := strings.TrimPrefix(oldName, "files/")
+	newPath := strings.TrimPrefix(newName, "files/")
+	
+	// Check if source exists
+	entry, exists := fs.index.GetFile(oldPath)
+	if !exists {
+		return fuse.ENOENT
+	}
+	
+	// Check if destination already exists
+	if _, exists := fs.index.GetFile(newPath); exists {
+		return fuse.Status(17) // EEXIST
+	}
+	
+	// Remove old entry
+	fs.index.RemoveFile(oldPath)
+	
+	// Add new entry
+	fs.index.AddFile(newPath, entry.DescriptorCID, entry.FileSize)
+	
+	// Save index
+	if err := fs.index.SaveIndex(); err != nil {
+		return fuse.EIO
+	}
+	
+	return fuse.OK
+}
+
+// GetXAttr implements pathfs.FileSystem for extended attributes
+func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context) ([]byte, fuse.Status) {
+	// Only handle files under files/
+	if !strings.HasPrefix(name, "files/") {
+		return nil, fuse.ENODATA
+	}
+	
+	relativePath := strings.TrimPrefix(name, "files/")
+	entry, exists := fs.index.GetFile(relativePath)
+	if !exists {
+		return nil, fuse.ENOENT
+	}
+	
+	// Handle standard attributes
+	switch attribute {
+	case "user.noisefs.descriptor_cid":
+		return []byte(entry.DescriptorCID), fuse.OK
+	case "user.noisefs.created_at":
+		return []byte(entry.CreatedAt.Format("2006-01-02T15:04:05Z07:00")), fuse.OK
+	case "user.noisefs.modified_at":
+		return []byte(entry.ModifiedAt.Format("2006-01-02T15:04:05Z07:00")), fuse.OK
+	case "user.noisefs.file_size":
+		return []byte(fmt.Sprintf("%d", entry.FileSize)), fuse.OK
+	case "user.noisefs.directory":
+		return []byte(entry.Directory), fuse.OK
+	default:
+		return nil, fuse.ENODATA
+	}
+}
+
+// ListXAttr implements pathfs.FileSystem for listing extended attributes
+func (fs *NoiseFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse.Status) {
+	// Only handle files under files/
+	if !strings.HasPrefix(name, "files/") {
+		return nil, fuse.ENODATA
+	}
+	
+	relativePath := strings.TrimPrefix(name, "files/")
+	_, exists := fs.index.GetFile(relativePath)
+	if !exists {
+		return nil, fuse.ENOENT
+	}
+	
+	// Return list of available extended attributes
+	attrs := []string{
+		"user.noisefs.descriptor_cid",
+		"user.noisefs.created_at",
+		"user.noisefs.modified_at",
+		"user.noisefs.file_size",
+		"user.noisefs.directory",
+	}
+	
+	return attrs, fuse.OK
+}
+
+// SetXAttr implements pathfs.FileSystem for setting extended attributes
+func (fs *NoiseFS) SetXAttr(name string, attribute string, data []byte, flags int, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// Extended attributes are read-only for NoiseFS metadata
+	// Only allow setting user-defined attributes that don't conflict with system ones
+	if strings.HasPrefix(attribute, "user.noisefs.") {
+		return fuse.EPERM
+	}
+	
+	// For now, don't support arbitrary extended attributes
+	return fuse.ENOTSUP
+}
+
+// RemoveXAttr implements pathfs.FileSystem for removing extended attributes
+func (fs *NoiseFS) RemoveXAttr(name string, attribute string, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// System attributes cannot be removed
+	if strings.HasPrefix(attribute, "user.noisefs.") {
+		return fuse.EPERM
+	}
+	
+	// For now, don't support arbitrary extended attributes
+	return fuse.ENOTSUP
+}
+
+// Symlink implements pathfs.FileSystem for creating symbolic links
+func (fs *NoiseFS) Symlink(value string, linkName string, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// Only allow symlinks under files/
+	if !strings.HasPrefix(linkName, "files/") {
+		return fuse.EINVAL
+	}
+	
+	// For now, don't support symbolic links in NoiseFS
+	// Symbolic links would require storing link targets in the index
+	// and special handling during directory listing
+	return fuse.ENOTSUP
+}
+
+// Readlink implements pathfs.FileSystem for reading symbolic links
+func (fs *NoiseFS) Readlink(name string, context *fuse.Context) (string, fuse.Status) {
+	// Only handle links under files/
+	if !strings.HasPrefix(name, "files/") {
+		return "", fuse.EINVAL
+	}
+	
+	// For now, don't support symbolic links
+	return "", fuse.ENOTSUP
+}
+
+// Link implements pathfs.FileSystem for creating hard links
+func (fs *NoiseFS) Link(oldName string, newName string, context *fuse.Context) fuse.Status {
+	if fs.readOnly {
+		return fuse.EROFS
+	}
+	
+	// Both paths must be under files/
+	if !strings.HasPrefix(oldName, "files/") || !strings.HasPrefix(newName, "files/") {
+		return fuse.EINVAL
+	}
+	
+	// Get relative paths
+	oldPath := strings.TrimPrefix(oldName, "files/")
+	newPath := strings.TrimPrefix(newName, "files/")
+	
+	// Check if source exists
+	entry, exists := fs.index.GetFile(oldPath)
+	if !exists {
+		return fuse.ENOENT
+	}
+	
+	// Check if destination already exists
+	if _, exists := fs.index.GetFile(newPath); exists {
+		return fuse.Status(17) // EEXIST
+	}
+	
+	// Create hard link by adding another index entry with same descriptor CID
+	fs.index.AddFile(newPath, entry.DescriptorCID, entry.FileSize)
+	
+	// Save index
+	if err := fs.index.SaveIndex(); err != nil {
+		return fuse.EIO
+	}
+	
 	return fuse.OK
 }
 
