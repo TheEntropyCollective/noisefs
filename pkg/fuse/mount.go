@@ -227,7 +227,7 @@ func (fs *NoiseFS) Open(name string, flags uint32, context *fuse.Context) (nodef
 	
 	// Create NoiseFS file handle
 	readOnly := (flags & fuse.O_ANYWRITE) == 0
-	file := NewNoiseFile(fs.client, fs.ipfsClient, entry.DescriptorCID, relativePath, readOnly)
+	file := NewNoiseFile(fs.client, fs.ipfsClient, entry.DescriptorCID, relativePath, readOnly, fs.index)
 	
 	return file, fuse.OK
 }
@@ -238,8 +238,18 @@ func (fs *NoiseFS) Create(name string, flags uint32, mode uint32, context *fuse.
 		return nil, fuse.EROFS
 	}
 
-	// For now, return a simple implementation
-	return nodefs.NewDataFile([]byte{}), fuse.OK
+	// Only handle files under the files directory
+	if !strings.HasPrefix(name, "files/") {
+		return nil, fuse.EINVAL
+	}
+	
+	// Get relative path
+	relativePath := strings.TrimPrefix(name, "files/")
+	
+	// Create new NoiseFS file handle with empty descriptor CID (new file)
+	file := NewNoiseFile(fs.client, fs.ipfsClient, "", relativePath, false, fs.index)
+	
+	return file, fuse.OK
 }
 
 // Mkdir implements pathfs.FileSystem

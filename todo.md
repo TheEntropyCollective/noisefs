@@ -9,12 +9,12 @@
 - ✅ Complete file reading through FUSE filesystem
 - ✅ Automatic index loading/saving on mount/unmount
 
-### Phase 2: Write Operations (High Priority)
-- [ ] Implement basic write support in NoiseFile.Write()
-- [ ] Add file creation support (Create() method)
-- [ ] Implement write buffering and flush operations
-- [ ] Auto-upload on file close/flush
-- [ ] Update index automatically on new file creation
+### Phase 2: Write Operations (2025-07-07)
+- ✅ Implement basic write support in NoiseFile.Write()
+- ✅ Add file creation support (Create() method)
+- ✅ Implement write buffering and flush operations
+- ✅ Auto-upload on file close/flush
+- ✅ Update index automatically on new file creation
 
 ### Phase 3: Enhanced FUSE Features (Medium Priority)
 - [ ] Directory operations (Mkdir, Rmdir, Rename)
