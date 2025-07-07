@@ -91,7 +91,7 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
         </header>
 
         <main>
-            <div class="section">
+            <div class="section upload-card">
                 <h2>Upload File</h2>
                 <form id="uploadForm" enctype="multipart/form-data">
                     <div class="form-group">
@@ -112,7 +112,7 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                 <div id="uploadResult"></div>
             </div>
 
-            <div class="section">
+            <div class="section download-card">
                 <h2>Download File</h2>
                 <form id="downloadForm">
                     <div class="form-group">
@@ -125,14 +125,14 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                 <div id="downloadResult"></div>
             </div>
 
-            <div class="section">
+            <div class="section metrics-card">
                 <h2>System Metrics</h2>
                 <div id="metrics">
                     <p>Loading metrics...</p>
                 </div>
             </div>
 
-            <div class="section full-width">
+            <div class="section info-card full-width">
                 <h2>How NoiseFS Works</h2>
                 <p>NoiseFS implements the OFFSystem architecture to provide anonymous, distributed file storage:</p>
                 <div class="flow-diagram" id="flowDiagram">

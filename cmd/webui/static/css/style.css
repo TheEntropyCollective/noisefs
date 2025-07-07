@@ -118,9 +118,8 @@ body::before {
         300px 200px, 300px 200px, 300px 200px, 300px 200px, 300px 200px;
     
     animation: 
-        twinkle-1 4s ease-in-out infinite alternate,
-        twinkle-2 3s ease-in-out infinite alternate-reverse,
-        twinkle-3 5s ease-in-out infinite alternate;
+        starfield-drift-1 20s linear infinite,
+        starfield-shimmer-1 8s ease-in-out infinite alternate;
     z-index: -1;
     opacity: 0.8;
 }
@@ -142,43 +141,37 @@ body::after {
     
     background-size: 450px 350px, 380px 280px, 420px 320px, 360px 270px, 400px 300px;
     animation: 
-        twinkle-4 6s ease-in-out infinite alternate,
-        twinkle-5 4.5s ease-in-out infinite alternate-reverse;
+        starfield-drift-2 25s linear infinite reverse,
+        starfield-shimmer-2 12s ease-in-out infinite alternate-reverse;
     z-index: -1;
     opacity: 0.6;
 }
 
-@keyframes twinkle-1 {
-    0% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.1); }
-    100% { opacity: 0.4; transform: scale(1); }
+@keyframes starfield-drift-1 {
+    0% { transform: translateX(0) translateY(0); }
+    25% { transform: translateX(-10px) translateY(-5px); }
+    50% { transform: translateX(-5px) translateY(-15px); }
+    75% { transform: translateX(5px) translateY(-10px); }
+    100% { transform: translateX(0) translateY(0); }
 }
 
-@keyframes twinkle-2 {
-    0% { opacity: 0.2; transform: scale(0.9); }
-    33% { opacity: 0.7; transform: scale(1.05); }
-    66% { opacity: 0.5; transform: scale(1.02); }
-    100% { opacity: 0.3; transform: scale(0.95); }
+@keyframes starfield-drift-2 {
+    0% { transform: translateX(0) translateY(0); }
+    33% { transform: translateX(8px) translateY(-8px); }
+    66% { transform: translateX(-3px) translateY(-12px); }
+    100% { transform: translateX(0) translateY(0); }
 }
 
-@keyframes twinkle-3 {
-    0% { opacity: 0.4; transform: scale(1.02); }
-    25% { opacity: 0.2; transform: scale(0.98); }
-    75% { opacity: 0.9; transform: scale(1.08); }
-    100% { opacity: 0.3; transform: scale(1); }
+@keyframes starfield-shimmer-1 {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.5; }
 }
 
-@keyframes twinkle-4 {
-    0% { opacity: 0.1; transform: scale(0.8) rotate(0deg); }
-    50% { opacity: 0.6; transform: scale(1.15) rotate(180deg); }
-    100% { opacity: 0.2; transform: scale(0.9) rotate(360deg); }
-}
-
-@keyframes twinkle-5 {
-    0% { opacity: 0.5; transform: scale(1.1); }
-    40% { opacity: 0.1; transform: scale(0.85); }
-    80% { opacity: 0.7; transform: scale(1.2); }
-    100% { opacity: 0.3; transform: scale(1); }
+@keyframes starfield-shimmer-2 {
+    0% { opacity: 0.3; }
+    40% { opacity: 0.7; }
+    100% { opacity: 0.4; }
 }
 
 .container {
@@ -280,12 +273,53 @@ main {
     box-shadow: var(--shadow-color) 0px 8px 24px;
 }
 
+[data-theme="dark"] .section.upload-card {
+    border-color: var(--star-blue);
+    background: linear-gradient(145deg, var(--bg-card), rgba(245, 158, 11, 0.08));
+}
+
+[data-theme="dark"] .section.download-card {
+    border-color: var(--star-green);
+    background: linear-gradient(145deg, var(--bg-card), rgba(245, 158, 11, 0.08));
+}
+
+[data-theme="dark"] .section.metrics-card {
+    border-color: var(--star-violet);
+    background: linear-gradient(145deg, var(--bg-card), rgba(245, 158, 11, 0.08));
+}
+
+[data-theme="dark"] .section.info-card {
+    border-color: var(--star-cyan);
+    background: linear-gradient(145deg, var(--bg-card), rgba(245, 158, 11, 0.08));
+}
+
+
+/* Card color variations using star palette */
+.section.upload-card {
+    border-color: var(--star-blue);
+    background: linear-gradient(145deg, var(--bg-card), rgba(59, 130, 246, 0.08));
+}
+
+.section.download-card {
+    border-color: var(--star-green);
+    background: linear-gradient(145deg, var(--bg-card), rgba(34, 197, 94, 0.08));
+}
+
+.section.metrics-card {
+    border-color: var(--star-violet);
+    background: linear-gradient(145deg, var(--bg-card), rgba(139, 92, 246, 0.08));
+}
+
+.section.info-card {
+    border-color: var(--star-cyan);
+    background: linear-gradient(145deg, var(--bg-card), rgba(6, 182, 212, 0.08));
+}
 
 .section:hover {
-    border-color: var(--accent-primary);
+    transform: translateY(-2px);
     box-shadow: 
         var(--shadow-color) 0px 12px 32px,
-        0 0 0 1px var(--accent-primary);
+        0 0 0 2px currentColor;
 }
 
 [data-theme="dark"] .section:hover {
@@ -295,13 +329,12 @@ main {
 }
 
 .section h2 {
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     color: var(--text-primary);
     margin-bottom: 30px;
     font-size: 1.6rem;
-    font-weight: 800;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     position: relative;
     padding-bottom: 20px;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
