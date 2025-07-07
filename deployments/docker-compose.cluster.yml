@@ -1,0 +1,106 @@
+# Multi-node NoiseFS cluster deployment
+# Use with: docker-compose -f docker-compose.cluster.yml up --scale noisefs-node=3
+
+version: '3.8'
+
+services:
+  # NoiseFS cluster nodes
+  noisefs-node:
+    build: .
+    image: noisefs:latest
+    command: daemon
+    ports:
+      - "4001-4010:4001"   # IPFS swarm port range
+      - "5001-5010:5001"   # IPFS API port range
+    volumes:
+      - noisefs-cluster-data:/opt/noisefs/data
+      - noisefs-cluster-logs:/opt/noisefs/logs
+      - noisefs-cluster-cache:/opt/noisefs/cache
+      - ./config:/opt/noisefs/config:ro
+    environment:
+      - NOISEFS_LOG_LEVEL=info
+      - NOISEFS_CLUSTER_MODE=true
+      - NOISEFS_BOOTSTRAP_PEERS=${NOISEFS_BOOTSTRAP_PEERS:-}
+      - NOISEFS_NODE_ID=${NOISEFS_NODE_ID:-}
+    networks:
+      - noisefs-cluster
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    restart: unless-stopped
+
+  # Load balancer for cluster
+  noisefs-lb:
+    image: nginx:alpine
+    container_name: noisefs-cluster-lb
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./docker/nginx-cluster.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - noisefs-cluster
+    depends_on:
+      - noisefs-node
+    restart: unless-stopped
+
+  # Cluster discovery service (using Consul)
+  consul:
+    image: consul:latest
+    container_name: noisefs-consul
+    ports:
+      - "8500:8500"
+    command: >
+      consul agent -server -bootstrap-expect=1 -ui -bind=0.0.0.0 
+      -client=0.0.0.0 -data-dir=/consul/data
+    volumes:
+      - consul-data:/consul/data
+    networks:
+      - noisefs-cluster
+    restart: unless-stopped
+
+  # Monitoring for cluster
+  cluster-monitor:
+    build: .
+    image: noisefs:latest
+    container_name: noisefs-cluster-monitor
+    command: benchmark --type cluster --continuous
+    volumes:
+      - noisefs-cluster-logs:/opt/noisefs/logs
+      - ./config:/opt/noisefs/config:ro
+    environment:
+      - NOISEFS_LOG_LEVEL=info
+      - NOISEFS_MONITOR_INTERVAL=30s
+    networks:
+      - noisefs-cluster
+    depends_on:
+      - noisefs-node
+    restart: unless-stopped
+
+volumes:
+  noisefs-cluster-data:
+    driver: local
+  noisefs-cluster-logs:
+    driver: local
+  noisefs-cluster-cache:
+    driver: local
+  consul-data:
+    driver: local
+
+networks:
+  noisefs-cluster:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

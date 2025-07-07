@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: noisefs
+  labels:
+    name: noisefs
+    app: noisefs

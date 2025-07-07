@@ -1,0 +1,262 @@
+# NoiseFS Makefile
+
+# Configuration
+SHELL := /bin/bash
+PROJECT_NAME := noisefs
+BUILD_DIR := bin
+DIST_DIR := dist
+
+# Go configuration
+GO := go
+GOOS := $(shell go env GOOS)
+GOARCH := $(shell go env GOARCH)
+CGO_ENABLED := 0
+
+# Version information
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Linker flags
+LDFLAGS := -s -w
+LDFLAGS += -X 'main.Version=$(VERSION)'
+LDFLAGS += -X 'main.GitCommit=$(GIT_COMMIT)'
+LDFLAGS += -X 'main.BuildDate=$(BUILD_DATE)'
+
+# Build tags
+BUILD_TAGS ?=
+
+# Binaries to build
+BINARIES := noisefs noisefs-mount noisefs-benchmark noisefs-config webui
+
+# Docker configuration
+DOCKER_IMAGE := $(PROJECT_NAME)
+DOCKER_TAG := latest
+
+# Colors for output
+RED := \033[0;31m
+GREEN := \033[0;32m
+YELLOW := \033[1;33m
+BLUE := \033[0;34m
+NC := \033[0m # No Color
+
+.PHONY: help build clean test bench lint fmt vet deps docker docker-build docker-push install dist dev check all
+
+# Default target
+all: clean build test
+
+# Show help
+help:
+	@echo "$(BLUE)NoiseFS Build System$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Available targets:$(NC)"
+	@echo "  $(GREEN)build$(NC)         Build all binaries"
+	@echo "  $(GREEN)clean$(NC)         Clean build artifacts"
+	@echo "  $(GREEN)test$(NC)          Run tests"
+	@echo "  $(GREEN)bench$(NC)         Run benchmarks"
+	@echo "  $(GREEN)lint$(NC)          Run linters"
+	@echo "  $(GREEN)fmt$(NC)           Format code"
+	@echo "  $(GREEN)vet$(NC)           Run go vet"
+	@echo "  $(GREEN)deps$(NC)          Download dependencies"
+	@echo "  $(GREEN)docker$(NC)        Build Docker image"
+	@echo "  $(GREEN)docker-push$(NC)   Push Docker image"
+	@echo "  $(GREEN)install$(NC)       Install binaries to system"
+	@echo "  $(GREEN)dist$(NC)          Create distribution packages"
+	@echo "  $(GREEN)dev$(NC)           Development build with race detection"
+	@echo "  $(GREEN)check$(NC)         Run all checks (test, lint, vet)"
+	@echo "  $(GREEN)all$(NC)           Clean, build, and test"
+	@echo ""
+	@echo "$(YELLOW)Variables:$(NC)"
+	@echo "  VERSION=$(VERSION)"
+	@echo "  GOOS=$(GOOS)"
+	@echo "  GOARCH=$(GOARCH)"
+	@echo "  BUILD_TAGS=$(BUILD_TAGS)"
+
+# Build all binaries
+build: $(BUILD_DIR) $(addprefix $(BUILD_DIR)/,$(BINARIES))
+	@echo "$(GREEN)✓ Build completed$(NC)"
+
+# Build individual binaries
+$(BUILD_DIR)/%: cmd/%
+	@echo "$(BLUE)Building $*...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/$*
+
+# Create build directory
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+# Development build with race detection
+dev: CGO_ENABLED := 1
+dev: LDFLAGS += -race
+dev: build
+	@echo "$(GREEN)✓ Development build completed$(NC)"
+
+# Clean build artifacts
+clean:
+	@echo "$(BLUE)Cleaning build artifacts...$(NC)"
+	@rm -rf $(BUILD_DIR) $(DIST_DIR)
+	@$(GO) clean -cache -testcache
+	@echo "$(GREEN)✓ Clean completed$(NC)"
+
+# Download dependencies
+deps:
+	@echo "$(BLUE)Downloading dependencies...$(NC)"
+	@$(GO) mod download
+	@$(GO) mod tidy
+	@echo "$(GREEN)✓ Dependencies updated$(NC)"
+
+# Format code
+fmt:
+	@echo "$(BLUE)Formatting code...$(NC)"
+	@$(GO) fmt ./...
+	@echo "$(GREEN)✓ Code formatted$(NC)"
+
+# Run go vet
+vet:
+	@echo "$(BLUE)Running go vet...$(NC)"
+	@$(GO) vet $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) ./...
+	@echo "$(GREEN)✓ Vet completed$(NC)"
+
+# Run linters
+lint:
+	@echo "$(BLUE)Running linters...$(NC)"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run $(if $(BUILD_TAGS),--build-tags $(BUILD_TAGS)); \
+		echo "$(GREEN)✓ Linting completed$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠ golangci-lint not found, running basic checks$(NC)"; \
+		$(MAKE) fmt vet; \
+	fi
+
+# Run tests
+test:
+	@echo "$(BLUE)Running tests...$(NC)"
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./...
+	@echo "$(GREEN)✓ Tests completed$(NC)"
+
+# Run tests with coverage
+test-coverage:
+	@echo "$(BLUE)Running tests with coverage...$(NC)"
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v -coverprofile=coverage.out ./...
+	@$(GO) tool cover -html=coverage.out -o coverage.html
+	@echo "$(GREEN)✓ Coverage report generated: coverage.html$(NC)"
+
+# Run benchmarks
+bench:
+	@echo "$(BLUE)Running benchmarks...$(NC)"
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -bench=. -benchmem ./...
+	@echo "$(GREEN)✓ Benchmarks completed$(NC)"
+
+# Run all checks
+check: deps fmt vet lint test
+	@echo "$(GREEN)✓ All checks passed$(NC)"
+
+# Build Docker image
+docker: docker-build
+
+docker-build:
+	@echo "$(BLUE)Building Docker image...$(NC)"
+	@cd deployments && docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) -f Dockerfile ..
+	@echo "$(GREEN)✓ Docker image built: $(DOCKER_IMAGE):$(DOCKER_TAG)$(NC)"
+
+# Push Docker image
+docker-push:
+	@echo "$(BLUE)Pushing Docker image...$(NC)"
+	@docker push $(DOCKER_IMAGE):$(DOCKER_TAG)
+	@echo "$(GREEN)✓ Docker image pushed$(NC)"
+
+# Install binaries to system
+install: build
+	@echo "$(BLUE)Installing binaries...$(NC)"
+	@for binary in $(BINARIES); do \
+		echo "Installing $$binary to /usr/local/bin/"; \
+		sudo cp $(BUILD_DIR)/$$binary /usr/local/bin/; \
+	done
+	@echo "$(GREEN)✓ Installation completed$(NC)"
+
+# Create distribution packages
+dist: $(DIST_DIR)
+	@echo "$(BLUE)Creating distribution packages...$(NC)"
+	@./scripts/build.sh dist
+	@echo "$(GREEN)✓ Distribution packages created in $(DIST_DIR)$(NC)"
+
+# Create dist directory
+$(DIST_DIR):
+	@mkdir -p $(DIST_DIR)
+
+# Cross-compilation targets
+build-linux: GOOS := linux
+build-linux: build
+
+build-darwin: GOOS := darwin
+build-darwin: build
+
+build-windows: GOOS := windows
+build-windows: build
+
+build-all-platforms:
+	@$(MAKE) build-linux GOOS=linux GOARCH=amd64
+	@$(MAKE) build-linux GOOS=linux GOARCH=arm64
+	@$(MAKE) build-darwin GOOS=darwin GOARCH=amd64
+	@$(MAKE) build-darwin GOOS=darwin GOARCH=arm64
+	@$(MAKE) build-windows GOOS=windows GOARCH=amd64
+
+# FUSE build
+build-fuse: BUILD_TAGS := fuse
+build-fuse: build
+	@echo "$(GREEN)✓ FUSE build completed$(NC)"
+
+# Development workflow
+dev-setup: deps
+	@echo "$(BLUE)Setting up development environment...$(NC)"
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing golangci-lint...$(NC)"; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin; \
+	fi
+	@echo "$(GREEN)✓ Development environment ready$(NC)"
+
+# Watch for changes and rebuild (requires entr)
+watch:
+	@if command -v entr >/dev/null 2>&1; then \
+		echo "$(BLUE)Watching for changes... (Ctrl+C to stop)$(NC)"; \
+		find . -name "*.go" | entr -c $(MAKE) build; \
+	else \
+		echo "$(RED)Error: entr is required for watch mode$(NC)"; \
+		echo "Install with: brew install entr (macOS) or apt-get install entr (Ubuntu)"; \
+		exit 1; \
+	fi
+
+# Start development server
+dev-server: build
+	@echo "$(BLUE)Starting development server...$(NC)"
+	@./$(BUILD_DIR)/noisefs daemon --config configs/config.example.json --log-level debug
+
+# Quick deployment
+deploy: docker
+	@echo "$(BLUE)Starting deployment...$(NC)"
+	@cd deployments && docker-compose up -d
+	@echo "$(GREEN)✓ Deployment started$(NC)"
+	@echo "Web UI: http://localhost:8080"
+
+# Stop deployment
+stop:
+	@echo "$(BLUE)Stopping deployment...$(NC)"
+	@cd deployments && docker-compose down
+	@echo "$(GREEN)✓ Deployment stopped$(NC)"
+
+# Show project status
+status:
+	@echo "$(BLUE)Project Status:$(NC)"
+	@echo "  Version: $(VERSION)"
+	@echo "  Commit: $(GIT_COMMIT)"
+	@echo "  Build Date: $(BUILD_DATE)"
+	@echo "  Go Version: $(shell go version)"
+	@echo "  Platform: $(GOOS)/$(GOARCH)"
+	@if [ -d $(BUILD_DIR) ]; then \
+		echo "  Binaries:"; \
+		ls -la $(BUILD_DIR)/ | grep -v "^d" | awk '{print "    " $$9 " (" $$5 " bytes)"}'; \
+	fi

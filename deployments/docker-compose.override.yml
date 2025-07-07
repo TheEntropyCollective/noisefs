@@ -1,0 +1,38 @@
+# Development override for Docker Compose
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+version: '3.8'
+
+services:
+  noisefs-daemon:
+    environment:
+      - NOISEFS_LOG_LEVEL=debug
+    volumes:
+      # Mount source code for development
+      - .:/app:ro
+    command: shell
+
+  noisefs-webui:
+    environment:
+      - NOISEFS_LOG_LEVEL=debug
+    volumes:
+      # Mount source code for development
+      - .:/app:ro
+
+  # Development tools
+  noisefs-dev:
+    build: .
+    image: noisefs:latest
+    container_name: noisefs-dev
+    command: shell
+    volumes:
+      - .:/app
+      - noisefs-data:/opt/noisefs/data
+      - noisefs-logs:/opt/noisefs/logs
+      - noisefs-cache:/opt/noisefs/cache
+    environment:
+      - NOISEFS_LOG_LEVEL=debug
+    networks:
+      - noisefs-network
+    profiles:
+      - dev

@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: noisefs-daemon
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: daemon
+spec:
+  type: ClusterIP
+  ports:
+  - port: 4001
+    targetPort: 4001
+    protocol: TCP
+    name: swarm
+  - port: 5001
+    targetPort: 5001
+    protocol: TCP
+    name: api
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: metrics
+  selector:
+    app: noisefs
+    component: daemon
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: noisefs-webui
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: webui
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: noisefs
+    component: webui
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: noisefs-daemon-headless
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: daemon
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 4001
+    targetPort: 4001
+    protocol: TCP
+    name: swarm
+  selector:
+    app: noisefs
+    component: daemon

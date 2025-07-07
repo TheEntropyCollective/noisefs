@@ -39,3 +39,22 @@ Thumbs.db
 # Build directories
 /build/
 /dist/
+/bin/
+
+# Configuration files (keep examples)
+config/config.json
+*.env
+.env
+
+# Log files
+*.log
+logs/
+
+# Docker volumes
+docker-data/
+
+# Local development
+.local/
+
+# Go module cache
+go.sum.backup

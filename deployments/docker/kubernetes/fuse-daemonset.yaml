@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: noisefs-fuse
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: fuse
+spec:
+  selector:
+    matchLabels:
+      app: noisefs
+      component: fuse
+  template:
+    metadata:
+      labels:
+        app: noisefs
+        component: fuse
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: noisefs-fuse
+        image: noisefs:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/opt/noisefs/entrypoint.sh"]
+        args: ["mount"]
+        securityContext:
+          privileged: true
+          capabilities:
+            add:
+              - SYS_ADMIN
+        env:
+        - name: NOISEFS_CONFIG_FILE
+          value: /opt/noisefs/config/config.json
+        - name: NOISEFS_LOG_LEVEL
+          value: info
+        - name: NOISEFS_MOUNT_POINT
+          value: /host/mnt/noisefs
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: config
+          mountPath: /opt/noisefs/config
+          readOnly: true
+        - name: dev-fuse
+          mountPath: /dev/fuse
+        - name: host-mount
+          mountPath: /host/mnt
+          mountPropagation: Bidirectional
+        - name: logs
+          mountPath: /opt/noisefs/logs
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "mountpoint -q /host/mnt/noisefs"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: config
+        configMap:
+          name: noisefs-config
+      - name: dev-fuse
+        hostPath:
+          path: /dev/fuse
+          type: CharDevice
+      - name: host-mount
+        hostPath:
+          path: /mnt
+          type: DirectoryOrCreate
+      - name: logs
+        hostPath:
+          path: /var/log/noisefs
+          type: DirectoryOrCreate
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

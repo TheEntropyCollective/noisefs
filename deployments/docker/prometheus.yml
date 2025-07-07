@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # NoiseFS daemon metrics
+  - job_name: 'noisefs-daemon'
+    static_configs:
+      - targets: ['noisefs-daemon:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # NoiseFS Web UI metrics
+  - job_name: 'noisefs-webui'
+    static_configs:
+      - targets: ['noisefs-webui:8080']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  # IPFS node metrics (if available)
+  - job_name: 'ipfs'
+    static_configs:
+      - targets: ['ipfs:5001']
+    metrics_path: /debug/metrics/prometheus
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Container metrics (if cAdvisor is available)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+    metrics_path: /metrics
+
+  # Node exporter (if available)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093

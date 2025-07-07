@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: noisefs-config
+  namespace: noisefs
+data:
+  config.json: |
+    {
+      "ipfs": {
+        "api_url": "http://localhost:5001",
+        "gateway_url": "https://ipfs.io",
+        "timeout": "30s",
+        "retry_attempts": 3
+      },
+      "cache": {
+        "max_size": 1000000,
+        "eviction_policy": "lru",
+        "read_ahead_size": 4,
+        "write_back_buffer": 100
+      },
+      "fuse": {
+        "mount_point": "/opt/noisefs/mount",
+        "allow_other": true,
+        "debug": false
+      },
+      "logging": {
+        "level": "info",
+        "format": "json",
+        "output": "stdout",
+        "file": "/opt/noisefs/logs/noisefs.log"
+      },
+      "performance": {
+        "max_concurrent_operations": 100,
+        "block_size": 131072,
+        "enable_metrics": true,
+        "metrics_port": 8080
+      }
+    }

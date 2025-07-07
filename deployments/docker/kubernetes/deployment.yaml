@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: noisefs-daemon
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: daemon
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: noisefs
+      component: daemon
+  template:
+    metadata:
+      labels:
+        app: noisefs
+        component: daemon
+    spec:
+      containers:
+      - name: noisefs
+        image: noisefs:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/opt/noisefs/entrypoint.sh"]
+        args: ["daemon"]
+        ports:
+        - containerPort: 4001
+          name: swarm
+          protocol: TCP
+        - containerPort: 5001
+          name: api
+          protocol: TCP
+        - containerPort: 8080
+          name: metrics
+          protocol: TCP
+        env:
+        - name: NOISEFS_CONFIG_FILE
+          value: /opt/noisefs/config/config.json
+        - name: NOISEFS_LOG_LEVEL
+          value: info
+        - name: NOISEFS_CLUSTER_MODE
+          value: "true"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: config
+          mountPath: /opt/noisefs/config
+          readOnly: true
+        - name: data
+          mountPath: /opt/noisefs/data
+        - name: logs
+          mountPath: /opt/noisefs/logs
+        - name: cache
+          mountPath: /opt/noisefs/cache
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: config
+        configMap:
+          name: noisefs-config
+      - name: data
+        persistentVolumeClaim:
+          claimName: noisefs-data
+      - name: logs
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: noisefs-webui
+  namespace: noisefs
+  labels:
+    app: noisefs
+    component: webui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: noisefs
+      component: webui
+  template:
+    metadata:
+      labels:
+        app: noisefs
+        component: webui
+    spec:
+      containers:
+      - name: webui
+        image: noisefs:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/opt/noisefs/entrypoint.sh"]
+        args: ["webui"]
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: NOISEFS_CONFIG_FILE
+          value: /opt/noisefs/config/config.json
+        - name: NOISEFS_LOG_LEVEL
+          value: info
+        volumeMounts:
+        - name: config
+          mountPath: /opt/noisefs/config
+          readOnly: true
+        - name: logs
+          mountPath: /opt/noisefs/logs
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 250m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: noisefs-config
+      - name: logs
+        emptyDir: {}
+      restartPolicy: Always

@@ -14,85 +14,72 @@ NoiseFS is a privacy-focused distributed file system that implements the OFFSyst
 
 ### Prerequisites
 
-1. Install [Go](https://golang.org/dl/) (1.19 or later)
+1. Install [Go](https://golang.org/dl/) (1.21 or later)
 2. Install [IPFS](https://docs.ipfs.tech/install/)
 3. Start IPFS daemon:
    ```bash
    ipfs daemon
    ```
 
-### Option 1: Web Interface (Recommended)
+### Option 1: Using Make (Recommended)
 
-1. **Build and start the web UI:**
+1. **Build all binaries:**
    ```bash
-   go run ./cmd/webui
+   make build
    ```
 
-2. **Open your browser:**
+2. **Start the web UI:**
+   ```bash
+   make dev-server
+   ```
+
+3. **Open your browser:**
    ```
    http://localhost:8080
    ```
 
-3. **Upload a file:**
-   - Select a file using the upload form
-   - Choose block size (128KB default)
-   - Click "Upload"
-   - Save the descriptor CID for downloading
+### Option 2: Using Docker
 
-4. **Download a file:**
-   - Enter the descriptor CID
-   - Click "Download"
-   - File will be saved to your Downloads folder
-
-### Option 2: Command Line Interface
-
-1. **Build the CLI:**
+1. **Quick deployment:**
    ```bash
-   go build ./cmd/noisefs
+   make deploy
    ```
 
-2. **Upload a file:**
-   ```bash
-   ./noisefs -upload myfile.txt
-   ```
+2. **Access services:**
+   - Web UI: http://localhost:8080
+   - IPFS API: http://localhost:5001
 
-3. **Download a file:**
-   ```bash
-   ./noisefs -download <descriptor_cid> -output downloaded_file.txt
-   ```
+### Option 3: Manual Build
 
-### Option 3: FUSE Filesystem (Transparent Integration)
-
-1. **Mount NoiseFS as a filesystem:**
+1. **Build individual binaries:**
    ```bash
-   go build ./cmd/noisefs-mount
-   ./noisefs-mount -mount /mnt/noisefs
-   ```
-
-2. **Use standard file operations:**
-   ```bash
-   # Copy files (automatically uploaded and anonymized)
-   cp document.pdf /mnt/noisefs/files/
-   cp image.jpg /mnt/noisefs/files/photos/
+   # CLI application
+   go build -o bin/noisefs ./cmd/noisefs
    
-   # List files
-   ls /mnt/noisefs/files/
+   # Web interface
+   go build -o bin/webui ./cmd/webui
    
-   # Read files (automatically downloaded and reconstructed)
-   cat /mnt/noisefs/files/document.pdf > local_copy.pdf
+   # FUSE filesystem (requires FUSE libraries)
+   go build -tags fuse -o bin/noisefs-mount ./cmd/noisefs-mount
    
-   # View filesystem structure
-   tree /mnt/noisefs/
+   # Configuration tool
+   go build -o bin/noisefs-config ./cmd/noisefs-config
+   
+   # Benchmarking tool
+   go build -o bin/noisefs-benchmark ./cmd/noisefs-benchmark
    ```
 
-3. **Unmount when done:**
+2. **Use the binaries:**
    ```bash
-   ./noisefs-mount -unmount -mount /mnt/noisefs
+   # Upload a file
+   ./bin/noisefs upload myfile.txt
+   
+   # Download a file
+   ./bin/noisefs download <descriptor_cid> -output downloaded_file.txt
+   
+   # Mount filesystem (FUSE)
+   ./bin/noisefs-mount /mnt/noisefs
    ```
-
-**Requirements for FUSE:**
-- macFUSE (macOS) or FUSE (Linux) installed
-- Build with FUSE support: `go build -tags fuse ./cmd/noisefs-mount`
 
 ## How It Works
 
@@ -125,23 +112,88 @@ The system tracks several efficiency metrics:
 ### Project Structure
 
 ```
-cmd/
-├── noisefs/    # CLI application
-└── webui/      # Web interface
+├── cmd/                    # Applications and tools
+│   ├── noisefs/           # Main CLI application
+│   ├── noisefs-mount/     # FUSE filesystem
+│   ├── noisefs-benchmark/ # Performance benchmarking
+│   ├── noisefs-config/    # Configuration management
+│   └── webui/             # Web interface
+├── pkg/                    # Go packages
+│   ├── blocks/            # File splitting and assembly
+│   ├── cache/             # Advanced caching system
+│   ├── config/            # Configuration management
+│   ├── descriptors/       # File metadata management
+│   ├── fuse/              # FUSE filesystem integration
+│   ├── ipfs/              # IPFS integration
+│   ├── logging/           # Structured logging
+│   ├── noisefs/           # High-level client API
+│   └── benchmarks/        # Performance testing
+├── deployments/           # Docker and Kubernetes configs
+│   ├── docker/            # Docker configurations
+│   ├── kubernetes/        # Kubernetes manifests
+│   ├── Dockerfile         # Container build
+│   └── docker-compose.yml # Service orchestration
+├── configs/               # Configuration examples
+├── scripts/               # Build and deployment scripts
+├── docs/                  # Documentation
+├── bin/                   # Built binaries (gitignored)
+└── dist/                  # Distribution packages (gitignored)
+```
 
-pkg/
-├── blocks/     # File splitting and assembly
-├── cache/      # Block caching system
-├── descriptors/# File metadata management
-├── ipfs/       # IPFS integration
-├── noisefs/    # High-level client API
-└── fuse/       # FUSE filesystem integration
+### Development Commands
+
+```bash
+# Build everything
+make build
+
+# Run tests
+make test
+
+# Run with coverage
+make test-coverage
+
+# Run benchmarks
+make bench
+
+# Run linters
+make lint
+
+# Format code
+make fmt
+
+# Development build with race detection
+make dev
+
+# Build with FUSE support
+make build-fuse
+
+# Create distribution packages
+make dist
+
+# Install to system
+make install
+
+# Docker deployment
+make deploy
+
+# Clean build artifacts
+make clean
 ```
 
 ### Running Tests
 
 ```bash
-go test ./...
+# All tests
+make test
+
+# With coverage report
+make test-coverage
+
+# Benchmarks
+make bench
+
+# FUSE tests (requires FUSE)
+make test BUILD_TAGS=fuse
 ```
 
 ### Contributing

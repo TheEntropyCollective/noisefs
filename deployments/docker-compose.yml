@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  # NoiseFS daemon service
+  noisefs-daemon:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    image: noisefs:latest
+    container_name: noisefs-daemon
+    command: daemon
+    ports:
+      - "4001:4001"   # IPFS swarm port
+      - "5001:5001"   # IPFS API port
+    volumes:
+      - noisefs-data:/opt/noisefs/data
+      - noisefs-logs:/opt/noisefs/logs
+      - noisefs-cache:/opt/noisefs/cache
+      - ../configs:/opt/noisefs/config:ro
+    environment:
+      - NOISEFS_LOG_LEVEL=info
+      - NOISEFS_IPFS_GATEWAY=https://ipfs.io
+    networks:
+      - noisefs-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # NoiseFS Web UI service
+  noisefs-webui:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    image: noisefs:latest
+    container_name: noisefs-webui
+    command: webui
+    ports:
+      - "8080:8080"   # Web UI port
+    volumes:
+      - noisefs-data:/opt/noisefs/data:ro
+      - noisefs-logs:/opt/noisefs/logs:ro
+      - ../configs:/opt/noisefs/config:ro
+    environment:
+      - NOISEFS_LOG_LEVEL=info
+    networks:
+      - noisefs-network
+    depends_on:
+      - noisefs-daemon
+    restart: unless-stopped
+
+  # NoiseFS FUSE mount service (requires privileged mode)
+  noisefs-mount:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    image: noisefs:latest
+    container_name: noisefs-mount
+    command: mount
+    privileged: true
+    devices:
+      - /dev/fuse:/dev/fuse
+    cap_add:
+      - SYS_ADMIN
+    volumes:
+      - noisefs-data:/opt/noisefs/data
+      - noisefs-logs:/opt/noisefs/logs
+      - noisefs-cache:/opt/noisefs/cache
+      - noisefs-mount:/opt/noisefs/mount:shared
+      - ../configs:/opt/noisefs/config:ro
+    environment:
+      - NOISEFS_LOG_LEVEL=info
+    networks:
+      - noisefs-network
+    depends_on:
+      - noisefs-daemon
+    restart: unless-stopped
+    profiles:
+      - fuse
+
+  # IPFS node (optional, for local development)
+  ipfs:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-ipfs
+    ports:
+      - "4002:4001"   # Swarm port (different from NoiseFS)
+      - "5002:5001"   # API port (different from NoiseFS)
+      - "8081:8080"   # Gateway port (different from NoiseFS)
+    volumes:
+      - ipfs-data:/data/ipfs
+    environment:
+      - IPFS_PROFILE=server
+    networks:
+      - noisefs-network
+    restart: unless-stopped
+    profiles:
+      - ipfs
+
+  # Monitoring and metrics (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: noisefs-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - noisefs-network
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: noisefs-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - noisefs-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  noisefs-data:
+    driver: local
+  noisefs-logs:
+    driver: local
+  noisefs-cache:
+    driver: local
+  noisefs-mount:
+    driver: local
+  ipfs-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  noisefs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

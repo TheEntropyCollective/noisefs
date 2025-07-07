@@ -3,7 +3,7 @@ module github.com/TheEntropyCollective/noisefs
 go 1.24.4
 
 require (
-	bazil.org/fuse v0.0.0-20230120002735-62a210ff1fd5
+	github.com/hanwen/go-fuse/v2 v2.8.0
 	github.com/ipfs/go-ipfs-api v0.7.0
 )
 
