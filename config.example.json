@@ -1,0 +1,30 @@
+{
+  "ipfs": {
+    "api_endpoint": "localhost:5001",
+    "timeout_seconds": 30
+  },
+  "cache": {
+    "block_cache_size": 1000,
+    "memory_limit_mb": 512
+  },
+  "fuse": {
+    "mount_path": "/mnt/noisefs",
+    "volume_name": "NoiseFS",
+    "read_only": false,
+    "allow_other": false,
+    "debug": false,
+    "index_path": "~/.noisefs/index.json"
+  },
+  "logging": {
+    "level": "info",
+    "format": "text",
+    "output": "console",
+    "file": ""
+  },
+  "performance": {
+    "block_size": 131072,
+    "read_ahead": false,
+    "write_back": false,
+    "max_concurrent_ops": 10
+  }
+}

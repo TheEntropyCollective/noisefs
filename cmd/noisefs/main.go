@@ -8,6 +8,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
@@ -15,25 +16,44 @@ import (
 
 func main() {
 	var (
-		ipfsAPI = flag.String("api", "localhost:5001", "IPFS API endpoint")
-		upload  = flag.String("upload", "", "File to upload to NoiseFS")
-		download = flag.String("download", "", "Descriptor CID to download from NoiseFS")
-		output = flag.String("output", "", "Output file path for download")
-		blockSize = flag.Int("block-size", blocks.DefaultBlockSize, "Block size in bytes")
-		cacheSize = flag.Int("cache-size", 1000, "Number of blocks to cache in memory")
+		configFile = flag.String("config", "", "Configuration file path")
+		ipfsAPI    = flag.String("api", "", "IPFS API endpoint (overrides config)")
+		upload     = flag.String("upload", "", "File to upload to NoiseFS")
+		download   = flag.String("download", "", "Descriptor CID to download from NoiseFS")
+		output     = flag.String("output", "", "Output file path for download")
+		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
+		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
 	)
 	
 	flag.Parse()
 	
+	// Load configuration
+	cfg, err := loadConfig(*configFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Apply command-line overrides
+	if *ipfsAPI != "" {
+		cfg.IPFS.APIEndpoint = *ipfsAPI
+	}
+	if *blockSize != 0 {
+		cfg.Performance.BlockSize = *blockSize
+	}
+	if *cacheSize != 0 {
+		cfg.Cache.BlockCacheSize = *cacheSize
+	}
+	
 	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient(*ipfsAPI)
+	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to connect to IPFS: %v\n", err)
 		os.Exit(1)
 	}
 	
 	// Create cache
-	blockCache := cache.NewMemoryCache(*cacheSize)
+	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
 	
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(ipfsClient, blockCache)
@@ -43,7 +63,7 @@ func main() {
 	}
 	
 	if *upload != "" {
-		if err := uploadFile(ipfsClient, client, *upload, *blockSize); err != nil {
+		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize); err != nil {
 			fmt.Fprintf(os.Stderr, "Upload failed: %v\n", err)
 			os.Exit(1)
 		}
@@ -61,6 +81,19 @@ func main() {
 	} else {
 		flag.Usage()
 	}
+}
+
+// loadConfig loads configuration from file or uses defaults
+func loadConfig(configPath string) (*config.Config, error) {
+	if configPath == "" {
+		// Try default config path
+		defaultPath, err := config.GetDefaultConfigPath()
+		if err == nil {
+			configPath = defaultPath
+		}
+	}
+	
+	return config.LoadConfig(configPath)
 }
 
 func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int) error {

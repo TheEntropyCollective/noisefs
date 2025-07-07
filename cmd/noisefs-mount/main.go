@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
@@ -17,13 +18,14 @@ import (
 
 func main() {
 	var (
-		mountPath    = flag.String("mount", "", "Mount point for the filesystem (required)")
-		volumeName   = flag.String("volume", "NoiseFS", "Volume name")
-		ipfsAPI      = flag.String("ipfs", "localhost:5001", "IPFS API endpoint")
-		cacheSize    = flag.Int("cache", 100, "Cache size (number of blocks)")
-		readOnly     = flag.Bool("readonly", false, "Mount as read-only")
-		allowOther   = flag.Bool("allow-other", false, "Allow other users to access")
-		debug        = flag.Bool("debug", false, "Enable debug output")
+		configFile   = flag.String("config", "", "Configuration file path")
+		mountPath    = flag.String("mount", "", "Mount point for the filesystem (overrides config)")
+		volumeName   = flag.String("volume", "", "Volume name (overrides config)")
+		ipfsAPI      = flag.String("ipfs", "", "IPFS API endpoint (overrides config)")
+		cacheSize    = flag.Int("cache", 0, "Cache size (number of blocks, overrides config)")
+		readOnly     = flag.Bool("readonly", false, "Mount as read-only (overrides config)")
+		allowOther   = flag.Bool("allow-other", false, "Allow other users to access (overrides config)")
+		debug        = flag.Bool("debug", false, "Enable debug output (overrides config)")
 		daemon       = flag.Bool("daemon", false, "Run as daemon")
 		pidFile      = flag.String("pidfile", "", "PID file for daemon mode")
 		unmount      = flag.Bool("unmount", false, "Unmount filesystem")
@@ -31,7 +33,7 @@ func main() {
 		help         = flag.Bool("help", false, "Show help message")
 		
 		// Index management flags
-		indexFile    = flag.String("index", "", "Custom index file path (default: ~/.noisefs/index.json)")
+		indexFile    = flag.String("index", "", "Custom index file path (overrides config)")
 		addFile      = flag.String("add-file", "", "Add file to index: filename:descriptor_cid:size")
 		removeFile   = flag.String("remove-file", "", "Remove file from index")
 		listFiles    = flag.Bool("list-files", false, "List files in index")
@@ -63,12 +65,40 @@ func main() {
 		return
 	}
 
-	if *mountPath == "" {
+	// Load configuration
+	cfg, err := loadConfig(*configFile)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Apply command-line overrides
+	if *mountPath != "" {
+		cfg.FUSE.MountPath = *mountPath
+	}
+	if *volumeName != "" {
+		cfg.FUSE.VolumeName = *volumeName
+	}
+	if *ipfsAPI != "" {
+		cfg.IPFS.APIEndpoint = *ipfsAPI
+	}
+	if *cacheSize != 0 {
+		cfg.Cache.BlockCacheSize = *cacheSize
+	}
+	if *indexFile != "" {
+		cfg.FUSE.IndexPath = *indexFile
+	}
+	// Apply boolean overrides (they override config regardless of value)
+	cfg.FUSE.ReadOnly = *readOnly
+	cfg.FUSE.AllowOther = *allowOther
+	cfg.FUSE.Debug = *debug
+
+	if cfg.FUSE.MountPath == "" {
 		log.Fatal("Mount path is required")
 	}
 
 	// Mount filesystem
-	mountFS(*mountPath, *volumeName, *ipfsAPI, *cacheSize, *readOnly, *allowOther, *debug, *daemon, *pidFile, *indexFile)
+	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
+		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath)
 }
 
 func showHelp() {
@@ -121,6 +151,19 @@ func showHelp() {
 	fmt.Println("  cp file.txt /mnt/noisefs/files/")
 	fmt.Println("  ls /mnt/noisefs/files/")
 	fmt.Println("  cat /mnt/noisefs/files/file.txt")
+}
+
+// loadConfig loads configuration from file or uses defaults
+func loadConfig(configPath string) (*config.Config, error) {
+	if configPath == "" {
+		// Try default config path
+		defaultPath, err := config.GetDefaultConfigPath()
+		if err == nil {
+			configPath = defaultPath
+		}
+	}
+	
+	return config.LoadConfig(configPath)
 }
 
 func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile string) {
