@@ -1,19 +1,34 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 :root {
-    /* Light theme colors */
+    /* Light theme colors - matching RandomFS palette */
     --bg-primary: #ffffff;
-    --bg-secondary: rgba(255, 255, 255, 0.95);
-    --bg-card: rgba(255, 255, 255, 0.8);
+    --bg-secondary: #f8fafc;
+    --bg-card: rgba(255, 255, 255, 0.85);
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-accent: #1e293b;
-    --accent-primary: #1e40af;
-    --accent-secondary: #3b82f6;
-    --accent-gradient: linear-gradient(135deg, #1e40af 0%, #7c3aed 50%, #1e40af 100%);
-    --border-color: rgba(30, 64, 175, 0.2);
-    --shadow-color: rgba(30, 64, 175, 0.1);
+    --accent-primary: #1a1a2e;
+    --accent-secondary: #16213e;
+    --accent-tertiary: #0f3460;
+    --accent-gradient: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    --border-color: rgba(26, 26, 46, 0.15);
+    --shadow-color: rgba(26, 26, 46, 0.1);
     --backdrop-blur: blur(20px);
+    
+    /* Star colors for light theme - vibrant spectrum */
+    --star-red: rgba(239, 68, 68, 0.7);
+    --star-orange: rgba(249, 115, 22, 0.7);
+    --star-yellow: rgba(245, 158, 11, 0.7);
+    --star-green: rgba(34, 197, 94, 0.7);
+    --star-cyan: rgba(6, 182, 212, 0.7);
+    --star-blue: rgba(59, 130, 246, 0.7);
+    --star-violet: rgba(139, 92, 246, 0.7);
+    --star-pink: rgba(236, 72, 153, 0.7);
+    --star-amber: rgba(245, 158, 11, 0.8);
+    --star-emerald: rgba(16, 185, 129, 0.7);
+    --star-indigo: rgba(99, 102, 241, 0.7);
+    --star-lime: rgba(132, 204, 22, 0.7);
     
     /* Typography */
     --font-display: 'Orbitron', monospace;
@@ -23,16 +38,31 @@
 
 [data-theme="dark"] {
     --bg-primary: #0a0a0a;
-    --bg-secondary: rgba(10, 10, 10, 0.95);
-    --bg-card: rgba(20, 20, 20, 0.8);
+    --bg-secondary: #111111;
+    --bg-card: rgba(17, 17, 17, 0.85);
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
     --text-accent: #e2e8f0;
     --accent-primary: #f59e0b;
     --accent-secondary: #fbbf24;
-    --accent-gradient: linear-gradient(135deg, #f59e0b 0%, #f97316 50%, #f59e0b 100%);
-    --border-color: rgba(245, 158, 11, 0.2);
+    --accent-tertiary: #fcd34d;
+    --accent-gradient: linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #fcd34d 100%);
+    --border-color: rgba(245, 158, 11, 0.15);
     --shadow-color: rgba(245, 158, 11, 0.1);
+    
+    /* Star colors for dark theme - warm golden tones */
+    --star-red: rgba(251, 191, 36, 0.6);
+    --star-orange: rgba(245, 158, 11, 0.7);
+    --star-yellow: rgba(252, 211, 77, 0.8);
+    --star-green: rgba(245, 158, 11, 0.6);
+    --star-cyan: rgba(251, 191, 36, 0.5);
+    --star-blue: rgba(245, 158, 11, 0.7);
+    --star-violet: rgba(251, 191, 36, 0.6);
+    --star-pink: rgba(252, 211, 77, 0.7);
+    --star-amber: rgba(245, 158, 11, 0.9);
+    --star-emerald: rgba(251, 191, 36, 0.6);
+    --star-indigo: rgba(245, 158, 11, 0.6);
+    --star-lime: rgba(252, 211, 77, 0.6);
 }
 
 * {
@@ -61,23 +91,94 @@ body::before {
     width: 100%;
     height: 100%;
     background: 
-        radial-gradient(2px 2px at 20px 30px, var(--accent-primary), transparent),
-        radial-gradient(2px 2px at 40px 70px, var(--accent-secondary), transparent),
-        radial-gradient(1px 1px at 90px 40px, var(--accent-primary), transparent),
-        radial-gradient(1px 1px at 130px 80px, var(--accent-secondary), transparent),
-        radial-gradient(2px 2px at 160px 30px, var(--accent-primary), transparent),
-        var(--accent-gradient);
-    background-repeat: repeat;
-    background-size: 200px 100px;
-    animation: twinkle 20s ease-in-out infinite alternate;
+        /* Layer 1 - Large bright stars */
+        radial-gradient(circle at 15% 25%, var(--star-red) 1px, transparent 2px),
+        radial-gradient(circle at 85% 15%, var(--star-blue) 1px, transparent 2px),
+        radial-gradient(circle at 45% 85%, var(--star-yellow) 1px, transparent 2px),
+        radial-gradient(circle at 75% 45%, var(--star-green) 1px, transparent 2px),
+        radial-gradient(circle at 25% 75%, var(--star-violet) 1px, transparent 2px),
+        
+        /* Layer 2 - Medium stars */
+        radial-gradient(circle at 35% 10%, var(--star-cyan) 0.8px, transparent 1.5px),
+        radial-gradient(circle at 90% 80%, var(--star-pink) 0.8px, transparent 1.5px),
+        radial-gradient(circle at 10% 60%, var(--star-orange) 0.8px, transparent 1.5px),
+        radial-gradient(circle at 65% 35%, var(--star-amber) 0.8px, transparent 1.5px),
+        radial-gradient(circle at 55% 65%, var(--star-emerald) 0.8px, transparent 1.5px),
+        
+        /* Layer 3 - Small distant stars */
+        radial-gradient(circle at 20% 40%, var(--star-indigo) 0.5px, transparent 1px),
+        radial-gradient(circle at 80% 70%, var(--star-lime) 0.5px, transparent 1px),
+        radial-gradient(circle at 40% 20%, var(--star-red) 0.5px, transparent 1px),
+        radial-gradient(circle at 70% 90%, var(--star-blue) 0.5px, transparent 1px),
+        radial-gradient(circle at 95% 30%, var(--star-yellow) 0.5px, transparent 1px);
+    
+    background-size: 
+        400px 300px, 400px 300px, 400px 300px, 400px 300px, 400px 300px,
+        350px 250px, 350px 250px, 350px 250px, 350px 250px, 350px 250px,
+        300px 200px, 300px 200px, 300px 200px, 300px 200px, 300px 200px;
+    
+    animation: 
+        twinkle-1 4s ease-in-out infinite alternate,
+        twinkle-2 3s ease-in-out infinite alternate-reverse,
+        twinkle-3 5s ease-in-out infinite alternate;
     z-index: -1;
-    opacity: 0.1;
+    opacity: 0.8;
 }
 
-@keyframes twinkle {
-    0% { transform: translateY(0) rotate(0deg); opacity: 0.05; }
-    50% { transform: translateY(-20px) rotate(180deg); opacity: 0.15; }
-    100% { transform: translateY(0) rotate(360deg); opacity: 0.1; }
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        /* Additional twinkling layer with different timing */
+        radial-gradient(circle at 60% 50%, var(--star-violet) 0.7px, transparent 1.2px),
+        radial-gradient(circle at 30% 80%, var(--star-cyan) 0.6px, transparent 1.1px),
+        radial-gradient(circle at 85% 25%, var(--star-pink) 0.8px, transparent 1.3px),
+        radial-gradient(circle at 50% 15%, var(--star-amber) 0.5px, transparent 1px),
+        radial-gradient(circle at 15% 90%, var(--star-emerald) 0.6px, transparent 1.1px);
+    
+    background-size: 450px 350px, 380px 280px, 420px 320px, 360px 270px, 400px 300px;
+    animation: 
+        twinkle-4 6s ease-in-out infinite alternate,
+        twinkle-5 4.5s ease-in-out infinite alternate-reverse;
+    z-index: -1;
+    opacity: 0.6;
+}
+
+@keyframes twinkle-1 {
+    0% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.1); }
+    100% { opacity: 0.4; transform: scale(1); }
+}
+
+@keyframes twinkle-2 {
+    0% { opacity: 0.2; transform: scale(0.9); }
+    33% { opacity: 0.7; transform: scale(1.05); }
+    66% { opacity: 0.5; transform: scale(1.02); }
+    100% { opacity: 0.3; transform: scale(0.95); }
+}
+
+@keyframes twinkle-3 {
+    0% { opacity: 0.4; transform: scale(1.02); }
+    25% { opacity: 0.2; transform: scale(0.98); }
+    75% { opacity: 0.9; transform: scale(1.08); }
+    100% { opacity: 0.3; transform: scale(1); }
+}
+
+@keyframes twinkle-4 {
+    0% { opacity: 0.1; transform: scale(0.8) rotate(0deg); }
+    50% { opacity: 0.6; transform: scale(1.15) rotate(180deg); }
+    100% { opacity: 0.2; transform: scale(0.9) rotate(360deg); }
+}
+
+@keyframes twinkle-5 {
+    0% { opacity: 0.5; transform: scale(1.1); }
+    40% { opacity: 0.1; transform: scale(0.85); }
+    80% { opacity: 0.7; transform: scale(1.2); }
+    100% { opacity: 0.3; transform: scale(1); }
 }
 
 .container {
