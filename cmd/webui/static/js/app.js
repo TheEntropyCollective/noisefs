@@ -40,6 +40,23 @@ function initializeEventListeners() {
     // Download form handler
     const downloadForm = document.getElementById('downloadForm');
     downloadForm.addEventListener('submit', handleDownload);
+    
+    // Encryption toggle handler
+    const encryptSelect = document.getElementById('encrypt');
+    const passwordGroup = document.getElementById('passwordGroup');
+    
+    // Initial state
+    togglePasswordField();
+    
+    encryptSelect.addEventListener('change', togglePasswordField);
+    
+    function togglePasswordField() {
+        const isEncrypted = encryptSelect.value === 'encrypted';
+        passwordGroup.style.display = isEncrypted ? 'block' : 'none';
+        
+        const passwordInput = document.getElementById('password');
+        passwordInput.required = isEncrypted;
+    }
 }
 
 async function handleUpload(event) {
@@ -93,6 +110,7 @@ async function handleDownload(event) {
     const form = event.target;
     const formData = new FormData(form);
     const descriptorCID = formData.get('descriptorCID').trim();
+    const password = formData.get('downloadPassword') || '';
     const resultDiv = document.getElementById('downloadResult');
     const submitButton = form.querySelector('button[type="submit"]');
     
@@ -108,7 +126,11 @@ async function handleDownload(event) {
     showProgress(resultDiv, 'Downloading file...');
     
     try {
-        const response = await fetch(`/api/download?cid=${encodeURIComponent(descriptorCID)}`);
+        let url = `/api/download?cid=${encodeURIComponent(descriptorCID)}`;
+        if (password) {
+            url += `&password=${encodeURIComponent(password)}`;
+        }
+        const response = await fetch(url);
         
         if (response.ok) {
             // Get filename from Content-Disposition header

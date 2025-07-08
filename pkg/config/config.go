@@ -30,6 +30,9 @@ type Config struct {
 	
 	// WebUI Configuration
 	WebUI WebUIConfig `json:"webui"`
+	
+	// Security Configuration
+	Security SecurityConfig `json:"security"`
 }
 
 // IPFSConfig holds IPFS-related configuration
@@ -81,6 +84,14 @@ type WebUIConfig struct {
 	TLSHostnames []string `json:"tls_hostnames"`
 }
 
+// SecurityConfig holds security-related configuration
+type SecurityConfig struct {
+	EncryptDescriptors bool   `json:"encrypt_descriptors"`
+	DefaultEncrypted   bool   `json:"default_encrypted"`
+	RequirePassword    bool   `json:"require_password"`
+	PasswordPrompt     bool   `json:"password_prompt"`
+}
+
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
@@ -123,6 +134,12 @@ func DefaultConfig() *Config {
 			TLSKeyFile:   "",
 			TLSAutoGen:   true,
 			TLSHostnames: []string{"localhost"},
+		},
+		Security: SecurityConfig{
+			EncryptDescriptors: true,
+			DefaultEncrypted:   true,
+			RequirePassword:    false,
+			PasswordPrompt:     true,
 		},
 	}
 }
@@ -259,6 +276,20 @@ func (c *Config) applyEnvironmentOverrides() {
 	}
 	if val := os.Getenv("NOISEFS_WEBUI_TLS_AUTO"); val != "" {
 		c.WebUI.TLSAutoGen = strings.ToLower(val) == "true"
+	}
+
+	// Security overrides
+	if val := os.Getenv("NOISEFS_ENCRYPT_DESCRIPTORS"); val != "" {
+		c.Security.EncryptDescriptors = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_DEFAULT_ENCRYPTED"); val != "" {
+		c.Security.DefaultEncrypted = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_REQUIRE_PASSWORD"); val != "" {
+		c.Security.RequirePassword = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_PASSWORD_PROMPT"); val != "" {
+		c.Security.PasswordPrompt = strings.ToLower(val) == "true"
 	}
 }
 

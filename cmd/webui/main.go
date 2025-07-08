@@ -24,6 +24,7 @@ type WebUI struct {
 	ipfsClient   *ipfs.Client
 	noisefsClient *noisefs.Client
 	cache        cache.Cache
+	config       *config.Config
 }
 
 type UploadResponse struct {
@@ -67,6 +68,7 @@ func main() {
 		ipfsClient:    ipfsClient,
 		noisefsClient: noisefsClient,
 		cache:         blockCache,
+		config:        cfg,
 	}
 
 	// Set up HTTP routes
@@ -215,6 +217,18 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                             <option value="524288">512 KB</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="encrypt">Encryption:</label>
+                        <select id="encrypt" name="encrypt">
+                            <option value="encrypted" selected>Private (Encrypted)</option>
+                            <option value="public">Public (Unencrypted)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="passwordGroup">
+                        <label for="password">Password (for private files):</label>
+                        <input type="password" id="password" name="password" 
+                               placeholder="Enter password to encrypt file metadata">
+                    </div>
                     <button type="submit">Upload</button>
                 </form>
                 <div id="uploadResult"></div>
@@ -227,6 +241,11 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                         <label for="descriptorCID">Descriptor CID:</label>
                         <input type="text" id="descriptorCID" name="descriptorCID" required 
                                placeholder="Enter descriptor CID from upload">
+                    </div>
+                    <div class="form-group">
+                        <label for="downloadPassword">Password (if file is encrypted):</label>
+                        <input type="password" id="downloadPassword" name="downloadPassword" 
+                               placeholder="Enter password for encrypted files">
                     </div>
                     <button type="submit">Download</button>
                 </form>
@@ -388,8 +407,15 @@ func (w *WebUI) uploadHandler(rw http.ResponseWriter, r *http.Request) {
 		blockSize = blocks.DefaultBlockSize
 	}
 
+	// Get encryption settings
+	encryptType := r.FormValue("encrypt")
+	password := r.FormValue("password")
+	
+	// Determine if file should be encrypted
+	useEncryption := encryptType == "encrypted" && password != ""
+
 	// Upload file
-	descriptorCID, err := w.uploadFile(file, header.Filename, int64(header.Size), blockSize)
+	descriptorCID, err := w.uploadFile(file, header.Filename, int64(header.Size), blockSize, useEncryption, password)
 	if err != nil {
 		w.sendError(rw, "Upload failed", err)
 		return
@@ -418,8 +444,10 @@ func (w *WebUI) downloadHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	password := r.URL.Query().Get("password")
+
 	// Download file
-	data, filename, err := w.downloadFile(descriptorCID)
+	data, filename, err := w.downloadFile(descriptorCID, password)
 	if err != nil {
 		w.sendError(rw, "Download failed", err)
 		return
@@ -444,7 +472,7 @@ func (w *WebUI) metricsHandler(rw http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(rw).Encode(response)
 }
 
-func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, blockSize int) (string, error) {
+func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, blockSize int, useEncryption bool, password string) (string, error) {
 	// Create splitter
 	splitter, err := blocks.NewSplitter(blockSize)
 	if err != nil {
@@ -486,15 +514,31 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 		}
 	}
 
-	// Store descriptor
-	store, err := descriptors.NewStore(w.ipfsClient)
-	if err != nil {
-		return "", err
-	}
-
-	descriptorCID, err := store.Save(descriptor)
-	if err != nil {
-		return "", err
+	// Store descriptor (encrypted or unencrypted)
+	var descriptorCID string
+	
+	if useEncryption {
+		// Use encrypted store
+		encStore, storeErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		if storeErr != nil {
+			return "", storeErr
+		}
+		cid, saveErr := encStore.Save(descriptor)
+		if saveErr != nil {
+			return "", saveErr
+		}
+		descriptorCID = cid
+	} else {
+		// Use regular store for public content
+		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		if storeErr != nil {
+			return "", storeErr
+		}
+		cid, saveErr := store.Save(descriptor)
+		if saveErr != nil {
+			return "", saveErr
+		}
+		descriptorCID = cid
 	}
 
 	// Record metrics
@@ -507,16 +551,40 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 	return descriptorCID, nil
 }
 
-func (w *WebUI) downloadFile(descriptorCID string) ([]byte, string, error) {
-	// Load descriptor
-	store, err := descriptors.NewStore(w.ipfsClient)
-	if err != nil {
-		return nil, "", err
+func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, string, error) {
+	// Try to load descriptor (encrypted first if password provided, then fallback to unencrypted)
+	var descriptor *descriptors.Descriptor
+	var loadErr error
+	
+	if password != "" {
+		// Try encrypted store first
+		encStore, encErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		if encErr == nil {
+			descriptor, loadErr = encStore.Load(descriptorCID)
+			if loadErr == nil {
+				// Successfully loaded encrypted descriptor
+			} else {
+				// Try fallback to unencrypted
+				descriptor = nil
+			}
+		}
 	}
+	
+	if descriptor == nil {
+		// Fallback to regular store (for unencrypted descriptors or if password fails)
+		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		if storeErr != nil {
+			return nil, "", storeErr
+		}
 
-	descriptor, err := store.Load(descriptorCID)
-	if err != nil {
-		return nil, "", err
+		var err error
+		descriptor, err = store.Load(descriptorCID)
+		if err != nil {
+			if password != "" {
+				return nil, "", fmt.Errorf("failed to load descriptor (wrong password or not encrypted): %w", err)
+			}
+			return nil, "", err
+		}
 	}
 
 	// Retrieve blocks
