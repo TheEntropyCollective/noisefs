@@ -111,12 +111,29 @@ type CacheExchangeProtocol struct {
 	mutex           sync.RWMutex
 }
 
+
+// AdaptiveAccessPredictor predicts access patterns using ML
+type AdaptiveAccessPredictor struct {
+	model          *LinearRegressionModel
+	featureExtractor *FeatureExtractor
+	predictionCache  map[string]float64
+	mutex           sync.RWMutex
+}
+
+// AdaptiveEvictionPolicy defines how items are evicted from cache
+type AdaptiveEvictionPolicy interface {
+	ShouldEvict(item *AdaptiveCacheItem) bool
+	SelectEvictionCandidates(items []*AdaptiveCacheItem, count int) []*AdaptiveCacheItem
+	UpdateItem(item *AdaptiveCacheItem)
+	GetPriority(item *AdaptiveCacheItem) float64
+}
+
 // AdaptiveCache implements ML-based caching with intelligent eviction policies
 type AdaptiveCache struct {
 	// Core cache data
-	items           map[string]*CacheItem
-	accessHistory   map[string]*AccessPattern
-	evictionPolicy  EvictionPolicy
+	items           map[string]*AdaptiveCacheItem
+	accessHistory   map[string]*AdaptiveAccessPattern
+	evictionPolicy  AdaptiveEvictionPolicy
 	
 	// Cache configuration
 	maxSize         int64
@@ -124,7 +141,7 @@ type AdaptiveCache struct {
 	maxItems        int
 	
 	// ML prediction model
-	predictor       *AccessPredictor
+	predictor       *AdaptiveAccessPredictor
 	
 	// Peer coordination
 	peerCache       map[peer.ID]*PeerCacheInfo
@@ -134,7 +151,7 @@ type AdaptiveCache struct {
 	mutex           sync.RWMutex
 	
 	// Statistics
-	stats           *CacheStats
+	stats           *AdaptiveCacheStats
 	
 	// Configuration
 	config          *AdaptiveCacheConfig
@@ -144,20 +161,20 @@ type AdaptiveCache struct {
 // NewAdaptiveCache creates a new adaptive cache instance
 func NewAdaptiveCache(config *AdaptiveCacheConfig) *AdaptiveCache {
 	cache := &AdaptiveCache{
-		items:         make(map[string]*CacheItem),
-		accessHistory: make(map[string]*AccessPattern),
+		items:         make(map[string]*AdaptiveCacheItem),
+		accessHistory: make(map[string]*AdaptiveAccessPattern),
 		peerCache:     make(map[peer.ID]*PeerCacheInfo),
 		maxSize:       config.MaxSize,
 		maxItems:      config.MaxItems,
 		config:        config,
-		stats:         &CacheStats{},
+		stats:         &AdaptiveCacheStats{},
 	}
 	
 	// Initialize ML predictor
-	cache.predictor = NewAccessPredictor()
+	cache.predictor = NewAdaptiveAccessPredictor()
 	
 	// Initialize eviction policy (start with ML-based policy)
-	cache.evictionPolicy = NewMLEvictionPolicy(cache)
+	cache.evictionPolicy = NewAdaptiveMLEvictionPolicy(cache)
 	
 	// Initialize cache exchange protocol
 	cache.cacheExchange = &CacheExchangeProtocol{
