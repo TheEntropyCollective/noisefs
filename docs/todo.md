@@ -133,33 +133,33 @@ function shouldCache(block, predictedAccess, cacheSpace):
 
 **Goal**: Implement sophisticated peer selection algorithms that optimize for randomizer block reuse, performance, privacy, and caching efficiency.
 
-#### Task 1: Core Peer Selection Infrastructure
+#### Task 1: Core Peer Selection Infrastructure ✅
 - [x] Create `pkg/p2p/peer_manager.go` with PeerManager interface and implementation
-- [ ] Implement peer metadata tracking (latency, bandwidth, block availability, reputation)
-- [ ] Create peer discovery mechanisms integrated with IPFS DHT
-- [ ] Build peer connection pool with configurable limits
-- [ ] Add peer health monitoring and automatic pruning of unresponsive peers
+- [x] Implement peer metadata tracking (latency, bandwidth, block availability, reputation)
+- [x] Create peer discovery mechanisms integrated with IPFS DHT
+- [x] Build peer connection pool with configurable limits
+- [x] Add peer health monitoring and automatic pruning of unresponsive peers
 
-#### Task 2: Randomizer-Aware Peer Selection
-- [ ] Create `pkg/p2p/randomizer_index.go` for tracking randomizer block distribution
-- [ ] Implement bloom filter-based block availability announcements
-- [ ] Build randomizer popularity tracking across peer network
-- [ ] Create peer ranking algorithm based on randomizer availability score
-- [ ] Implement preferential peer selection for nodes with high randomizer overlap
+#### Task 2: Randomizer-Aware Peer Selection ✅
+- [x] Create `pkg/p2p/randomizer_strategy.go` for tracking randomizer block distribution
+- [x] Implement bloom filter-based block availability announcements
+- [x] Build randomizer popularity tracking across peer network
+- [x] Create peer ranking algorithm based on randomizer availability score
+- [x] Implement preferential peer selection for nodes with high randomizer overlap
 
-#### Task 3: Performance-Based Peer Scoring
-- [ ] Create `pkg/p2p/peer_metrics.go` for real-time performance tracking
-- [ ] Implement latency measurement using periodic ping/pong
-- [ ] Build bandwidth estimation through transfer sampling
-- [ ] Create composite performance score (latency * 0.4 + bandwidth * 0.3 + success_rate * 0.3)
-- [ ] Implement adaptive timeout adjustments based on peer performance history
+#### Task 3: Performance-Based Peer Scoring ✅
+- [x] Create `pkg/p2p/performance_strategy.go` for real-time performance tracking
+- [x] Implement latency measurement using periodic ping/pong
+- [x] Build bandwidth estimation through transfer sampling
+- [x] Create composite performance score (latency * 0.4 + bandwidth * 0.3 + success_rate * 0.3)
+- [x] Implement adaptive timeout adjustments based on peer performance history
 
-#### Task 4: Privacy-Preserving Load Distribution
-- [ ] Create `pkg/p2p/privacy_mixer.go` for anonymizing peer requests
-- [ ] Implement request routing through random intermediate peers
-- [ ] Build query batching to obscure individual file access patterns
-- [ ] Create decoy traffic generation for plausible deniability
-- [ ] Implement temporal randomization for request timing
+#### Task 4: Privacy-Preserving Load Distribution ✅
+- [x] Create `pkg/p2p/privacy_strategy.go` for anonymizing peer requests
+- [x] Implement request routing through random intermediate peers
+- [x] Build query batching to obscure individual file access patterns
+- [x] Create decoy traffic generation for plausible deniability
+- [x] Implement temporal randomization for request timing
 
 ### 🎯 Sprint 2: Adaptive Caching & Integration
 
