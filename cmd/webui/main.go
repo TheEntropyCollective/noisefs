@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
@@ -21,10 +24,10 @@ import (
 )
 
 type WebUI struct {
-	ipfsClient   *ipfs.Client
+	ipfsClient    *ipfs.Client
 	noisefsClient *noisefs.Client
-	cache        cache.Cache
-	config       *config.Config
+	cache         cache.Cache
+	config        *config.Config
 }
 
 type UploadResponse struct {
@@ -38,6 +41,19 @@ type UploadResponse struct {
 type MetricsResponse struct {
 	noisefs.MetricsSnapshot
 	Timestamp time.Time `json:"timestamp"`
+}
+
+type RangeRequest struct {
+	Start int64
+	End   int64
+	Size  int64
+}
+
+type StreamingFile struct {
+	descriptor *descriptors.Descriptor
+	blocks     []*blocks.Block
+	size       int64
+	filename   string
 }
 
 func main() {
@@ -247,9 +263,25 @@ func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {
                         <input type="password" id="downloadPassword" name="downloadPassword" 
                                placeholder="Enter password for encrypted files">
                     </div>
+                    <div class="form-group">
+                        <label for="downloadMode">Download Mode:</label>
+                        <select id="downloadMode" name="downloadMode">
+                            <option value="traditional" selected>Traditional (Full Download)</option>
+                            <option value="streaming">Progressive (Streaming)</option>
+                        </select>
+                        <small class="help-text">
+                            Traditional: Download complete file (better privacy)<br>
+                            Progressive: Stream on-demand (better for media playback)
+                        </small>
+                    </div>
                     <button type="submit">Download</button>
+                    <button type="button" id="streamPreviewBtn" style="display: none;">Stream Preview</button>
                 </form>
                 <div id="downloadResult"></div>
+                <div id="streamingPreview" style="display: none;">
+                    <h3>Media Preview</h3>
+                    <div id="mediaContainer"></div>
+                </div>
             </div>
 
             <div class="section metrics-card">
@@ -445,7 +477,18 @@ func (w *WebUI) downloadHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	password := r.URL.Query().Get("password")
+	streaming := r.URL.Query().Get("stream") == "true"
 
+	if streaming {
+		// Use streaming download for progressive/range requests
+		w.streamingDownloadHandler(rw, r, descriptorCID, password)
+	} else {
+		// Use traditional download for full file downloads
+		w.traditionalDownloadHandler(rw, r, descriptorCID, password)
+	}
+}
+
+func (w *WebUI) traditionalDownloadHandler(rw http.ResponseWriter, r *http.Request, descriptorCID, password string) {
 	// Download file
 	data, filename, err := w.downloadFile(descriptorCID, password)
 	if err != nil {
@@ -453,12 +496,36 @@ func (w *WebUI) downloadHandler(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Detect content type
+	contentType := w.detectContentType(filename, data)
+
 	// Set headers for file download
 	rw.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	rw.Header().Set("Content-Type", "application/octet-stream")
+	rw.Header().Set("Content-Type", contentType)
 	rw.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	rw.Header().Set("Accept-Ranges", "bytes")
 
 	rw.Write(data)
+}
+
+func (w *WebUI) streamingDownloadHandler(rw http.ResponseWriter, r *http.Request, descriptorCID, password string) {
+	// Load streaming file metadata
+	streamFile, err := w.loadStreamingFile(descriptorCID, password)
+	if err != nil {
+		w.sendError(rw, "Failed to load file for streaming", err)
+		return
+	}
+
+	// Detect content type
+	contentType := w.detectContentType(streamFile.filename, nil)
+
+	// Parse range request if present
+	rangeHeader := r.Header.Get("Range")
+	if rangeHeader != "" {
+		w.serveRangeRequest(rw, r, streamFile, contentType, rangeHeader)
+	} else {
+		w.serveFullStreamingFile(rw, r, streamFile, contentType)
+	}
 }
 
 func (w *WebUI) metricsHandler(rw http.ResponseWriter, r *http.Request) {
@@ -648,6 +715,273 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 	w.noisefsClient.RecordDownload()
 
 	return data, descriptor.Filename, nil
+}
+
+// detectContentType detects the MIME type based on filename and optional data
+func (w *WebUI) detectContentType(filename string, data []byte) string {
+	// First try to detect from file extension
+	ext := filepath.Ext(filename)
+	if contentType := mime.TypeByExtension(ext); contentType != "" {
+		return contentType
+	}
+	
+	// For common media types not covered by mime package
+	switch strings.ToLower(ext) {
+	case ".mkv":
+		return "video/x-matroska"
+	case ".avi":
+		return "video/x-msvideo"
+	case ".flv":
+		return "video/x-flv"
+	case ".m4v":
+		return "video/mp4"
+	case ".ts":
+		return "video/mp2t"
+	}
+	
+	// Try to detect from content if data is available
+	if data != nil && len(data) > 512 {
+		return http.DetectContentType(data[:512])
+	}
+	
+	// Default fallback
+	return "application/octet-stream"
+}
+
+// loadStreamingFile loads file metadata for streaming without loading full content
+func (w *WebUI) loadStreamingFile(descriptorCID string, password string) (*StreamingFile, error) {
+	// Load descriptor (same logic as downloadFile)
+	var descriptor *descriptors.Descriptor
+	var loadErr error
+	
+	if password != "" {
+		encStore, encErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		if encErr == nil {
+			descriptor, loadErr = encStore.Load(descriptorCID)
+			if loadErr != nil {
+				descriptor = nil
+			}
+		}
+	}
+	
+	if descriptor == nil {
+		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		if storeErr != nil {
+			return nil, storeErr
+		}
+
+		var err error
+		descriptor, err = store.Load(descriptorCID)
+		if err != nil {
+			if password != "" {
+				return nil, fmt.Errorf("failed to load descriptor (wrong password or not encrypted): %w", err)
+			}
+			return nil, err
+		}
+	}
+
+	// Calculate total file size
+	var totalSize int64
+	for range descriptor.Blocks {
+		totalSize += int64(descriptor.BlockSize)
+	}
+
+	return &StreamingFile{
+		descriptor: descriptor,
+		blocks:     nil, // Blocks will be loaded on-demand
+		size:       totalSize,
+		filename:   descriptor.Filename,
+	}, nil
+}
+
+// parseRangeHeader parses HTTP Range header
+func (w *WebUI) parseRangeHeader(rangeHeader string, fileSize int64) (*RangeRequest, error) {
+	if !strings.HasPrefix(rangeHeader, "bytes=") {
+		return nil, fmt.Errorf("unsupported range unit")
+	}
+	
+	rangeSpec := strings.TrimPrefix(rangeHeader, "bytes=")
+	parts := strings.Split(rangeSpec, "-")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid range format")
+	}
+	
+	var start, end int64
+	var err error
+	
+	if parts[0] == "" {
+		// Suffix range: -500 (last 500 bytes)
+		if parts[1] == "" {
+			return nil, fmt.Errorf("invalid range format")
+		}
+		suffix, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		start = fileSize - suffix
+		if start < 0 {
+			start = 0
+		}
+		end = fileSize - 1
+	} else {
+		// Normal range: 0-499 or 500-
+		start, err = strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		
+		if parts[1] == "" {
+			// Open-ended range: 500-
+			end = fileSize - 1
+		} else {
+			end, err = strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	
+	// Validate range
+	if start < 0 || end >= fileSize || start > end {
+		return nil, fmt.Errorf("invalid range")
+	}
+	
+	return &RangeRequest{
+		Start: start,
+		End:   end,
+		Size:  end - start + 1,
+	}, nil
+}
+
+// serveRangeRequest serves a partial content response for range requests
+func (w *WebUI) serveRangeRequest(rw http.ResponseWriter, r *http.Request, streamFile *StreamingFile, contentType, rangeHeader string) {
+	rangeReq, err := w.parseRangeHeader(rangeHeader, streamFile.size)
+	if err != nil {
+		http.Error(rw, "Invalid range request", http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+	
+	// Set partial content headers
+	rw.Header().Set("Content-Type", contentType)
+	rw.Header().Set("Accept-Ranges", "bytes")
+	rw.Header().Set("Content-Length", strconv.FormatInt(rangeReq.Size, 10))
+	rw.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", rangeReq.Start, rangeReq.End, streamFile.size))
+	rw.WriteHeader(http.StatusPartialContent)
+	
+	// Stream the requested range
+	err = w.streamFileRange(rw, streamFile, rangeReq.Start, rangeReq.End)
+	if err != nil {
+		log.Printf("Error streaming range: %v", err)
+	}
+}
+
+// serveFullStreamingFile serves the complete file progressively
+func (w *WebUI) serveFullStreamingFile(rw http.ResponseWriter, r *http.Request, streamFile *StreamingFile, contentType string) {
+	// Set headers for full streaming response
+	rw.Header().Set("Content-Type", contentType)
+	rw.Header().Set("Accept-Ranges", "bytes")
+	rw.Header().Set("Content-Length", strconv.FormatInt(streamFile.size, 10))
+	
+	// Stream the complete file
+	err := w.streamFileRange(rw, streamFile, 0, streamFile.size-1)
+	if err != nil {
+		log.Printf("Error streaming file: %v", err)
+	}
+}
+
+// streamFileRange streams a byte range from the file by reconstructing blocks on-demand
+func (w *WebUI) streamFileRange(writer io.Writer, streamFile *StreamingFile, startByte, endByte int64) error {
+	blockSize := int64(streamFile.descriptor.BlockSize)
+	
+	// Calculate which blocks we need (for optimization, not currently used)
+	_ = int(startByte / blockSize)
+	_ = int(endByte / blockSize)
+	
+	var currentPos int64 = 0
+	
+	for blockIdx := 0; blockIdx < len(streamFile.descriptor.Blocks); blockIdx++ {
+		blockEndPos := currentPos + blockSize
+		
+		// Skip blocks that are completely before our range
+		if blockEndPos <= startByte {
+			currentPos = blockEndPos
+			continue
+		}
+		
+		// Stop if we're past our range
+		if currentPos > endByte {
+			break
+		}
+		
+		// Retrieve and reconstruct this block
+		originalBlock, err := w.reconstructBlock(streamFile.descriptor, blockIdx)
+		if err != nil {
+			return fmt.Errorf("failed to reconstruct block %d: %w", blockIdx, err)
+		}
+		
+		// Calculate what portion of this block to write
+		blockStart := int64(0)
+		if currentPos < startByte {
+			blockStart = startByte - currentPos
+		}
+		
+		blockEnd := blockSize
+		if blockEndPos > endByte+1 {
+			blockEnd = blockSize - (blockEndPos-endByte-1)
+		}
+		
+		// Write the relevant portion of the block
+		if blockStart < blockEnd {
+			_, err = writer.Write(originalBlock.Data[blockStart:blockEnd])
+			if err != nil {
+				return err
+			}
+		}
+		
+		currentPos = blockEndPos
+	}
+	
+	return nil
+}
+
+// reconstructBlock retrieves and reconstructs a single block by index
+func (w *WebUI) reconstructBlock(descriptor *descriptors.Descriptor, blockIdx int) (*blocks.Block, error) {
+	blockPair := descriptor.Blocks[blockIdx]
+	
+	// Get data block
+	dataBlock, err := w.ipfsClient.RetrieveBlock(blockPair.DataCID)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get first randomizer block
+	randomizer1Block, err := w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID1)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get second randomizer block if using 3-tuple format
+	var randomizer2Block *blocks.Block
+	if descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
+		randomizer2Block, err = w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID2)
+		if err != nil {
+			return nil, err
+		}
+	}
+	
+	// XOR to reconstruct original block
+	var originalBlock *blocks.Block
+	if descriptor.IsThreeTuple() && randomizer2Block != nil {
+		originalBlock, err = dataBlock.XOR3(randomizer1Block, randomizer2Block)
+	} else {
+		originalBlock, err = dataBlock.XOR(randomizer1Block)
+	}
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	return originalBlock, nil
 }
 
 func (w *WebUI) sendError(rw http.ResponseWriter, message string, err error) {

@@ -75,12 +75,12 @@ type PerformanceConfig struct {
 
 // WebUIConfig holds web UI server configuration
 type WebUIConfig struct {
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	TLSEnabled   bool   `json:"tls_enabled"`
-	TLSCertFile  string `json:"tls_cert_file"`
-	TLSKeyFile   string `json:"tls_key_file"`
-	TLSAutoGen   bool   `json:"tls_auto_gen"`
+	Host         string   `json:"host"`
+	Port         int      `json:"port"`
+	TLSEnabled   bool     `json:"tls_enabled"`
+	TLSCertFile  string   `json:"tls_cert_file"`
+	TLSKeyFile   string   `json:"tls_key_file"`
+	TLSAutoGen   bool     `json:"tls_auto_gen"`
 	TLSHostnames []string `json:"tls_hostnames"`
 }
 

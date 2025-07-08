@@ -41,6 +41,23 @@ function initializeEventListeners() {
     const downloadForm = document.getElementById('downloadForm');
     downloadForm.addEventListener('submit', handleDownload);
     
+    // Stream preview button handler
+    const streamPreviewBtn = document.getElementById('streamPreviewBtn');
+    streamPreviewBtn.addEventListener('click', handleStreamPreview);
+    
+    // Download mode change handler
+    const downloadModeSelect = document.getElementById('downloadMode');
+    downloadModeSelect.addEventListener('change', function() {
+        const streamingPreview = document.getElementById('streamingPreview');
+        
+        if (this.value === 'streaming') {
+            streamPreviewBtn.style.display = 'inline-block';
+        } else {
+            streamPreviewBtn.style.display = 'none';
+            streamingPreview.style.display = 'none';
+        }
+    });
+    
     // Encryption toggle handler
     const encryptSelect = document.getElementById('encrypt');
     const passwordGroup = document.getElementById('passwordGroup');
@@ -111,6 +128,7 @@ async function handleDownload(event) {
     const formData = new FormData(form);
     const descriptorCID = formData.get('descriptorCID').trim();
     const password = formData.get('downloadPassword') || '';
+    const downloadMode = formData.get('downloadMode') || 'traditional';
     const resultDiv = document.getElementById('downloadResult');
     const submitButton = form.querySelector('button[type="submit"]');
     
@@ -129,6 +147,9 @@ async function handleDownload(event) {
         let url = `/api/download?cid=${encodeURIComponent(descriptorCID)}`;
         if (password) {
             url += `&password=${encodeURIComponent(password)}`;
+        }
+        if (downloadMode === 'streaming') {
+            url += `&stream=true`;
         }
         const response = await fetch(url);
         
@@ -159,6 +180,123 @@ async function handleDownload(event) {
         submitButton.disabled = false;
         submitButton.textContent = 'Download';
     }
+}
+
+async function handleStreamPreview(event) {
+    const form = document.getElementById('downloadForm');
+    const formData = new FormData(form);
+    const descriptorCID = formData.get('descriptorCID').trim();
+    const password = formData.get('downloadPassword') || '';
+    const streamingPreview = document.getElementById('streamingPreview');
+    const mediaContainer = document.getElementById('mediaContainer');
+    const resultDiv = document.getElementById('downloadResult');
+    
+    // Validate CID input
+    if (!descriptorCID) {
+        showResult(resultDiv, 'Please enter a descriptor CID.', 'error');
+        return;
+    }
+    
+    try {
+        showProgress(resultDiv, 'Loading streaming preview...');
+        
+        // Build streaming URL
+        let streamUrl = `/api/download?cid=${encodeURIComponent(descriptorCID)}&stream=true`;
+        if (password) {
+            streamUrl += `&password=${encodeURIComponent(password)}`;
+        }
+        
+        // Test if the file can be loaded for streaming
+        const testResponse = await fetch(streamUrl, { method: 'HEAD' });
+        
+        if (testResponse.ok) {
+            const contentType = testResponse.headers.get('Content-Type') || '';
+            const contentLength = testResponse.headers.get('Content-Length');
+            const acceptsRanges = testResponse.headers.get('Accept-Ranges') === 'bytes';
+            
+            // Create appropriate media element based on content type
+            let mediaElement = null;
+            
+            if (contentType.startsWith('video/')) {
+                mediaElement = document.createElement('video');
+                mediaElement.controls = true;
+                mediaElement.style.maxWidth = '100%';
+                mediaElement.style.height = 'auto';
+                mediaElement.preload = 'metadata';
+            } else if (contentType.startsWith('audio/')) {
+                mediaElement = document.createElement('audio');
+                mediaElement.controls = true;
+                mediaElement.style.width = '100%';
+                mediaElement.preload = 'metadata';
+            } else if (contentType.startsWith('image/')) {
+                mediaElement = document.createElement('img');
+                mediaElement.style.maxWidth = '100%';
+                mediaElement.style.height = 'auto';
+            } else {
+                // For other file types, show download link
+                mediaElement = document.createElement('div');
+                mediaElement.innerHTML = `
+                    <p><strong>File Type:</strong> ${contentType}</p>
+                    <p><strong>Size:</strong> ${contentLength ? formatBytes(parseInt(contentLength)) : 'Unknown'}</p>
+                    <p><strong>Range Requests:</strong> ${acceptsRanges ? 'Supported' : 'Not supported'}</p>
+                    <a href="${streamUrl}" target="_blank" class="download-link">Open/Download File</a>
+                `;
+            }
+            
+            if (mediaElement.tagName === 'VIDEO' || mediaElement.tagName === 'AUDIO' || mediaElement.tagName === 'IMG') {
+                mediaElement.src = streamUrl;
+                
+                // Add event listeners for media elements
+                if (mediaElement.tagName !== 'IMG') {
+                    mediaElement.addEventListener('loadstart', () => {
+                        showProgress(resultDiv, 'Loading media...');
+                    });
+                    
+                    mediaElement.addEventListener('canplay', () => {
+                        showResult(resultDiv, 'Media ready for streaming!', 'success');
+                    });
+                    
+                    mediaElement.addEventListener('error', (e) => {
+                        showResult(resultDiv, 'Error loading media: ' + e.message, 'error');
+                    });
+                } else {
+                    mediaElement.onload = () => {
+                        showResult(resultDiv, 'Image loaded successfully!', 'success');
+                    };
+                    mediaElement.onerror = () => {
+                        showResult(resultDiv, 'Error loading image', 'error');
+                    };
+                }
+            }
+            
+            // Clear previous content and add new media element
+            mediaContainer.innerHTML = '';
+            mediaContainer.appendChild(mediaElement);
+            streamingPreview.style.display = 'block';
+            
+            if (mediaElement.tagName === 'DIV') {
+                showResult(resultDiv, 'File information loaded', 'success');
+            }
+            
+        } else {
+            const errorData = await testResponse.json().catch(() => ({}));
+            showResult(resultDiv, errorData.error || 'Failed to load file for streaming', 'error');
+        }
+    } catch (error) {
+        showResult(resultDiv, 'Error: ' + error.message, 'error');
+    }
+}
+
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
 async function loadMetrics() {
