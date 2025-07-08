@@ -308,8 +308,8 @@ func (p *TTLEvictionPolicy) Clear() {
 	p.heap = &TTLHeap{}
 }
 
-// AdaptiveEvictionPolicy combines multiple eviction policies
-type AdaptiveEvictionPolicy struct {
+// AdaptiveEvictionPolicyImpl combines multiple eviction policies
+type AdaptiveEvictionPolicyImpl struct {
 	mu         sync.RWMutex
 	policies   []EvictionPolicy
 	weights    []float64
@@ -325,14 +325,14 @@ type EvictionStats struct {
 }
 
 // NewAdaptiveEvictionPolicy creates a new adaptive eviction policy
-func NewAdaptiveEvictionPolicy(logger *logging.Logger) *AdaptiveEvictionPolicy {
+func NewAdaptiveEvictionPolicy(logger *logging.Logger) *AdaptiveEvictionPolicyImpl {
 	policies := []EvictionPolicy{
 		NewLRUEvictionPolicy(),
 		NewLFUEvictionPolicy(),
 		NewTTLEvictionPolicy(30 * time.Minute),
 	}
 	
-	return &AdaptiveEvictionPolicy{
+	return &AdaptiveEvictionPolicyImpl{
 		policies: policies,
 		weights:  []float64{0.4, 0.4, 0.2}, // Initial weights
 		logger:   logger,
@@ -341,28 +341,28 @@ func NewAdaptiveEvictionPolicy(logger *logging.Logger) *AdaptiveEvictionPolicy {
 }
 
 // OnAccess forwards to all policies
-func (p *AdaptiveEvictionPolicy) OnAccess(cid string) {
+func (p *AdaptiveEvictionPolicyImpl) OnAccess(cid string) {
 	for _, policy := range p.policies {
 		policy.OnAccess(cid)
 	}
 }
 
 // OnStore forwards to all policies
-func (p *AdaptiveEvictionPolicy) OnStore(cid string, block *blocks.Block) {
+func (p *AdaptiveEvictionPolicyImpl) OnStore(cid string, block *blocks.Block) {
 	for _, policy := range p.policies {
 		policy.OnStore(cid, block)
 	}
 }
 
 // OnRemove forwards to all policies
-func (p *AdaptiveEvictionPolicy) OnRemove(cid string) {
+func (p *AdaptiveEvictionPolicyImpl) OnRemove(cid string) {
 	for _, policy := range p.policies {
 		policy.OnRemove(cid)
 	}
 }
 
 // SelectVictim selects a victim using weighted policy selection
-func (p *AdaptiveEvictionPolicy) SelectVictim() (string, bool) {
+func (p *AdaptiveEvictionPolicyImpl) SelectVictim() (string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	
@@ -385,7 +385,7 @@ func (p *AdaptiveEvictionPolicy) SelectVictim() (string, bool) {
 }
 
 // Clear resets all policies
-func (p *AdaptiveEvictionPolicy) Clear() {
+func (p *AdaptiveEvictionPolicyImpl) Clear() {
 	for _, policy := range p.policies {
 		policy.Clear()
 	}

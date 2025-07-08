@@ -424,7 +424,6 @@ func (ps *PrivacyStrategy) routeThroughPath(ctx context.Context, path *RoutingPa
 	path.UsageCount++
 	
 	// Route through each intermediate hop
-	currentPeer := path.Source
 	allHops := append(path.IntermediateHops, path.Destination)
 	
 	for _, nextPeer := range allHops {
@@ -437,8 +436,6 @@ func (ps *PrivacyStrategy) routeThroughPath(ctx context.Context, path *RoutingPa
 		metrics.ForwardedRequests++
 		metrics.updateAnonymityRatio()
 		metrics.mutex.Unlock()
-		
-		currentPeer = nextPeer
 	}
 	
 	return nil

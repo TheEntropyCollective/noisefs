@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
 	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
 )
@@ -559,7 +557,7 @@ func (pa *PerformanceAnalyzer) RunLiveAnalysis(ctx context.Context, updateInterv
 		case <-ticker.C:
 			pa.CollectMetrics()
 			pa.PrintSummary()
-			fmt.Println("\n" + "="*50 + "\n")
+			fmt.Println("\n" + strings.Repeat("=", 50) + "\n")
 		case <-ctx.Done():
 			log.Println("Stopping live analysis")
 			return

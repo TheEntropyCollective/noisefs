@@ -211,7 +211,7 @@ func (hs *HybridStrategy) applyDiversitySelection(scores []HybridPeerScore) []Hy
 	var diverseScores []HybridPeerScore
 	maxPerStrategy := len(scores) / 3 // Roughly equal distribution
 	
-	for strategy, group := range strategyGroups {
+	for _, group := range strategyGroups {
 		// Sort group by score
 		sort.Slice(group, func(i, j int) bool {
 			return group[i].CompositeScore > group[j].CompositeScore

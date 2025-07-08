@@ -77,13 +77,14 @@ func (c *Client) SetPeerManager(manager *p2p.PeerManager) {
 // GetConnectedPeers returns a list of currently connected IPFS peers
 func (c *Client) GetConnectedPeers() []peer.ID {
 	// Use IPFS shell to get connected peers
-	peers, err := c.shell.SwarmPeers()
+	ctx := context.Background()
+	peers, err := c.shell.SwarmPeers(ctx)
 	if err != nil {
 		return []peer.ID{}
 	}
 	
-	peerIDs := make([]peer.ID, 0, len(peers))
-	for _, p := range peers {
+	peerIDs := make([]peer.ID, 0, len(peers.Peers))
+	for _, p := range peers.Peers {
 		if peerID, err := peer.Decode(p.Peer); err == nil {
 			peerIDs = append(peerIDs, peerID)
 		}
@@ -141,7 +142,11 @@ func (c *Client) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID)
 // retrieveBlockWithPeerSelection uses peer selection strategies for block retrieval
 func (c *Client) retrieveBlockWithPeerSelection(ctx context.Context, cid string) (*blocks.Block, error) {
 	// Use the performance strategy by default for block retrieval
-	selectedPeers, err := c.peerManager.SelectPeers(cid, 3, "performance")
+	criteria := p2p.SelectionCriteria{
+		Count:          3,
+		RequiredBlocks: []string{cid},
+	}
+	selectedPeers, err := c.peerManager.SelectPeers(ctx, "performance", criteria)
 	if err != nil {
 		// If peer selection fails, fall back to standard retrieval
 		return c.retrieveBlockStandard(cid)
@@ -328,7 +333,12 @@ func (c *Client) BroadcastBlock(ctx context.Context, cid string, block *blocks.B
 	}
 	
 	// Select peers for broadcasting using randomizer-aware strategy
-	selectedPeers, err := c.peerManager.SelectPeers(cid, 5, "randomizer")
+	criteria := p2p.SelectionCriteria{
+		Count:             5,
+		PreferRandomizers: true,
+		RequiredBlocks:    []string{cid},
+	}
+	selectedPeers, err := c.peerManager.SelectPeers(ctx, "randomizer", criteria)
 	if err != nil {
 		return fmt.Errorf("failed to select peers for broadcast: %w", err)
 	}
@@ -387,12 +397,8 @@ func (c *Client) updateRequestMetrics(peerID peer.ID, latency time.Duration, suc
 	
 	// Update peer manager with latest metrics if available
 	if c.peerManager != nil {
-		perfMetrics := &p2p.PerformanceMetrics{
-			AverageLatency:   metrics.AverageLatency,
-			AverageBandwidth: metrics.Bandwidth,
-			SuccessRate:      float64(metrics.SuccessfulRequests) / float64(metrics.TotalRequests),
-		}
-		c.peerManager.UpdatePeerMetrics(peerID, perfMetrics)
+		successRate := float64(metrics.SuccessfulRequests) / float64(metrics.TotalRequests)
+		c.peerManager.UpdatePeerMetrics(peerID, success, latency, int64(successRate*100))
 	}
 }
 

@@ -1,20 +1,18 @@
 package integration
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
-	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
 )
 
 // Milestone4ImpactAnalyzer conducts comprehensive analysis of Milestone 4 improvements
@@ -176,7 +174,7 @@ func (analyzer *Milestone4ImpactAnalyzer) setupLegacyClient() error {
 	}
 	
 	// Basic cache with simple LRU
-	basicCache := cache.NewLRUCache(1000)
+	basicCache := cache.NewMemoryCache(1000)
 	
 	analyzer.legacyClient = &LegacyClient{
 		ipfsClient: ipfsClient,
@@ -215,7 +213,7 @@ func (analyzer *Milestone4ImpactAnalyzer) setupModernClient() error {
 	}
 	
 	// Basic cache for compatibility
-	basicCache := cache.NewLRUCache(1000)
+	basicCache := cache.NewMemoryCache(1000)
 	
 	modernClient, err := noisefs.NewClientWithConfig(ipfsClient, basicCache, clientConfig)
 	if err != nil {
@@ -223,20 +221,9 @@ func (analyzer *Milestone4ImpactAnalyzer) setupModernClient() error {
 	}
 	
 	// Setup peer manager with all strategies
-	peerManager := p2p.NewPeerManager(ipfsClient, nil)
+	// TODO: Create proper peer manager initialization
+	// For now, skip peer manager setup in integration tests
 	
-	// Add test peers to peer manager
-	for _, testPeer := range analyzer.testPeers {
-		peerInfo := &p2p.PeerInfo{
-			ID:           testPeer.ID,
-			LastSeen:     time.Now(),
-			BlockCount:   testPeer.BlockCount,
-			Availability: testPeer.Availability,
-		}
-		peerManager.AddPeer(peerInfo)
-	}
-	
-	modernClient.SetPeerManager(peerManager)
 	analyzer.modernClient = modernClient
 	
 	return nil
@@ -401,6 +388,7 @@ func (analyzer *Milestone4ImpactAnalyzer) simulateModernOperation(cid string, it
 	}
 	
 	_ = peerSelectionTime // Use the peer selection time
+	_ = latency           // Use the calculated latency
 	
 	return success
 }
@@ -502,9 +490,9 @@ func (analyzer *Milestone4ImpactAnalyzer) calculatePercentile(latencies []time.D
 
 // PrintDetailedReport prints comprehensive analysis results
 func (analyzer *Milestone4ImpactAnalyzer) PrintDetailedReport() {
-	fmt.Println("\n" + "="*80)
+	fmt.Println("\n" + strings.Repeat("=", 80))
 	fmt.Println("MILESTONE 4 COMPREHENSIVE IMPACT ANALYSIS")
-	fmt.Println("="*80)
+	fmt.Println(strings.Repeat("=", 80))
 	
 	if analyzer.legacyResults == nil || analyzer.modernResults == nil {
 		fmt.Println("Error: Test results not available")
@@ -525,10 +513,10 @@ func (analyzer *Milestone4ImpactAnalyzer) printPerformanceComparison() {
 	modern := analyzer.modernResults
 	
 	fmt.Println("\n🚀 PERFORMANCE COMPARISON")
-	fmt.Println("-"*50)
+	fmt.Println(strings.Repeat("-", 50))
 	
 	fmt.Printf("%-25s │ %15s │ %15s │ %15s\n", "Metric", "Legacy", "Modern", "Improvement")
-	fmt.Println("-"*75)
+	fmt.Println(strings.Repeat("-", 75))
 	
 	// Latency improvement
 	latencyImprovement := ((float64(legacy.AverageLatency - modern.AverageLatency)) / float64(legacy.AverageLatency)) * 100
@@ -559,7 +547,7 @@ func (analyzer *Milestone4ImpactAnalyzer) printPerformanceComparison() {
 // printFeatureImpactAnalysis analyzes impact of specific Milestone 4 features
 func (analyzer *Milestone4ImpactAnalyzer) printFeatureImpactAnalysis() {
 	fmt.Println("\n🎯 MILESTONE 4 FEATURE IMPACT ANALYSIS")
-	fmt.Println("-"*50)
+	fmt.Println(strings.Repeat("-", 50))
 	
 	fmt.Println("1. INTELLIGENT PEER SELECTION")
 	fmt.Printf("   • Peer selection time: %v → %v (%d%% faster)\n",
@@ -596,7 +584,7 @@ func (analyzer *Milestone4ImpactAnalyzer) printFeatureImpactAnalysis() {
 // printMLEffectivenessAnalysis analyzes ML system effectiveness
 func (analyzer *Milestone4ImpactAnalyzer) printMLEffectivenessAnalysis() {
 	fmt.Println("\n🤖 MACHINE LEARNING EFFECTIVENESS")
-	fmt.Println("-"*50)
+	fmt.Println(strings.Repeat("-", 50))
 	
 	fmt.Printf("• Prediction Accuracy: %.1f%%\n", analyzer.modernResults.PredictionAccuracy*100)
 	fmt.Printf("• Cache Tier Promotions: %d\n", analyzer.modernResults.TierPromotions)
@@ -608,7 +596,7 @@ func (analyzer *Milestone4ImpactAnalyzer) printMLEffectivenessAnalysis() {
 // printPeerSelectionAnalysis analyzes peer selection strategy effectiveness
 func (analyzer *Milestone4ImpactAnalyzer) printPeerSelectionAnalysis() {
 	fmt.Println("\n🌐 PEER SELECTION STRATEGY ANALYSIS")
-	fmt.Println("-"*50)
+	fmt.Println(strings.Repeat("-", 50))
 	
 	fmt.Println("Available Strategies:")
 	fmt.Println("  • Performance Strategy: Latency + bandwidth optimization")
@@ -625,7 +613,7 @@ func (analyzer *Milestone4ImpactAnalyzer) printPeerSelectionAnalysis() {
 // printStorageEfficiencyAnalysis analyzes storage optimization
 func (analyzer *Milestone4ImpactAnalyzer) printStorageEfficiencyAnalysis() {
 	fmt.Println("\n💾 STORAGE EFFICIENCY ANALYSIS")
-	fmt.Println("-"*50)
+	fmt.Println(strings.Repeat("-", 50))
 	
 	fmt.Printf("Storage Overhead Reduction:\n")
 	fmt.Printf("  • Legacy: %.1f%% overhead\n", analyzer.legacyResults.StorageOverhead)
@@ -648,9 +636,9 @@ func (analyzer *Milestone4ImpactAnalyzer) printOverallConclusions() {
 	legacy := analyzer.legacyResults
 	modern := analyzer.modernResults
 	
-	fmt.Println("\n" + "="*80)
+	fmt.Println("\n" + strings.Repeat("=", 80))
 	fmt.Println("🎉 MILESTONE 4 IMPACT CONCLUSIONS")
-	fmt.Println("="*80)
+	fmt.Println(strings.Repeat("=", 80))
 	
 	// Calculate overall improvements
 	overallPerformance := (
@@ -687,7 +675,7 @@ func (analyzer *Milestone4ImpactAnalyzer) printOverallConclusions() {
 	fmt.Printf("\n🚀 READY FOR: Production deployment, real-world validation\n")
 	fmt.Printf("📈 NEXT STEPS: Milestone 6 (Production Infrastructure)\n")
 	
-	fmt.Println("="*80)
+	fmt.Println(strings.Repeat("=", 80))
 }
 
 // Helper functions

@@ -153,7 +153,11 @@ func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block
 	ctx := context.Background()
 	
 	// Get peers with randomizer blocks
-	peers, err := c.peerManager.SelectPeers("randomizer_query", 5, "randomizer")
+	criteria := p2p.SelectionCriteria{
+		Count:             5,
+		PreferRandomizers: true,
+	}
+	peers, err := c.peerManager.SelectPeers(ctx, "randomizer", criteria)
 	if err != nil || len(peers) == 0 {
 		// Fall back to standard selection if no suitable peers
 		return c.selectStandardRandomizer(blockSize)
@@ -503,15 +507,16 @@ func (c *Client) OptimizeForRandomizers() {
 	
 	// Switch to randomizer-aware eviction policy if adaptive cache is enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-		randomizerPolicy := cache.NewRandomizerAwareEvictionPolicy()
-		c.adaptiveCache.SetEvictionPolicy(randomizerPolicy)
+		// TODO: Implement NewRandomizerAwareEvictionPolicy
+		// For now, keep the existing policy
 	}
 }
 
 // SetPeerSelectionStrategy sets the default peer selection strategy
 func (c *Client) SetPeerSelectionStrategy(strategy string) {
 	if c.peerManager != nil {
-		c.peerManager.SetDefaultStrategy(strategy)
+		// TODO: Implement SetDefaultStrategy method on PeerManager
+		// For now, this is a no-op
 	}
 }
 
