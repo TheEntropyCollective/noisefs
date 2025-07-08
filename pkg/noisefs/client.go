@@ -1,25 +1,62 @@
 package noisefs
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 	
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
 )
 
-// Client provides high-level NoiseFS operations with caching
+// Client provides high-level NoiseFS operations with caching and peer selection
 type Client struct {
-	ipfsClient ipfs.BlockStore
-	cache      cache.Cache
-	metrics    *Metrics
+	ipfsClient    ipfs.PeerAwareIPFSClient
+	cache         cache.Cache
+	adaptiveCache *cache.AdaptiveCache
+	peerManager   *p2p.PeerManager
+	metrics       *Metrics
+	
+	// Configuration for intelligent operations
+	preferRandomizerPeers bool
+	adaptiveCacheEnabled  bool
+}
+
+// ClientConfig holds configuration for NoiseFS client
+type ClientConfig struct {
+	EnableAdaptiveCache   bool
+	PreferRandomizerPeers bool
+	AdaptiveCacheConfig   *cache.AdaptiveCacheConfig
 }
 
 // NewClient creates a new NoiseFS client
 func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, error) {
+	config := &ClientConfig{
+		EnableAdaptiveCache:   true,
+		PreferRandomizerPeers: true,
+		AdaptiveCacheConfig: &cache.AdaptiveCacheConfig{
+			MaxSize:            100 * 1024 * 1024, // 100MB
+			MaxItems:           10000,
+			HotTierRatio:       0.1,  // 10% hot tier
+			WarmTierRatio:      0.3,  // 30% warm tier
+			PredictionWindow:   time.Hour * 24,
+			EvictionBatchSize:  10,
+			ExchangeInterval:   time.Minute * 15,
+			PredictionInterval: time.Minute * 10,
+		},
+	}
+	
+	return NewClientWithConfig(ipfsClient, blockCache, config)
+}
+
+// NewClientWithConfig creates a new NoiseFS client with custom configuration
+func NewClientWithConfig(ipfsClient ipfs.BlockStore, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
 	if ipfsClient == nil {
 		return nil, errors.New("IPFS client is required")
 	}
@@ -28,15 +65,41 @@ func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, err
 		return nil, errors.New("cache is required")
 	}
 	
-	return &Client{
-		ipfsClient: ipfsClient,
-		cache:      blockCache,
-		metrics:    NewMetrics(),
-	}, nil
+	// Try to cast to peer-aware IPFS client
+	peerAwareClient, isPeerAware := ipfsClient.(ipfs.PeerAwareIPFSClient)
+	if !isPeerAware {
+		return nil, errors.New("IPFS client must implement PeerAwareIPFSClient interface")
+	}
+	
+	client := &Client{
+		ipfsClient:            peerAwareClient,
+		cache:                 blockCache,
+		metrics:               NewMetrics(),
+		preferRandomizerPeers: config.PreferRandomizerPeers,
+		adaptiveCacheEnabled:  config.EnableAdaptiveCache,
+	}
+	
+	// Initialize adaptive cache if enabled
+	if config.EnableAdaptiveCache && config.AdaptiveCacheConfig != nil {
+		client.adaptiveCache = cache.NewAdaptiveCache(config.AdaptiveCacheConfig)
+	}
+	
+	return client, nil
+}
+
+// SetPeerManager sets the peer manager for intelligent peer selection
+func (c *Client) SetPeerManager(manager *p2p.PeerManager) {
+	c.peerManager = manager
+	c.ipfsClient.SetPeerManager(manager)
 }
 
 // SelectRandomizer selects a randomizer block for the given block size (legacy 2-tuple support)
 func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) {
+	// If we have peer selection enabled, use intelligent randomizer selection
+	if c.preferRandomizerPeers && c.peerManager != nil {
+		return c.selectRandomizerWithPeerSelection(blockSize)
+	}
+	
 	// Try to get popular blocks from cache first
 	randomizers, err := c.cache.GetRandomizers(10)
 	if err == nil && len(randomizers) > 0 {
@@ -69,14 +132,75 @@ func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) 
 		return nil, "", fmt.Errorf("failed to create randomizer: %w", err)
 	}
 	
-	// Store in IPFS
-	cid, err := c.ipfsClient.StoreBlock(randBlock)
+	// Store in IPFS with randomizer strategy if available
+	cid, err := c.storeBlockWithStrategy(randBlock, "randomizer")
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to store randomizer: %w", err)
 	}
 	
 	// Cache the new randomizer
-	c.cache.Store(cid, randBlock)
+	c.cacheBlock(cid, randBlock, map[string]interface{}{
+		"is_randomizer": true,
+		"block_type":    "randomizer",
+	})
+	c.metrics.RecordBlockGeneration()
+	
+	return randBlock, cid, nil
+}
+
+// selectRandomizerWithPeerSelection uses peer selection to find optimal randomizer blocks
+func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block, string, error) {
+	ctx := context.Background()
+	
+	// Get peers with randomizer blocks
+	peers, err := c.peerManager.SelectPeers("randomizer_query", 5, "randomizer")
+	if err != nil || len(peers) == 0 {
+		// Fall back to standard selection if no suitable peers
+		return c.selectStandardRandomizer(blockSize)
+	}
+	
+	// Try to get randomizer blocks from selected peers
+	for _, peerID := range peers {
+		// This would require a protocol to query peer for available randomizers
+		// For now, we'll use the peer as a hint for block retrieval
+		randomizers, err := c.cache.GetRandomizers(10)
+		if err == nil && len(randomizers) > 0 {
+			for _, info := range randomizers {
+				if info.Size == blockSize {
+					// Try to retrieve this block with peer hint
+					if block, err := c.ipfsClient.RetrieveBlockWithPeerHint(info.CID, []peer.ID{peerID}); err == nil {
+						c.cache.IncrementPopularity(info.CID)
+						c.metrics.RecordBlockReuse()
+						return block, info.CID, nil
+					}
+				}
+			}
+		}
+	}
+	
+	// If peer-based selection fails, fall back to standard method
+	return c.selectStandardRandomizer(blockSize)
+}
+
+// selectStandardRandomizer implements the original randomizer selection logic
+func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string, error) {
+	// Generate new randomizer
+	randBlock, err := blocks.NewRandomBlock(blockSize)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create randomizer: %w", err)
+	}
+	
+	// Store in IPFS
+	cid, err := c.storeBlockWithStrategy(randBlock, "randomizer")
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to store randomizer: %w", err)
+	}
+	
+	// Cache the new randomizer
+	c.cacheBlock(cid, randBlock, map[string]interface{}{
+		"is_randomizer": true,
+		"block_type":    "randomizer",
+	})
 	c.metrics.RecordBlockGeneration()
 	
 	return randBlock, cid, nil
@@ -206,7 +330,34 @@ func (c *Client) SelectTwoRandomizers(blockSize int) (*blocks.Block, string, *bl
 
 // StoreBlockWithCache stores a block in IPFS and caches it
 func (c *Client) StoreBlockWithCache(block *blocks.Block) (string, error) {
-	// Store in IPFS
+	return c.storeBlockWithStrategy(block, "performance")
+}
+
+// storeBlockWithStrategy stores a block using the specified peer selection strategy
+func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
+	// Try to use strategy-aware storage if available
+	if strategyStore, ok := c.ipfsClient.(interface {
+		StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error)
+	}); ok {
+		cid, err := strategyStore.StoreBlockWithStrategy(block, strategy)
+		if err != nil {
+			return "", err
+		}
+		
+		// Cache the block with metadata
+		metadata := map[string]interface{}{
+			"block_type": "data",
+			"strategy":   strategy,
+		}
+		if strategy == "randomizer" {
+			metadata["is_randomizer"] = true
+		}
+		
+		c.cacheBlock(cid, block, metadata)
+		return cid, nil
+	}
+	
+	// Fallback to standard storage
 	cid, err := c.ipfsClient.StoreBlock(block)
 	if err != nil {
 		return "", err
@@ -219,24 +370,78 @@ func (c *Client) StoreBlockWithCache(block *blocks.Block) (string, error) {
 	return cid, nil
 }
 
+// cacheBlock stores a block in both standard and adaptive caches with metadata
+func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string]interface{}) {
+	// Store in standard cache
+	c.cache.Store(cid, block)
+	c.cache.IncrementPopularity(cid)
+	
+	// Store in adaptive cache if enabled
+	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
+		c.adaptiveCache.Put(cid, block.Data, metadata)
+	}
+}
+
 // RetrieveBlockWithCache retrieves a block, checking cache first
 func (c *Client) RetrieveBlockWithCache(cid string) (*blocks.Block, error) {
-	// Check cache first
+	return c.RetrieveBlockWithCacheAndPeerHint(cid, nil)
+}
+
+// RetrieveBlockWithCacheAndPeerHint retrieves a block with cache and peer hints
+func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+	// Check adaptive cache first if enabled
+	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
+		if data, found := c.adaptiveCache.Get(cid); found {
+			block, err := blocks.NewBlock(data)
+			if err == nil {
+				c.metrics.RecordCacheHit()
+				return block, nil
+			}
+		}
+	}
+	
+	// Check standard cache
 	if block, err := c.cache.Get(cid); err == nil {
 		c.cache.IncrementPopularity(cid)
 		c.metrics.RecordCacheHit()
+		
+		// Update adaptive cache with access
+		if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
+			metadata := map[string]interface{}{
+				"block_type": "data",
+				"accessed_from_cache": true,
+			}
+			c.adaptiveCache.Put(cid, block.Data, metadata)
+		}
+		
 		return block, nil
 	}
 	
-	// Not in cache, retrieve from IPFS
+	// Not in cache, retrieve from IPFS with peer hints
 	c.metrics.RecordCacheMiss()
-	block, err := c.ipfsClient.RetrieveBlock(cid)
+	
+	var block *blocks.Block
+	var err error
+	
+	// Use peer-aware retrieval if available
+	if peerAware, ok := c.ipfsClient.(interface {
+		RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error)
+	}); ok {
+		block, err = peerAware.RetrieveBlockWithPeerHint(cid, preferredPeers)
+	} else {
+		block, err = c.ipfsClient.RetrieveBlock(cid)
+	}
+	
 	if err != nil {
 		return nil, err
 	}
 	
-	// Cache for future use
-	c.cache.Store(cid, block)
+	// Cache for future use with metadata
+	metadata := map[string]interface{}{
+		"block_type": "data",
+		"retrieved_from_network": true,
+	}
+	c.cacheBlock(cid, block, metadata)
 	
 	return block, nil
 }
@@ -254,4 +459,63 @@ func (c *Client) RecordUpload(originalBytes, storedBytes int64) {
 // RecordDownload records download metrics
 func (c *Client) RecordDownload() {
 	c.metrics.RecordDownload()
+}
+
+// GetAdaptiveCacheStats returns adaptive cache statistics if enabled
+func (c *Client) GetAdaptiveCacheStats() *cache.AdaptiveCacheStats {
+	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
+		return c.adaptiveCache.GetStats()
+	}
+	return nil
+}
+
+// GetPeerStats returns peer performance statistics if available
+func (c *Client) GetPeerStats() map[peer.ID]*ipfs.RequestMetrics {
+	if metricsProvider, ok := c.ipfsClient.(interface {
+		GetPeerMetrics() map[peer.ID]*ipfs.RequestMetrics
+	}); ok {
+		return metricsProvider.GetPeerMetrics()
+	}
+	return nil
+}
+
+// PreloadBlocks preloads blocks based on ML predictions
+func (c *Client) PreloadBlocks(ctx context.Context) error {
+	if !c.adaptiveCacheEnabled || c.adaptiveCache == nil {
+		return nil // Adaptive cache not enabled
+	}
+	
+	// Define block fetcher for preloading
+	blockFetcher := func(cid string) ([]byte, error) {
+		block, err := c.ipfsClient.RetrieveBlock(cid)
+		if err != nil {
+			return nil, err
+		}
+		return block.Data, nil
+	}
+	
+	return c.adaptiveCache.Preload(ctx, blockFetcher)
+}
+
+// OptimizeForRandomizers adjusts cache and peer selection for randomizer optimization
+func (c *Client) OptimizeForRandomizers() {
+	c.preferRandomizerPeers = true
+	
+	// Switch to randomizer-aware eviction policy if adaptive cache is enabled
+	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
+		randomizerPolicy := cache.NewRandomizerAwareEvictionPolicy()
+		c.adaptiveCache.SetEvictionPolicy(randomizerPolicy)
+	}
+}
+
+// SetPeerSelectionStrategy sets the default peer selection strategy
+func (c *Client) SetPeerSelectionStrategy(strategy string) {
+	if c.peerManager != nil {
+		c.peerManager.SetDefaultStrategy(strategy)
+	}
+}
+
+// GetConnectedPeers returns currently connected peers
+func (c *Client) GetConnectedPeers() []peer.ID {
+	return c.ipfsClient.GetConnectedPeers()
 }
