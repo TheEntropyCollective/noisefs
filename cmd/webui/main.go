@@ -21,6 +21,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
 	noisefsX509 "github.com/TheEntropyCollective/noisefs/pkg/tls"
+	"github.com/TheEntropyCollective/noisefs/pkg/validation"
 )
 
 type WebUI struct {
@@ -28,6 +29,8 @@ type WebUI struct {
 	noisefsClient *noisefs.Client
 	cache         cache.Cache
 	config        *config.Config
+	validator     *validation.Validator
+	rateLimiter   *validation.RateLimiter
 }
 
 type UploadResponse struct {
@@ -80,11 +83,21 @@ func main() {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
 
+	// Create input validator
+	validator := validation.NewValidator()
+	validator.SetMaxFileSize(100 * 1024 * 1024) // 100MB limit
+	
+	// Create rate limiter
+	rateLimitConfig := validation.DefaultRateLimitConfig()
+	rateLimiter := validation.NewRateLimiter(rateLimitConfig)
+
 	webui := &WebUI{
 		ipfsClient:    ipfsClient,
 		noisefsClient: noisefsClient,
 		cache:         blockCache,
 		config:        cfg,
+		validator:     validator,
+		rateLimiter:   rateLimiter,
 	}
 
 	// Set up HTTP routes
@@ -112,13 +125,16 @@ func main() {
 }
 
 func setupRoutes(webui *WebUI) {
-	// Serve static files
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("cmd/webui/static/"))))
+	// Serve static files with security headers
+	http.Handle("/static/", securityHeaders(http.StripPrefix("/static/", http.FileServer(http.Dir("cmd/webui/static/"))).ServeHTTP))
 
-	// Add security headers middleware
+	// Create request size limiter for upload endpoints
+	uploadSizeLimiter := validation.RequestSizeLimiter(105 * 1024 * 1024) // 105MB (5MB buffer)
+
+	// Add security headers, rate limiting, and request size limits
 	http.HandleFunc("/", securityHeaders(webui.indexHandler))
-	http.HandleFunc("/api/upload", securityHeaders(webui.uploadHandler))
-	http.HandleFunc("/api/download", securityHeaders(webui.downloadHandler))
+	http.HandleFunc("/api/upload", uploadSizeLimiter(webui.rateLimiter.Middleware(securityHeaders(webui.uploadHandler))))
+	http.HandleFunc("/api/download", webui.rateLimiter.Middleware(securityHeaders(webui.downloadHandler)))
 	http.HandleFunc("/api/metrics", securityHeaders(webui.metricsHandler))
 }
 
@@ -126,11 +142,12 @@ func createServer(cfg *config.Config) (*http.Server, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.WebUI.Host, cfg.WebUI.Port)
 	
 	server := &http.Server{
-		Addr:         addr,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
-		Handler:      nil,
+		Addr:           addr,
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1MB max header size
+		Handler:        nil,
 	}
 
 	if cfg.WebUI.TLSEnabled {
@@ -180,17 +197,47 @@ func createServer(cfg *config.Config) (*http.Server, error) {
 
 func securityHeaders(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Security headers
+		// Comprehensive security headers
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		w.Header().Set("X-Permitted-Cross-Domain-Policies", "none")
+		w.Header().Set("X-DNS-Prefetch-Control", "off")
+		
+		// Enhanced Content Security Policy
+		csp := "default-src 'self'; " +
+			"script-src 'self' 'unsafe-inline'; " +
+			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+			"font-src 'self' https://fonts.gstatic.com; " +
+			"img-src 'self' data: blob:; " +
+			"media-src 'self' blob:; " +
+			"connect-src 'self'; " +
+			"object-src 'none'; " +
+			"base-uri 'self'; " +
+			"form-action 'self'; " +
+			"frame-ancestors 'none'; " +
+			"upgrade-insecure-requests"
+		w.Header().Set("Content-Security-Policy", csp)
 		
 		// HSTS header for HTTPS
 		if r.TLS != nil {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
 		}
+		
+		// Prevent MIME type confusion
+		w.Header().Set("X-Download-Options", "noopen")
+		
+		// Feature Policy (deprecated but still useful for older browsers)
+		w.Header().Set("Feature-Policy", "geolocation 'none'; microphone 'none'; camera 'none'")
+		
+		// Permissions Policy (modern replacement for Feature Policy)
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=()")
+		
+		// Cross-Origin policies
+		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+		w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+		w.Header().Set("Cross-Origin-Resource-Policy", "same-origin")
 
 		next(w, r)
 	}
@@ -446,6 +493,28 @@ func (w *WebUI) uploadHandler(rw http.ResponseWriter, r *http.Request) {
 	// Determine if file should be encrypted
 	useEncryption := encryptType == "encrypted" && password != ""
 
+	// Input validation
+	validationErrors := w.validator.ValidateUploadRequest(header.Filename, header.Size, blockSize)
+	
+	// Additional password validation if encryption is requested
+	if useEncryption {
+		if err := w.validator.ValidatePassword(password); err != nil {
+			if ve, ok := err.(validation.ValidationError); ok {
+				validationErrors = append(validationErrors, ve)
+			}
+		}
+	}
+	
+	// Return validation errors if any
+	if len(validationErrors) > 0 {
+		errorMsg := "Validation failed:"
+		for _, ve := range validationErrors {
+			errorMsg += " " + ve.Error() + ";"
+		}
+		w.sendError(rw, errorMsg, nil)
+		return
+	}
+
 	// Upload file
 	descriptorCID, err := w.uploadFile(file, header.Filename, int64(header.Size), blockSize, useEncryption, password)
 	if err != nil {
@@ -478,6 +547,19 @@ func (w *WebUI) downloadHandler(rw http.ResponseWriter, r *http.Request) {
 
 	password := r.URL.Query().Get("password")
 	streaming := r.URL.Query().Get("stream") == "true"
+
+	// Input validation
+	validationErrors := w.validator.ValidateDownloadRequest(descriptorCID, password)
+	
+	// Return validation errors if any
+	if len(validationErrors) > 0 {
+		errorMsg := "Validation failed:"
+		for _, ve := range validationErrors {
+			errorMsg += " " + ve.Error() + ";"
+		}
+		w.sendError(rw, errorMsg, nil)
+		return
+	}
 
 	if streaming {
 		// Use streaming download for progressive/range requests
