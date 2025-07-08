@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -11,9 +13,11 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
+	noisefsX509 "github.com/TheEntropyCollective/noisefs/pkg/tls"
 )
 
 type WebUI struct {
@@ -36,14 +40,24 @@ type MetricsResponse struct {
 }
 
 func main() {
+	// Parse command line flags
+	var configFile = flag.String("config", "", "Path to configuration file")
+	flag.Parse()
+
+	// Load configuration
+	cfg, err := config.LoadConfig(*configFile)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
 	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient("localhost:5001")
+	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
 		log.Fatalf("Failed to connect to IPFS: %v", err)
 	}
 
 	// Create cache and NoiseFS client
-	blockCache := cache.NewMemoryCache(1000)
+	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
 	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
@@ -55,19 +69,113 @@ func main() {
 		cache:         blockCache,
 	}
 
+	// Set up HTTP routes
+	setupRoutes(webui)
+
+	// Create and start server with TLS
+	server, err := createServer(cfg)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Print startup information
+	protocol := "https"
+	if !cfg.WebUI.TLSEnabled {
+		protocol = "http"
+	}
+	fmt.Printf("NoiseFS Web UI starting on %s://%s:%d\n", protocol, cfg.WebUI.Host, cfg.WebUI.Port)
+	fmt.Printf("IPFS endpoint: %s\n", cfg.IPFS.APIEndpoint)
+	
+	if cfg.WebUI.TLSEnabled {
+		log.Fatal(server.ListenAndServeTLS("", ""))
+	} else {
+		log.Fatal(server.ListenAndServe())
+	}
+}
+
+func setupRoutes(webui *WebUI) {
 	// Serve static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("cmd/webui/static/"))))
 
-	// API endpoints
-	http.HandleFunc("/", webui.indexHandler)
-	http.HandleFunc("/api/upload", webui.uploadHandler)
-	http.HandleFunc("/api/download", webui.downloadHandler)
-	http.HandleFunc("/api/metrics", webui.metricsHandler)
+	// Add security headers middleware
+	http.HandleFunc("/", securityHeaders(webui.indexHandler))
+	http.HandleFunc("/api/upload", securityHeaders(webui.uploadHandler))
+	http.HandleFunc("/api/download", securityHeaders(webui.downloadHandler))
+	http.HandleFunc("/api/metrics", securityHeaders(webui.metricsHandler))
+}
 
-	fmt.Println("NoiseFS Web UI starting on http://localhost:8080")
-	fmt.Println("Make sure IPFS daemon is running on localhost:5001")
+func createServer(cfg *config.Config) (*http.Server, error) {
+	addr := fmt.Sprintf("%s:%d", cfg.WebUI.Host, cfg.WebUI.Port)
 	
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	server := &http.Server{
+		Addr:         addr,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		Handler:      nil,
+	}
+
+	if cfg.WebUI.TLSEnabled {
+		var certFile, keyFile string
+		var err error
+
+		if cfg.WebUI.TLSAutoGen {
+			// Auto-generate certificate
+			certDir, err := noisefsX509.GetDefaultCertificateDir()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get certificate directory: %w", err)
+			}
+
+			generator := noisefsX509.NewCertificateGenerator(certDir)
+			certFile, keyFile, err = generator.LoadOrGenerateCertificate(cfg.WebUI.TLSHostnames)
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate certificate: %w", err)
+			}
+
+			fmt.Printf("Using auto-generated TLS certificate: %s\n", certFile)
+		} else {
+			// Use provided certificate files
+			certFile = cfg.WebUI.TLSCertFile
+			keyFile = cfg.WebUI.TLSKeyFile
+		}
+
+		// Load TLS certificate
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load TLS certificate: %w", err)
+		}
+
+		// Configure TLS
+		server.TLSConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			},
+		}
+	}
+
+	return server, nil
+}
+
+func securityHeaders(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Security headers
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		
+		// HSTS header for HTTPS
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		}
+
+		next(w, r)
+	}
 }
 
 func (w *WebUI) indexHandler(rw http.ResponseWriter, r *http.Request) {

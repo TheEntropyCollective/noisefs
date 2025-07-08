@@ -27,6 +27,9 @@ type Config struct {
 
 	// Performance Configuration
 	Performance PerformanceConfig `json:"performance"`
+	
+	// WebUI Configuration
+	WebUI WebUIConfig `json:"webui"`
 }
 
 // IPFSConfig holds IPFS-related configuration
@@ -67,6 +70,17 @@ type PerformanceConfig struct {
 	MaxConcurrentOps int  `json:"max_concurrent_ops"`
 }
 
+// WebUIConfig holds web UI server configuration
+type WebUIConfig struct {
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	TLSEnabled   bool   `json:"tls_enabled"`
+	TLSCertFile  string `json:"tls_cert_file"`
+	TLSKeyFile   string `json:"tls_key_file"`
+	TLSAutoGen   bool   `json:"tls_auto_gen"`
+	TLSHostnames []string `json:"tls_hostnames"`
+}
+
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
@@ -100,6 +114,15 @@ func DefaultConfig() *Config {
 			ReadAhead:        false,
 			WriteBack:        false,
 			MaxConcurrentOps: 10,
+		},
+		WebUI: WebUIConfig{
+			Host:         "localhost",
+			Port:         8443,
+			TLSEnabled:   true,
+			TLSCertFile:  "",
+			TLSKeyFile:   "",
+			TLSAutoGen:   true,
+			TLSHostnames: []string{"localhost"},
 		},
 	}
 }
@@ -215,6 +238,28 @@ func (c *Config) applyEnvironmentOverrides() {
 			c.Performance.MaxConcurrentOps = ops
 		}
 	}
+
+	// WebUI overrides
+	if val := os.Getenv("NOISEFS_WEBUI_HOST"); val != "" {
+		c.WebUI.Host = val
+	}
+	if val := os.Getenv("NOISEFS_WEBUI_PORT"); val != "" {
+		if port, err := strconv.Atoi(val); err == nil {
+			c.WebUI.Port = port
+		}
+	}
+	if val := os.Getenv("NOISEFS_WEBUI_TLS_ENABLED"); val != "" {
+		c.WebUI.TLSEnabled = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_WEBUI_TLS_CERT"); val != "" {
+		c.WebUI.TLSCertFile = val
+	}
+	if val := os.Getenv("NOISEFS_WEBUI_TLS_KEY"); val != "" {
+		c.WebUI.TLSKeyFile = val
+	}
+	if val := os.Getenv("NOISEFS_WEBUI_TLS_AUTO"); val != "" {
+		c.WebUI.TLSAutoGen = strings.ToLower(val) == "true"
+	}
 }
 
 // Validate validates the configuration
@@ -263,6 +308,19 @@ func (c *Config) Validate() error {
 	}
 	if c.Performance.MaxConcurrentOps <= 0 {
 		return fmt.Errorf("max concurrent operations must be positive")
+	}
+
+	// Validate WebUI configuration
+	if c.WebUI.Host == "" {
+		return fmt.Errorf("WebUI host cannot be empty")
+	}
+	if c.WebUI.Port <= 0 || c.WebUI.Port > 65535 {
+		return fmt.Errorf("WebUI port must be between 1 and 65535")
+	}
+	if c.WebUI.TLSEnabled && !c.WebUI.TLSAutoGen {
+		if c.WebUI.TLSCertFile == "" || c.WebUI.TLSKeyFile == "" {
+			return fmt.Errorf("TLS cert and key files required when TLS enabled and auto-generation disabled")
+		}
 	}
 
 	return nil
