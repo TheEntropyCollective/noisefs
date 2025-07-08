@@ -117,7 +117,7 @@ cmd/
 - Dedupe storage, take advantage of the strengths of IPFS
 
 ## Standard Workflow 
-1. First think hard through the problem (using Opus), read the codebase for relevant files, and write a plan to the "Current Milestone" section in todo.md.
+1. First think hard through the problem (using Opus), read the codebase for relevant files, and write a plan to the "Current Milestone" section in docs/todo.md.
 2. The plan should have a list of sprints and todo items in each sprint that you can check off as you complete them
 3. Before you begin working, check in with me and I will verify the plan.
 4. Then, begin working on the todos for the next sprint (using Sonnet), marking them as complete as you go.
@@ -126,7 +126,8 @@ cmd/
 7. Git commit after every task (don't include anything about being created with Claude)
 8. When you are done with a sprint, update it as completed in todo.md
 9. When you complete a milestone, summarize it under "Completed Milestones"
-10. Ask about completing the next sprint or milestone. Suggest additional ideas for other milestones.
+10. Push the completed milestone to github
+11. Ask about completing the next sprint or milestone. Suggest additional ideas for other milestones.
 
 - **Workflow Guideline**: YOU MUST ALWAYS FOLLOW the standard workflow
 
