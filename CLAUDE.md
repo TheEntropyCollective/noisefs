@@ -129,3 +129,8 @@ cmd/
 10. Ask about completing the next sprint or milestone. Suggest additional ideas for other milestones.
 
 - **Workflow Guideline**: YOU MUST ALWAYS FOLLOW the standard workflow
+
+## Development Practices
+
+- **Workflow Management**: 
+  - Always keep todo.md clean. Just the current milestone, the sprints and tasks for that milestone and the completed milestone

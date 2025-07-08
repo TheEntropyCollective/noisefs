@@ -11,6 +11,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
+	"github.com/TheEntropyCollective/noisefs/pkg/security"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
 	"github.com/hanwen/go-fuse/v2/fuse/pathfs"
@@ -18,11 +19,13 @@ import (
 
 // MountOptions contains options for mounting the filesystem
 type MountOptions struct {
-	MountPath   string
-	VolumeName  string
-	ReadOnly    bool
-	AllowOther  bool
-	Debug       bool
+	MountPath      string
+	VolumeName     string
+	ReadOnly       bool
+	AllowOther     bool
+	Debug          bool
+	Security       *security.SecurityManager
+	IndexPassword  string
 }
 
 // MountInfo contains information about mounted filesystems
@@ -54,10 +57,31 @@ func MountWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountO
 		}
 	}
 
-	// Create and load file index
-	index := NewFileIndex(indexPath)
-	if err := index.LoadIndex(); err != nil {
-		return fmt.Errorf("failed to load file index: %w", err)
+	// Create and load file index (encrypted if password provided)
+	var index *FileIndex
+	if opts.IndexPassword != "" {
+		encIndex, err := NewEncryptedFileIndex(indexPath, opts.IndexPassword)
+		if err != nil {
+			return fmt.Errorf("failed to create encrypted index: %w", err)
+		}
+		defer encIndex.Cleanup()
+		
+		if err := encIndex.LoadIndex(); err != nil {
+			return fmt.Errorf("failed to load encrypted index: %w", err)
+		}
+		
+		// Lock memory if security manager is available
+		if opts.Security != nil && opts.Security.MemoryProtection != nil {
+			encIndex.LockMemory()
+		}
+		
+		index = encIndex.FileIndex
+	} else {
+		// Use standard unencrypted index
+		index = NewFileIndex(indexPath)
+		if err := index.LoadIndex(); err != nil {
+			return fmt.Errorf("failed to load file index: %w", err)
+		}
 	}
 
 	// Create NoiseFS filesystem

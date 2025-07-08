@@ -90,6 +90,9 @@ type SecurityConfig struct {
 	DefaultEncrypted   bool   `json:"default_encrypted"`
 	RequirePassword    bool   `json:"require_password"`
 	PasswordPrompt     bool   `json:"password_prompt"`
+	EncryptLocalIndex  bool   `json:"encrypt_local_index"`
+	SecureMemory       bool   `json:"secure_memory"`
+	AntiForensics      bool   `json:"anti_forensics"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults
@@ -140,6 +143,9 @@ func DefaultConfig() *Config {
 			DefaultEncrypted:   true,
 			RequirePassword:    false,
 			PasswordPrompt:     true,
+			EncryptLocalIndex:  false, // Disabled by default for backward compatibility
+			SecureMemory:       true,  // Enable secure memory handling
+			AntiForensics:      false, // Disabled by default (user choice)
 		},
 	}
 }
