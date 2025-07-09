@@ -10,9 +10,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/bootstrap"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/logging"
@@ -126,16 +128,17 @@ func main() {
 		"read_only":   cfg.FUSE.ReadOnly,
 		"debug":       cfg.FUSE.Debug,
 		"daemon":      *daemon,
+		"bootstrap":   *bootstrapFlag,
 	})
+
+	// Handle bootstrap BEFORE mounting
+	if *bootstrapFlag {
+		handleBootstrap(cfg, *bootstrapData, *bootstrapSize, *bootstrapDir, logger)
+	}
 
 	// Mount filesystem
 	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
 		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, logger)
-	
-	// Handle bootstrap after mount (if not daemon mode)
-	if *bootstrapFlag && !*daemon {
-		handleBootstrap(cfg, *bootstrapData, *bootstrapSize, *bootstrapDir, logger)
-	}
 }
 
 func showHelp() {
@@ -399,7 +402,7 @@ func init() {
 	}
 }
 
-// handleBootstrap downloads and uploads bootstrap data to the mounted filesystem
+// handleBootstrap downloads and uploads bootstrap data directly to NoiseFS
 func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstrapDir string, logger *logging.Logger) {
 	logger.Info("Starting bootstrap process", map[string]interface{}{
 		"dataset": dataset,
@@ -442,9 +445,9 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 	
 	fmt.Printf("Downloaded %d files (%.2f MB)\n", summary.TotalFiles, float64(summary.TotalSize)/(1024*1024))
 	
-	// Upload to NoiseFS
-	fmt.Printf("Uploading bootstrap data to NoiseFS at %s...\n", cfg.FUSE.MountPath)
-	if err := uploadBootstrapData(bootstrapDir, cfg.FUSE.MountPath, logger); err != nil {
+	// Create IPFS client and NoiseFS client for direct upload
+	fmt.Printf("Uploading bootstrap data to NoiseFS...\n")
+	if err := uploadBootstrapDataDirectly(bootstrapDir, cfg, logger); err != nil {
 		logger.Error("Failed to upload bootstrap data", map[string]interface{}{
 			"error": err.Error(),
 		})
@@ -452,7 +455,7 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 	}
 	
 	fmt.Println("Bootstrap process completed successfully!")
-	fmt.Printf("Files are now available in the mounted filesystem at: %s\n", cfg.FUSE.MountPath)
+	fmt.Printf("Files will be available in the mounted filesystem at: %s\n", cfg.FUSE.MountPath)
 	
 	// Clean up bootstrap directory
 	if err := os.RemoveAll(bootstrapDir); err != nil {
@@ -463,9 +466,42 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 	}
 }
 
-// uploadBootstrapData uploads files from bootstrap directory to the mounted filesystem
-func uploadBootstrapData(srcDir, mountPath string, logger *logging.Logger) error {
-	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+// uploadBootstrapDataDirectly uploads files directly to NoiseFS before mounting
+func uploadBootstrapDataDirectly(srcDir string, cfg *config.Config, logger *logging.Logger) error {
+	// Create IPFS client
+	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to create IPFS client: %w", err)
+	}
+	
+	// Create cache
+	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
+	
+	// Create NoiseFS client
+	client, err := noisefs.NewClient(ipfsClient, blockCache)
+	if err != nil {
+		return fmt.Errorf("failed to create NoiseFS client: %w", err)
+	}
+	
+	// Create or load index
+	indexPath := cfg.FUSE.IndexPath
+	if indexPath == "" {
+		indexPath, err = fuse.GetDefaultIndexPath()
+		if err != nil {
+			return fmt.Errorf("failed to get default index path: %w", err)
+		}
+	}
+	
+	index := fuse.NewFileIndex(indexPath)
+	if err := index.LoadIndex(); err != nil {
+		logger.Debug("Creating new index file", map[string]interface{}{
+			"path": indexPath,
+		})
+	}
+	
+	// Walk through bootstrap directory and upload files
+	fileCount := 0
+	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -481,27 +517,107 @@ func uploadBootstrapData(srcDir, mountPath string, logger *logging.Logger) error
 			return err
 		}
 		
-		// Create destination path
-		destPath := filepath.Join(mountPath, relPath)
-		
-		// Ensure destination directory exists
-		destDir := filepath.Dir(destPath)
-		if err := os.MkdirAll(destDir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+		// Read file content
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", path, err)
 		}
 		
-		// Copy file
-		logger.Debug("Copying bootstrap file", map[string]interface{}{
-			"source": path,
-			"destination": destPath,
+		// Upload to NoiseFS using block operations
+		logger.Debug("Uploading bootstrap file", map[string]interface{}{
+			"file": relPath,
+			"size": len(content),
 		})
 		
-		if err := copyFile(path, destPath); err != nil {
-			return fmt.Errorf("failed to copy %s to %s: %w", path, destPath, err)
+		descriptorCID, err := storeFileInNoiseFS(client, relPath, content)
+		if err != nil {
+			return fmt.Errorf("failed to store file %s: %w", relPath, err)
+		}
+		
+		// Add to index
+		index.AddFile(relPath, descriptorCID, int64(len(content)))
+		fileCount++
+		
+		if fileCount%10 == 0 {
+			fmt.Printf("Uploaded %d files...\n", fileCount)
 		}
 		
 		return nil
 	})
+	
+	if err != nil {
+		return err
+	}
+	
+	// Save the index
+	if err := index.SaveIndex(); err != nil {
+		return fmt.Errorf("failed to save index: %w", err)
+	}
+	
+	fmt.Printf("Successfully uploaded %d files to NoiseFS\n", fileCount)
+	return nil
+}
+
+// storeFileInNoiseFS stores a file in NoiseFS using the block-based system
+func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte) (string, error) {
+	// Create splitter
+	splitter, err := blocks.NewSplitter(blocks.DefaultBlockSize)
+	if err != nil {
+		return "", fmt.Errorf("failed to create splitter: %w", err)
+	}
+	
+	// Split file into blocks
+	fileBlocks, err := splitter.SplitBytes(content)
+	if err != nil {
+		return "", fmt.Errorf("failed to split file: %w", err)
+	}
+	
+	// Create descriptor
+	descriptor := descriptors.NewDescriptor(filename, int64(len(content)), blocks.DefaultBlockSize)
+	
+	// Process each block
+	for _, dataBlock := range fileBlocks {
+		// Select randomizers for 3-tuple anonymization
+		rand1, cid1, rand2, cid2, err := client.SelectTwoRandomizers(dataBlock.Size())
+		if err != nil {
+			return "", fmt.Errorf("failed to select randomizers: %w", err)
+		}
+		
+		// Anonymize block (XOR with two randomizers)
+		anonymizedBlock, err := dataBlock.XOR3(rand1, rand2)
+		if err != nil {
+			return "", fmt.Errorf("failed to anonymize block: %w", err)
+		}
+		
+		// Store anonymized block
+		dataCID, err := client.StoreBlockWithCache(anonymizedBlock)
+		if err != nil {
+			return "", fmt.Errorf("failed to store block: %w", err)
+		}
+		
+		// Add to descriptor
+		descriptor.AddBlockTriple(dataCID, cid1, cid2)
+	}
+	
+	// Store descriptor
+	descriptorData, err := descriptor.ToJSON()
+	if err != nil {
+		return "", fmt.Errorf("failed to serialize descriptor: %w", err)
+	}
+	
+	// Create block from descriptor data
+	descriptorBlock, err := blocks.NewBlock(descriptorData)
+	if err != nil {
+		return "", fmt.Errorf("failed to create descriptor block: %w", err)
+	}
+	
+	// Store descriptor in IPFS
+	descriptorCID, err := client.StoreBlockWithCache(descriptorBlock)
+	if err != nil {
+		return "", fmt.Errorf("failed to store descriptor: %w", err)
+	}
+	
+	return descriptorCID, nil
 }
 
 // copyFile copies a file from src to dst
