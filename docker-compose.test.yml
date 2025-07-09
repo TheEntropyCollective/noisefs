@@ -1,0 +1,169 @@
+services:
+  # IPFS Node 1
+  ipfs-node-1:
+    image: ipfs/kubo:latest
+    container_name: noisefs-ipfs-1
+    ports:
+      - "5001:5001"  # API port
+      - "4001:4001"  # P2P port
+      - "8080:8080"  # Gateway port
+    volumes:
+      - ipfs1_data:/data/ipfs
+      - ipfs1_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    entrypoint: |
+      sh -c '
+      if [ ! -f /data/ipfs/config ]; then
+        ipfs init --profile=server
+      fi
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"GET\", \"POST\", \"PUT\", \"DELETE\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\", \"Content-Type\"]"
+      ipfs config --json Swarm.ConnMgr.HighWater 200
+      ipfs config --json Swarm.ConnMgr.LowWater 100
+      exec ipfs daemon --enable-pubsub-experiment
+      '
+
+  # IPFS Node 2
+  ipfs-node-2:
+    image: ipfs/kubo:latest
+    container_name: noisefs-ipfs-2
+    ports:
+      - "5002:5001"  # API port
+      - "4002:4001"  # P2P port
+      - "8081:8080"  # Gateway port
+    volumes:
+      - ipfs2_data:/data/ipfs
+      - ipfs2_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    entrypoint: |
+      sh -c '
+      if [ ! -f /data/ipfs/config ]; then
+        ipfs init --profile=server
+      fi
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"GET\", \"POST\", \"PUT\", \"DELETE\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\", \"Content-Type\"]"
+      ipfs config --json Swarm.ConnMgr.HighWater 200
+      ipfs config --json Swarm.ConnMgr.LowWater 100
+      exec ipfs daemon --enable-pubsub-experiment
+      '
+
+  # IPFS Node 3
+  ipfs-node-3:
+    image: ipfs/kubo:latest
+    container_name: noisefs-ipfs-3
+    ports:
+      - "5003:5001"  # API port
+      - "4003:4001"  # P2P port
+      - "8082:8080"  # Gateway port
+    volumes:
+      - ipfs3_data:/data/ipfs
+      - ipfs3_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    entrypoint: |
+      sh -c '
+      if [ ! -f /data/ipfs/config ]; then
+        ipfs init --profile=server
+      fi
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"GET\", \"POST\", \"PUT\", \"DELETE\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\", \"Content-Type\"]"
+      ipfs config --json Swarm.ConnMgr.HighWater 200
+      ipfs config --json Swarm.ConnMgr.LowWater 100
+      exec ipfs daemon --enable-pubsub-experiment
+      '
+
+  # IPFS Node 4
+  ipfs-node-4:
+    image: ipfs/kubo:latest
+    container_name: noisefs-ipfs-4
+    ports:
+      - "5004:5001"  # API port
+      - "4004:4001"  # P2P port
+      - "8083:8080"  # Gateway port
+    volumes:
+      - ipfs4_data:/data/ipfs
+      - ipfs4_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    entrypoint: |
+      sh -c '
+      if [ ! -f /data/ipfs/config ]; then
+        ipfs init --profile=server
+      fi
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"GET\", \"POST\", \"PUT\", \"DELETE\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\", \"Content-Type\"]"
+      ipfs config --json Swarm.ConnMgr.HighWater 200
+      ipfs config --json Swarm.ConnMgr.LowWater 100
+      exec ipfs daemon --enable-pubsub-experiment
+      '
+
+  # IPFS Node 5
+  ipfs-node-5:
+    image: ipfs/kubo:latest
+    container_name: noisefs-ipfs-5
+    ports:
+      - "5005:5001"  # API port
+      - "4005:4001"  # P2P port
+      - "8084:8080"  # Gateway port
+    volumes:
+      - ipfs5_data:/data/ipfs
+      - ipfs5_staging:/export
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    entrypoint: |
+      sh -c '
+      if [ ! -f /data/ipfs/config ]; then
+        ipfs init --profile=server
+      fi
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin "[\"*\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods "[\"GET\", \"POST\", \"PUT\", \"DELETE\"]"
+      ipfs config --json API.HTTPHeaders.Access-Control-Allow-Headers "[\"Authorization\", \"Content-Type\"]"
+      ipfs config --json Swarm.ConnMgr.HighWater 200
+      ipfs config --json Swarm.ConnMgr.LowWater 100
+      exec ipfs daemon --enable-pubsub-experiment
+      '
+
+  # Network connectivity helper
+  ipfs-connector:
+    image: ipfs/kubo:latest
+    container_name: noisefs-connector
+    depends_on:
+      - ipfs-node-1
+      - ipfs-node-2
+      - ipfs-node-3
+      - ipfs-node-4
+      - ipfs-node-5
+    volumes:
+      - ./scripts:/scripts
+    command: >
+      sh -c "
+      sleep 10 &&
+      /scripts/connect-nodes.sh
+      "
+
+volumes:
+  ipfs1_data:
+  ipfs1_staging:
+  ipfs2_data:
+  ipfs2_staging:
+  ipfs3_data:
+  ipfs3_staging:
+  ipfs4_data:
+  ipfs4_staging:
+  ipfs5_data:
+  ipfs5_staging:
+
+networks:
+  default:
+    name: noisefs-test-network

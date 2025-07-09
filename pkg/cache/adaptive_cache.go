@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -93,6 +94,11 @@ type AdaptiveCacheConfig struct {
 	EvictionBatchSize  int           `json:"eviction_batch_size"`
 	ExchangeInterval   time.Duration `json:"exchange_interval"`
 	PredictionInterval time.Duration `json:"prediction_interval"`
+	
+	// Privacy settings
+	PrivacyEpsilon     float64       `json:"privacy_epsilon"`     // Differential privacy parameter
+	TemporalQuantum    time.Duration `json:"temporal_quantum"`    // Time quantization interval
+	DummyAccessRate    float64       `json:"dummy_access_rate"`   // Rate of dummy accesses (0.0-1.0)
 }
 
 // PeerCacheInfo holds information about peer cache state
@@ -139,6 +145,10 @@ type AdaptiveCache struct {
 	// Peer coordination
 	peerCache       map[peer.ID]*PeerCacheInfo
 	cacheExchange   *CacheExchangeProtocol
+	
+	// Privacy components
+	privacyNoise    *rand.Rand
+	lastDummyAccess time.Time
 	
 	// Synchronization
 	mutex           sync.RWMutex
@@ -203,15 +213,28 @@ func NewAdaptiveCache(config *AdaptiveCacheConfig) *AdaptiveCache {
 	// Initialize eviction policy with basic implementation
 	cache.evictionPolicy = &basicAdaptiveEvictionPolicy{}
 	
+	// Set default intervals if not configured
+	if config.PredictionInterval == 0 {
+		config.PredictionInterval = time.Minute * 5
+	}
+	if config.ExchangeInterval == 0 {
+		config.ExchangeInterval = time.Minute * 10
+	}
+	
 	// Initialize cache exchange protocol
 	cache.cacheExchange = &CacheExchangeProtocol{
 		exchangeRate: 0.1, // 10% of cache state exchanged per sync
 	}
 	
+	// Initialize privacy components
+	cache.privacyNoise = rand.New(rand.NewSource(time.Now().UnixNano()))
+	cache.lastDummyAccess = time.Now()
+	
 	// Start background tasks
 	go cache.predictionLoop()
 	go cache.evictionLoop()
 	go cache.cacheExchangeLoop()
+	go cache.privacyMaintenanceLoop()
 	
 	return cache
 }
@@ -233,8 +256,8 @@ func (ac *AdaptiveCache) Get(cid string) ([]byte, bool) {
 	item.AccessCount++
 	item.mutex.Unlock()
 	
-	// Update access pattern
-	ac.updateAccessPattern(cid)
+	// Update access pattern with privacy protections
+	ac.updateAccessPatternPrivate(cid)
 	
 	// Record hit
 	ac.recordHit(cid, item.Tier)
@@ -507,8 +530,8 @@ func (ac *AdaptiveCache) performMaintenance() {
 		ac.makeSpace(spaceToFree)
 	}
 	
-	// Update popularity scores
-	ac.updatePopularityScores()
+	// Update popularity scores with privacy protection
+	ac.updatePopularityScoresPrivate()
 	
 	// Clean old access patterns
 	ac.cleanOldAccessPatterns()
@@ -678,4 +701,148 @@ func (ac *AdaptiveCache) Preload(ctx context.Context, blockFetcher func(string) 
 	}
 	
 	return nil
+}
+
+// addDifferentialPrivacyNoise adds calibrated noise for differential privacy
+func (ac *AdaptiveCache) addDifferentialPrivacyNoise(trueValue float64) float64 {
+	if ac.config.PrivacyEpsilon <= 0 {
+		return trueValue // No privacy protection
+	}
+	
+	// Laplace mechanism for differential privacy
+	sensitivity := 1.0 // Sensitivity of popularity counting
+	scale := sensitivity / ac.config.PrivacyEpsilon
+	
+	// Generate Laplace noise: Lap(0, scale)
+	u := ac.privacyNoise.Float64() - 0.5
+	noise := -scale * math.Copysign(math.Log(1-2*math.Abs(u)), u)
+	
+	return math.Max(0, trueValue + noise) // Ensure non-negative
+}
+
+// quantizeTimestamp rounds timestamp to privacy quantum intervals
+func (ac *AdaptiveCache) quantizeTimestamp(t time.Time) time.Time {
+	if ac.config.TemporalQuantum <= 0 {
+		return t // No quantization
+	}
+	
+	// Round down to nearest quantum boundary
+	quantumNanos := ac.config.TemporalQuantum.Nanoseconds()
+	quantized := (t.UnixNano() / quantumNanos) * quantumNanos
+	return time.Unix(0, quantized)
+}
+
+// updateAccessPatternPrivate updates the access pattern with privacy protections
+func (ac *AdaptiveCache) updateAccessPatternPrivate(cid string) {
+	pattern, exists := ac.accessHistory[cid]
+	if !exists {
+		ac.initializeAccessPattern(cid)
+		pattern = ac.accessHistory[cid]
+	}
+	
+	// Use quantized timestamp for privacy
+	now := ac.quantizeTimestamp(time.Now())
+	pattern.AccessTimes = append(pattern.AccessTimes, now)
+	
+	// Calculate interval with quantized times
+	if len(pattern.AccessTimes) > 1 {
+		lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-2]
+		interval := now.Sub(lastAccess)
+		pattern.AccessIntervals = append(pattern.AccessIntervals, interval)
+	}
+	
+	// Update daily and weekly patterns
+	hour := now.Hour()
+	weekday := int(now.Weekday())
+	pattern.DailyPattern[hour]++
+	pattern.WeeklyPattern[weekday]++
+	
+	// Limit history size
+	if len(pattern.AccessTimes) > 1000 {
+		pattern.AccessTimes = pattern.AccessTimes[100:]
+		pattern.AccessIntervals = pattern.AccessIntervals[100:]
+	}
+}
+
+// updatePopularityScoresPrivate recalculates popularity with differential privacy
+func (ac *AdaptiveCache) updatePopularityScoresPrivate() {
+	now := time.Now()
+	
+	for _, item := range ac.items {
+		item.mutex.Lock()
+		
+		// Calculate base popularity
+		timeSinceCreation := now.Sub(item.CreatedAt)
+		timeSinceLastAccess := now.Sub(item.LastAccessed)
+		
+		accessRate := float64(item.AccessCount) / math.Max(timeSinceCreation.Hours(), 1.0)
+		recencyFactor := 1.0 / (1.0 + timeSinceLastAccess.Hours())
+		
+		randomizerBonus := 1.0
+		if item.IsRandomizer {
+			randomizerBonus = 1.5
+		}
+		
+		basePopularity := accessRate * recencyFactor * randomizerBonus
+		
+		// Apply differential privacy noise
+		item.PopularityScore = ac.addDifferentialPrivacyNoise(basePopularity)
+		
+		item.mutex.Unlock()
+	}
+}
+
+// injectDummyAccess creates fake cache accesses for privacy
+func (ac *AdaptiveCache) injectDummyAccess() {
+	if ac.config.DummyAccessRate <= 0 || len(ac.items) == 0 {
+		return
+	}
+	
+	// Check if it's time for a dummy access
+	timeSinceLastDummy := time.Since(ac.lastDummyAccess)
+	averageInterval := time.Duration(float64(time.Hour) / ac.config.DummyAccessRate)
+	
+	if timeSinceLastDummy < averageInterval {
+		return
+	}
+	
+	// Select a random cached item for dummy access
+	var items []*AdaptiveCacheItem
+	ac.mutex.RLock()
+	for _, item := range ac.items {
+		items = append(items, item)
+	}
+	ac.mutex.RUnlock()
+	
+	if len(items) > 0 {
+		randomItem := items[ac.privacyNoise.Intn(len(items))]
+		
+		// Perform dummy access without returning data
+		randomItem.mutex.Lock()
+		randomItem.LastAccessed = ac.quantizeTimestamp(time.Now())
+		randomItem.AccessCount++
+		randomItem.mutex.Unlock()
+		
+		// Update access pattern for the dummy access
+		ac.updateAccessPatternPrivate(randomItem.CID)
+		
+		ac.lastDummyAccess = time.Now()
+	}
+}
+
+// privacyMaintenanceLoop handles privacy-related maintenance tasks
+func (ac *AdaptiveCache) privacyMaintenanceLoop() {
+	ticker := time.NewTicker(time.Minute) // Check every minute
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		ac.injectDummyAccess()
+		
+		// Periodically update popularity with privacy noise
+		if time.Now().Minute()%5 == 0 { // Every 5 minutes
+			ac.mutex.Lock()
+			ac.updatePopularityScoresPrivate()
+			ac.mutex.Unlock()
+		}
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // mockIPFSClient provides a mock IPFS client for testing
@@ -28,6 +29,14 @@ func (m *mockIPFSClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	}
 	// Return a mock block
 	return blocks.NewBlock([]byte("mock data"))
+}
+
+func (m *mockIPFSClient) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+	return m.RetrieveBlock(cid)
+}
+
+func (m *mockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
+	return m.StoreBlock(block)
 }
 
 func TestNewClient(t *testing.T) {
@@ -162,14 +171,14 @@ func TestSelectRandomizer(t *testing.T) {
 
 	// Now SelectRandomizer should reuse from cache
 	initialMetrics := client.GetMetrics()
-	
+
 	randBlock2, cid2, err := client.SelectRandomizer(128)
 	if err != nil {
 		t.Errorf("SelectRandomizer() with cache error = %v, want nil", err)
 	}
 
 	finalMetrics := client.GetMetrics()
-	
+
 	// Should have incremented block reuse metric
 	if finalMetrics.BlocksReused <= initialMetrics.BlocksReused {
 		t.Error("SelectRandomizer() should have recorded block reuse")
@@ -274,7 +283,7 @@ func TestRetrieveBlockWithCache(t *testing.T) {
 
 	// Test cache miss (should retrieve from IPFS)
 	initialMetrics := client.GetMetrics()
-	
+
 	block, err := client.RetrieveBlockWithCache("test_cid")
 	if err != nil {
 		t.Errorf("RetrieveBlockWithCache() error = %v, want nil", err)
@@ -303,7 +312,7 @@ func TestRetrieveBlockWithCache(t *testing.T) {
 
 	// Test cache hit (should get from cache without IPFS call)
 	initialCacheMisses := finalMetrics.CacheMisses
-	
+
 	block2, err := client.RetrieveBlockWithCache("test_cid")
 	if err != nil {
 		t.Errorf("RetrieveBlockWithCache() cache hit error = %v, want nil", err)
@@ -394,7 +403,7 @@ func TestClientEdgeCases(t *testing.T) {
 			return blocks.NewBlock([]byte("test"))
 		},
 	}
-	
+
 	cache := cache.NewMemoryCache(10)
 	client, err := NewClient(mockIPFS, cache)
 	if err != nil {
@@ -454,14 +463,14 @@ func TestSelectRandomizerCacheFiltering(t *testing.T) {
 
 	// Request 128 byte randomizer - should not find suitable blocks and generate new one
 	initialGenerated := client.GetMetrics().BlocksGenerated
-	
+
 	_, _, err = client.SelectRandomizer(128)
 	if err != nil {
 		t.Errorf("SelectRandomizer() error = %v, want nil", err)
 	}
 
 	finalGenerated := client.GetMetrics().BlocksGenerated
-	
+
 	// Should have generated a new block since cache had no 128-byte blocks
 	if finalGenerated <= initialGenerated {
 		t.Error("SelectRandomizer() should have generated new block when cache has no suitable blocks")

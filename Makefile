@@ -52,19 +52,43 @@ help:
 	@echo "$(YELLOW)Available targets:$(NC)"
 	@echo "  $(GREEN)build$(NC)         Build all binaries"
 	@echo "  $(GREEN)clean$(NC)         Clean build artifacts"
-	@echo "  $(GREEN)test$(NC)          Run tests"
+	@echo ""
+	@echo "$(YELLOW)Testing:$(NC)"
+	@echo "  $(GREEN)test$(NC)          Run all tests"
+	@echo "  $(GREEN)test-unit$(NC)     Run unit tests only"
+	@echo "  $(GREEN)test-integration$(NC) Run integration tests (with mocks)"
+	@echo "  $(GREEN)test-real$(NC)     Run real end-to-end tests with IPFS"
+	@echo "  $(GREEN)test-milestone4$(NC) Run Milestone 4 specific tests"
+	@echo "  $(GREEN)quick-test$(NC)    Run quick unit tests"
+	@echo "  $(GREEN)real-quick$(NC)    Run quick real IPFS test"
+	@echo "  $(GREEN)perf-test$(NC)     Run performance tests with real IPFS"
+	@echo ""
+	@echo "$(YELLOW)Real IPFS Testing:$(NC)"
+	@echo "  $(GREEN)start-ipfs$(NC)    Start real IPFS test network"
+	@echo "  $(GREEN)stop-ipfs$(NC)     Stop IPFS test network"
+	@echo "  $(GREEN)ipfs-status$(NC)   Show IPFS network status"
+	@echo ""
+	@echo "$(YELLOW)Demos & Simulations:$(NC)"
+	@echo "  $(GREEN)demo$(NC)          Run NoiseFS impact demo"
+	@echo "  $(GREEN)benchmark$(NC)     Run NoiseFS benchmarks"
+	@echo "  $(GREEN)simulation$(NC)    Run medium-scale simulation"
+	@echo "  $(GREEN)simulation-large$(NC) Run large-scale simulation"
+	@echo ""
+	@echo "$(YELLOW)Development:$(NC)"
 	@echo "  $(GREEN)bench$(NC)         Run benchmarks"
 	@echo "  $(GREEN)lint$(NC)          Run linters"
 	@echo "  $(GREEN)fmt$(NC)           Format code"
 	@echo "  $(GREEN)vet$(NC)           Run go vet"
 	@echo "  $(GREEN)deps$(NC)          Download dependencies"
+	@echo "  $(GREEN)dev$(NC)           Development build with race detection"
+	@echo "  $(GREEN)check$(NC)         Run all checks (test, lint, vet)"
+	@echo "  $(GREEN)all$(NC)           Clean, build, and test"
+	@echo ""
+	@echo "$(YELLOW)Docker & Deployment:$(NC)"
 	@echo "  $(GREEN)docker$(NC)        Build Docker image"
 	@echo "  $(GREEN)docker-push$(NC)   Push Docker image"
 	@echo "  $(GREEN)install$(NC)       Install binaries to system"
 	@echo "  $(GREEN)dist$(NC)          Create distribution packages"
-	@echo "  $(GREEN)dev$(NC)           Development build with race detection"
-	@echo "  $(GREEN)check$(NC)         Run all checks (test, lint, vet)"
-	@echo "  $(GREEN)all$(NC)           Clean, build, and test"
 	@echo ""
 	@echo "$(YELLOW)Variables:$(NC)"
 	@echo "  VERSION=$(VERSION)"
@@ -138,6 +162,35 @@ test:
 	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./...
 	@echo "$(GREEN)✓ Tests completed$(NC)"
 
+# Run unit tests only
+test-unit:
+	@echo "$(BLUE)Running unit tests...$(NC)"
+	@$(GO) test -short $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/blocks ./pkg/cache ./pkg/noisefs ./pkg/ipfs
+	@echo "$(GREEN)✓ Unit tests completed$(NC)"
+
+# Run integration tests (with mocks)
+test-integration:
+	@echo "$(BLUE)Running integration tests...$(NC)"
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/integration/ -run "TestMilestone4"
+	@echo "$(GREEN)✓ Integration tests completed$(NC)"
+
+# Run real end-to-end tests with IPFS
+test-real: docker-check start-ipfs
+	@echo "$(BLUE)Running real end-to-end tests...$(NC)"
+	@echo "$(YELLOW)Waiting for IPFS network to stabilize...$(NC)"
+	@sleep 60
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/testing/ -timeout=10m || ($(MAKE) stop-ipfs && exit 1)
+	@$(MAKE) stop-ipfs
+	@echo "$(GREEN)✓ Real end-to-end tests completed$(NC)"
+
+# Run Milestone 4 specific tests
+test-milestone4:
+	@echo "$(BLUE)Running Milestone 4 tests...$(NC)"
+	@$(GO) test ./pkg/integration/ -run "TestMilestone4" -v
+	@$(GO) run cmd/impact-demo/main.go
+	@$(GO) run cmd/benchmark-runner/main.go
+	@echo "$(GREEN)✓ Milestone 4 tests completed$(NC)"
+
 # Run tests with coverage
 test-coverage:
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
@@ -154,6 +207,76 @@ bench:
 # Run all checks
 check: deps fmt vet lint test
 	@echo "$(GREEN)✓ All checks passed$(NC)"
+
+# Docker and IPFS management
+docker-check:
+	@command -v docker >/dev/null 2>&1 || { echo "$(RED)Docker is required but not installed$(NC)"; exit 1; }
+	@command -v docker-compose >/dev/null 2>&1 || { echo "$(RED)docker-compose is required but not installed$(NC)"; exit 1; }
+	@docker info >/dev/null 2>&1 || { echo "$(RED)Docker daemon is not running$(NC)"; exit 1; }
+
+# Start real IPFS test network
+start-ipfs: docker-check
+	@echo "$(BLUE)Starting real IPFS test network...$(NC)"
+	@docker-compose -f docker-compose.test.yml up -d
+	@echo "$(YELLOW)Waiting for IPFS nodes to initialize...$(NC)"
+	@sleep 20
+	@echo "$(GREEN)✓ IPFS network started$(NC)"
+	@echo "Nodes available at:"
+	@echo "  Node 1: http://localhost:5001"
+	@echo "  Node 2: http://localhost:5002"
+	@echo "  Node 3: http://localhost:5003"
+	@echo "  Node 4: http://localhost:5004"
+	@echo "  Node 5: http://localhost:5005"
+
+# Stop IPFS test network
+stop-ipfs:
+	@echo "$(BLUE)Stopping IPFS test network...$(NC)"
+	@docker-compose -f docker-compose.test.yml down -v >/dev/null 2>&1 || true
+	@echo "$(GREEN)✓ IPFS network stopped and volumes cleaned$(NC)"
+
+# Show IPFS network status
+ipfs-status:
+	@echo "$(BLUE)IPFS Network Status:$(NC)"
+	@echo "==================="
+	@for port in 5001 5002 5003 5004 5005; do \
+		echo -n "Node $$port: "; \
+		curl -s http://localhost:$$port/api/v0/version 2>/dev/null | grep -o '"Version":"[^"]*"' | cut -d'"' -f4 || echo "$(RED)Not responding$(NC)"; \
+	done
+
+# Demo and simulation targets
+demo:
+	@echo "$(BLUE)Running NoiseFS impact demo...$(NC)"
+	@$(GO) run cmd/impact-demo/main.go
+
+benchmark:
+	@echo "$(BLUE)Running NoiseFS benchmarks...$(NC)"
+	@$(GO) run cmd/benchmark-runner/main.go
+
+simulation:
+	@echo "$(BLUE)Running medium-scale simulation...$(NC)"
+	@$(GO) run cmd/simulation/main.go -scenario=medium -duration=60s
+
+simulation-large:
+	@echo "$(BLUE)Running large-scale simulation...$(NC)"
+	@$(GO) run cmd/simulation/main.go -scenario=large -duration=120s
+
+# Quick testing shortcuts
+quick-test:
+	@echo "$(BLUE)Running quick unit tests...$(NC)"
+	@$(GO) test ./pkg/noisefs/ ./pkg/blocks/ ./pkg/cache/ -v
+
+real-quick: start-ipfs
+	@echo "$(BLUE)Running quick real test...$(NC)"
+	@sleep 25
+	@$(GO) test ./pkg/testing/ -run TestRealSingleNode -v -timeout=5m || ($(MAKE) stop-ipfs && exit 1)
+	@$(MAKE) stop-ipfs
+
+# Performance testing
+perf-test: start-ipfs
+	@echo "$(BLUE)Running performance tests...$(NC)"
+	@sleep 30
+	@$(GO) test ./pkg/testing/ -bench=. -benchtime=30s -timeout=15m || ($(MAKE) stop-ipfs && exit 1)
+	@$(MAKE) stop-ipfs
 
 # Build Docker image
 docker: docker-build

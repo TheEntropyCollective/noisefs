@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
@@ -43,6 +44,16 @@ func (m *mockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
 	}
 	
 	return block, nil
+}
+
+func (m *mockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+	// For mock, ignore peer hints and use regular retrieval
+	return m.RetrieveBlock(cid)
+}
+
+func (m *mockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
+	// For mock, ignore strategy and use regular storage
+	return m.StoreBlock(block)
 }
 
 // simulateUpload simulates the complete file upload process
