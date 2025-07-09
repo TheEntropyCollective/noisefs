@@ -76,6 +76,16 @@ Production security with HTTPS/TLS, AES-256-GCM encryption, streaming support, i
 ### ✅ Milestone 4 - Scalability & Performance
 Intelligent peer selection (4 strategies), ML-based adaptive caching, enhanced IPFS integration, real-time monitoring, <200% storage overhead achieved.
 
+### ✅ Milestone 5 - Privacy-Preserving Cache Improvements
+Enhanced caching strategy with privacy protections:
+- **Differential Privacy**: Laplace mechanism for popularity tracking (configurable ε parameter)
+- **Temporal Quantization**: Access pattern timestamps rounded to hour/day boundaries
+- **Bloom Filter Cache Hints**: Probabilistic peer communication (1-5% false positive rate)
+- **Dummy Access Injection**: Fake cache accesses to obfuscate real patterns
+- **Comprehensive Testing**: Privacy protection verification and functionality tests
+
+Addresses major privacy concerns while maintaining adaptive caching performance benefits.
+
 ## Next Milestone Ideas
 
 ### 💡 Milestone 7: Advanced AI & Research Features

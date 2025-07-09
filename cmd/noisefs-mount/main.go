@@ -3,12 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/bootstrap"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
@@ -39,6 +41,13 @@ func main() {
 		removeFile   = flag.String("remove-file", "", "Remove file from index")
 		listFiles    = flag.Bool("list-files", false, "List files in index")
 		showIndex    = flag.Bool("show-index", false, "Show index file path and stats")
+		
+		// Bootstrap flags
+		bootstrapFlag   = flag.Bool("bootstrap", false, "Bootstrap filesystem with sample data")
+		bootstrapData   = flag.String("bootstrap-data", "mixed", "Bootstrap dataset (mixed, books, images, documents, code)")
+		bootstrapSize   = flag.Int64("bootstrap-size", 100*1024*1024, "Maximum bootstrap data size in bytes")
+		bootstrapDir    = flag.String("bootstrap-dir", "", "Directory to store bootstrap data before upload")
+		listBootstrap   = flag.Bool("list-bootstrap", false, "List available bootstrap datasets")
 	)
 	flag.Parse()
 
@@ -49,6 +58,11 @@ func main() {
 
 	if *list {
 		listMounts()
+		return
+	}
+
+	if *listBootstrap {
+		bootstrap.ListAvailableDatasets()
 		return
 	}
 
@@ -117,6 +131,11 @@ func main() {
 	// Mount filesystem
 	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
 		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, logger)
+	
+	// Handle bootstrap after mount (if not daemon mode)
+	if *bootstrapFlag && !*daemon {
+		handleBootstrap(cfg, *bootstrapData, *bootstrapSize, *bootstrapDir, logger)
+	}
 }
 
 func showHelp() {
@@ -159,6 +178,19 @@ func showHelp() {
 	fmt.Println()
 	fmt.Println("  # Remove file from index")
 	fmt.Println("  noisefs-mount -remove-file filename.txt")
+	fmt.Println()
+	fmt.Println("Bootstrap Operations:")
+	fmt.Println("  # List available bootstrap datasets")
+	fmt.Println("  noisefs-mount -list-bootstrap")
+	fmt.Println()
+	fmt.Println("  # Mount with bootstrap data")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -bootstrap")
+	fmt.Println()
+	fmt.Println("  # Mount with specific bootstrap dataset")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -bootstrap -bootstrap-data books")
+	fmt.Println()
+	fmt.Println("  # Mount with limited bootstrap size")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -bootstrap -bootstrap-size 50000000")
 	fmt.Println()
 	fmt.Println("Requirements:")
 	fmt.Println("  - IPFS daemon running at specified endpoint")
@@ -365,4 +397,127 @@ func init() {
 	if os.Geteuid() == 0 {
 		fmt.Println("Warning: Running as root")
 	}
+}
+
+// handleBootstrap downloads and uploads bootstrap data to the mounted filesystem
+func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstrapDir string, logger *logging.Logger) {
+	logger.Info("Starting bootstrap process", map[string]interface{}{
+		"dataset": dataset,
+		"max_size": maxSize,
+		"bootstrap_dir": bootstrapDir,
+	})
+	
+	// Set default bootstrap directory if not provided
+	if bootstrapDir == "" {
+		bootstrapDir = filepath.Join(os.TempDir(), "noisefs_bootstrap")
+	}
+	
+	// Create bootstrap configuration
+	bootstrapConfig := &bootstrap.Config{
+		OutputDir:         bootstrapDir,
+		Dataset:           dataset,
+		MaxSize:           maxSize,
+		Verbose:           cfg.FUSE.Debug,
+		ParallelDownloads: 4,
+	}
+	
+	// Download bootstrap data
+	fmt.Printf("Downloading bootstrap dataset '%s'...\n", dataset)
+	generator := bootstrap.NewDatasetGenerator(bootstrapConfig)
+	if err := generator.GenerateDataset(); err != nil {
+		logger.Error("Failed to generate bootstrap dataset", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	
+	// Get summary
+	summary, err := generator.GetSummary()
+	if err != nil {
+		logger.Error("Failed to get bootstrap summary", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	
+	fmt.Printf("Downloaded %d files (%.2f MB)\n", summary.TotalFiles, float64(summary.TotalSize)/(1024*1024))
+	
+	// Upload to NoiseFS
+	fmt.Printf("Uploading bootstrap data to NoiseFS at %s...\n", cfg.FUSE.MountPath)
+	if err := uploadBootstrapData(bootstrapDir, cfg.FUSE.MountPath, logger); err != nil {
+		logger.Error("Failed to upload bootstrap data", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+	
+	fmt.Println("Bootstrap process completed successfully!")
+	fmt.Printf("Files are now available in the mounted filesystem at: %s\n", cfg.FUSE.MountPath)
+	
+	// Clean up bootstrap directory
+	if err := os.RemoveAll(bootstrapDir); err != nil {
+		logger.Warn("Failed to clean up bootstrap directory", map[string]interface{}{
+			"directory": bootstrapDir,
+			"error": err.Error(),
+		})
+	}
+}
+
+// uploadBootstrapData uploads files from bootstrap directory to the mounted filesystem
+func uploadBootstrapData(srcDir, mountPath string, logger *logging.Logger) error {
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Skip metadata files and directories
+		if info.IsDir() || strings.HasSuffix(path, ".meta") {
+			return nil
+		}
+		
+		// Calculate relative path
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+		
+		// Create destination path
+		destPath := filepath.Join(mountPath, relPath)
+		
+		// Ensure destination directory exists
+		destDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+		}
+		
+		// Copy file
+		logger.Debug("Copying bootstrap file", map[string]interface{}{
+			"source": path,
+			"destination": destPath,
+		})
+		
+		if err := copyFile(path, destPath); err != nil {
+			return fmt.Errorf("failed to copy %s to %s: %w", path, destPath, err)
+		}
+		
+		return nil
+	})
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	
+	_, err = io.Copy(dstFile, srcFile)
+	return err
 }
