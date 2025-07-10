@@ -68,7 +68,14 @@ func NewClientWithConfig(ipfsClient ipfs.BlockStore, blockCache cache.Cache, con
 	// Try to cast to peer-aware IPFS client
 	peerAwareClient, isPeerAware := ipfsClient.(ipfs.PeerAwareIPFSClient)
 	if !isPeerAware {
-		return nil, errors.New("IPFS client must implement PeerAwareIPFSClient interface")
+		// If the ipfs.Client type is passed, it implements PeerAwareIPFSClient
+		// but might be passed as BlockStore interface. Try a type assertion to *ipfs.Client
+		if ipfsClientImpl, ok := ipfsClient.(*ipfs.Client); ok {
+			// The concrete type implements all methods, use it directly
+			peerAwareClient = ipfsClientImpl
+		} else {
+			return nil, errors.New("IPFS client must implement PeerAwareIPFSClient interface")
+		}
 	}
 	
 	client := &Client{

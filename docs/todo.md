@@ -1,31 +1,30 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Privacy-Enhanced Request Distribution
+## Current Milestone: System Integration & End-to-End Functionality
 
-### Sprint 1: Request Distribution Architecture ✅
-- [x] Design relay pool management system for distributing block requests
-- [x] Implement relay selection algorithm with load balancing
-- [x] Create encrypted communication protocol for relay requests
-- [x] Build connection pooling for efficient relay usage
-- [x] Add relay health monitoring and automatic failover
+### Sprint 1: Core Integration Fix
+- [x] Fix PeerAwareIPFSClient interface implementation
+- [x] Fix noisefs.Client constructor to properly integrate components
+- [ ] Wire relay pool into client for peer awareness
+- [x] Debug and fix nil pointer in PublicDomainMixer
+- [ ] Create SystemCoordinator to orchestrate all components
+- [ ] Test component integration with unit tests
 
-### Sprint 2: Cover Traffic Generation ✅
-- [x] Implement popular block identification system
-- [x] Create cover traffic generator with configurable noise ratio
-- [x] Build request mixing to combine real and cover blocks
-- [x] Add bandwidth throttling for cover traffic
-- [x] Implement cover block caching to avoid waste
+### Sprint 2: Prove Core Value
+- [ ] Implement basic file upload flow (file → blocks → XOR → storage → descriptor)
+- [ ] Implement basic file download flow (descriptor → blocks → XOR → file)
+- [ ] Verify block anonymization at each step
+- [ ] Demonstrate cover traffic mixing with real requests
+- [ ] Test multi-file block reuse functionality
+- [ ] Enable compliance tracking for all operations
 
-### Sprint 3: Privacy Metrics & Testing
-- [ ] Create privacy measurement framework
-- [ ] Build traffic analysis resistance tests
-- [ ] Implement correlation attack simulations
-- [ ] Add performance benchmarks with privacy features
-- [ ] Generate privacy guarantee documentation
-
-### Completed Milestones from Phase 1:
-- [x] **Sprint 1: Legal Stress Testing Framework**: Legal defense validation system with test case generation, court simulation, precedent analysis, and expert review documentation
-- [x] **IPFS Redundancy Research**: Built complete storage abstraction layer with multi-backend support
+### Sprint 3: Make It Usable
+- [ ] Implement CLI commands (upload, download, stats)
+- [ ] Add progress bars and user feedback
+- [ ] Create basic read-only FUSE mount
+- [ ] Performance benchmarking against direct IPFS
+- [ ] Generate demo showing privacy features
+- [ ] Polish error handling and user experience
 
 ## Completed Major Milestones
 

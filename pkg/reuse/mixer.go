@@ -358,19 +358,13 @@ func (mixer *PublicDomainMixer) generateLegalAttestation(fileBlocks []*blocks.Bl
 	attestationHash := sha256.Sum256([]byte(attestationData))
 	attestationID := fmt.Sprintf("PDA-%x", attestationHash[:8])
 
-	// Generate compliance certificate
-	certificate, err := mixer.generateComplianceCertificate(plan, sources, licenses)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate compliance certificate: %w", err)
-	}
-
 	attestation := &LegalAttestation{
 		AttestationID:         attestationID,
 		FileHash:              fileHash,
 		PublicDomainSources:   sources,
 		LicenseProofs:         licenses,
 		MixingTimestamp:       time.Now(),
-		ComplianceCertificate: certificate,
+		ComplianceCertificate: "", // Will be filled after creation
 		Metadata: map[string]string{
 			"mixer_version":      "1.0",
 			"compliance_level":   mixer.config.VerificationLevel,
@@ -379,11 +373,18 @@ func (mixer *PublicDomainMixer) generateLegalAttestation(fileBlocks []*blocks.Bl
 		},
 	}
 
+	// Generate compliance certificate with the attestation info
+	certificate, err := mixer.generateComplianceCertificate(attestationID, plan, sources, licenses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate compliance certificate: %w", err)
+	}
+	attestation.ComplianceCertificate = certificate
+
 	return attestation, nil
 }
 
 // generateComplianceCertificate creates a compliance certificate
-func (mixer *PublicDomainMixer) generateComplianceCertificate(plan *MixingPlan, sources, licenses []string) (string, error) {
+func (mixer *PublicDomainMixer) generateComplianceCertificate(attestationID string, plan *MixingPlan, sources, licenses []string) (string, error) {
 	cert := fmt.Sprintf(`
 NOISEFS PUBLIC DOMAIN COMPLIANCE CERTIFICATE
 
@@ -405,7 +406,7 @@ public domain sources, ensuring no individual block can be claimed as copyrighte
 
 Cryptographic verification available through NoiseFS legal proof system.
 `, 
-		plan.LegalAttestation.AttestationID,
+		attestationID,
 		time.Now().Format("2006-01-02 15:04:05 UTC"),
 		plan.TotalBlocks,
 		plan.PublicDomainBlocks,

@@ -1,12 +1,14 @@
 package noisefs
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -37,6 +39,26 @@ func (m *mockIPFSClient) RetrieveBlockWithPeerHint(cid string, preferredPeers []
 
 func (m *mockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	return m.StoreBlock(block)
+}
+
+// Additional methods to implement PeerAwareIPFSClient
+func (m *mockIPFSClient) SetPeerManager(manager *p2p.PeerManager) {
+	// Mock implementation - no-op
+}
+
+func (m *mockIPFSClient) GetConnectedPeers() []peer.ID {
+	// Return some mock peers
+	return []peer.ID{}
+}
+
+func (m *mockIPFSClient) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
+	// Delegate to regular retrieve
+	return m.RetrieveBlock(cid)
+}
+
+func (m *mockIPFSClient) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
+	// Mock implementation - no-op
+	return nil
 }
 
 func TestNewClient(t *testing.T) {
