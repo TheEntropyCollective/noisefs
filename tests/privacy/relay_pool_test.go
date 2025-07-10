@@ -138,14 +138,14 @@ func TestAnonymousRequestRouting(t *testing.T) {
 			}
 
 			// Route through relay pool (mock)
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			response := &RelayResponse{
 				Data:          []byte("mock response"),
 				Authenticated: true,
 			}
-			err := error(nil) // Mock success
+			_ = error(nil) // Mock success
 
 			// Verify anonymity properties
 			if req.expectAnon {
@@ -188,7 +188,7 @@ func TestRelaySelectionStrategies(t *testing.T) {
 			for i := range path {
 				path[i] = RelayNode{ID: fmt.Sprintf("relay-%d", i)}
 			}
-			err := error(nil) // Mock success
+			_ = error(nil) // Mock success
 
 			// Verify path properties
 			if len(path) < strat.minHops || len(path) > strat.maxHops {
@@ -233,7 +233,7 @@ func TestCoverTrafficGeneration(t *testing.T) {
 	}
 
 	// Start cover traffic generation (mock)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	coverTrafficStats := &CoverTrafficStats{
@@ -241,7 +241,7 @@ func TestCoverTrafficGeneration(t *testing.T) {
 		AverageInterval:    5 * time.Second,
 		PayloadDiversity:   0.8,
 	}
-	err := error(nil) // Mock success
+	_ = error(nil) // Mock success
 
 	// Send real requests (mock)
 	for _, req := range realRequests {
@@ -279,7 +279,7 @@ func TestOnionRoutingImplementation(t *testing.T) {
 	suite := setupRelayPoolTest(t)
 
 	// Create test request for onion routing
-	testReq := RelayRequest{
+	_ = RelayRequest{
 		ID:          "onion_test_001",
 		Target:      "noisefs://onion-target-001",
 		RequestType: "block_fetch",
@@ -301,7 +301,7 @@ func TestOnionRoutingImplementation(t *testing.T) {
 					EncryptedPayload:    []byte("encrypted"),
 				}
 			}
-			err := error(nil) // Mock success
+			_ = error(nil) // Mock success
 
 			// Verify onion layers
 			if len(onionReq.Layers) != pathLen {
@@ -316,7 +316,7 @@ func TestOnionRoutingImplementation(t *testing.T) {
 			}
 
 			// Route onion request (mock)
-			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			_, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
 
 			response := &RelayResponse{
@@ -324,14 +324,9 @@ func TestOnionRoutingImplementation(t *testing.T) {
 				Authenticated:   true,
 				OnionPathLength: pathLen,
 			}
-			err := error(nil) // Mock success
-			if err != nil {
-				t.Errorf("Failed to route onion request: %v", err)
-			} else {
-				// Verify response came through onion routing
-				if !suite.verifyOnionResponse(response, pathLen) {
-					t.Errorf("Onion response verification failed for path length %d", pathLen)
-				}
+			// Mock success - verify response came through onion routing
+			if !suite.verifyOnionResponse(response, pathLen) {
+				t.Errorf("Onion response verification failed for path length %d", pathLen)
 			}
 		})
 	}
@@ -365,21 +360,21 @@ func TestRelayPoolResilience(t *testing.T) {
 			}
 
 			// Test request routing under failure conditions (mock)
-			testReq := RelayRequest{
+			_ = RelayRequest{
 				ID:          fmt.Sprintf("resilience_test_%s", scenario.name),
 				Target:      "noisefs://resilience-target-001",
 				RequestType: "block_fetch",
 				Anonymous:   true,
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			_, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
 			response := &RelayResponse{
 				Data:          []byte("resilience response"),
 				Authenticated: true,
 			}
-			err := error(nil) // Mock success based on scenario
+			_ = error(nil) // Mock success based on scenario
 			if !scenario.expectSuccess {
 				err = fmt.Errorf("mock failure for %s", scenario.name)
 			}
