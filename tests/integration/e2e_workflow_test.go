@@ -12,6 +12,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -30,7 +31,8 @@ type E2ETestSuite struct {
 }
 
 type MockBlockStore struct {
-	blocks map[string]*blocks.Block
+	blocks      map[string]*blocks.Block
+	peerManager *p2p.PeerManager
 }
 
 func NewMockBlockStore() *MockBlockStore {
@@ -62,6 +64,28 @@ func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []
 
 func (m *MockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	return m.StoreBlock(block)
+}
+
+// PeerAwareIPFSClient interface methods
+func (m *MockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
+	m.peerManager = manager
+}
+
+func (m *MockBlockStore) GetConnectedPeers() []peer.ID {
+	return []peer.ID{
+		peer.ID("mock_peer_1"),
+		peer.ID("mock_peer_2"),
+		peer.ID("mock_peer_3"),
+	}
+}
+
+func (m *MockBlockStore) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
+	return m.RetrieveBlock(cid)
+}
+
+func (m *MockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
+	_, err := m.StoreBlock(block)
+	return err
 }
 
 // TestCompleteUploadDownloadWorkflow tests the entire file lifecycle
@@ -479,6 +503,7 @@ type CorruptedMockBlockStore struct {
 	blocks         map[string]*blocks.Block
 	failureRate    float64
 	operationCount int
+	peerManager    *p2p.PeerManager
 }
 
 func (c *CorruptedMockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
@@ -519,4 +544,26 @@ func (c *CorruptedMockBlockStore) RetrieveBlockWithPeerHint(cid string, preferre
 
 func (c *CorruptedMockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	return c.StoreBlock(block)
+}
+
+// PeerAwareIPFSClient interface methods
+func (c *CorruptedMockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
+	c.peerManager = manager
+}
+
+func (c *CorruptedMockBlockStore) GetConnectedPeers() []peer.ID {
+	return []peer.ID{
+		peer.ID("mock_peer_1"),
+		peer.ID("mock_peer_2"),
+		peer.ID("mock_peer_3"),
+	}
+}
+
+func (c *CorruptedMockBlockStore) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
+	return c.RetrieveBlock(cid)
+}
+
+func (c *CorruptedMockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
+	_, err := c.StoreBlock(block)
+	return err
 }

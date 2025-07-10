@@ -1,5 +1,10 @@
 # Milestone 4: Scalability & Performance - Impact Analysis
 
+> **Note**: This document provides historical analysis of Milestone 4 improvements. For comprehensive analysis covering ALL NoiseFS optimizations, use the new **Evolution Analysis Framework**:
+> - `make evolution-demo` - Shows cumulative impact of all improvements
+> - `make test-evolution` - Runs comprehensive evolution testing
+> - See `tests/integration/evolution_analyzer.go` for technical details
+
 ## Executive Summary
 
 Milestone 4 has delivered **exceptional performance improvements** to NoiseFS, achieving all target goals and significantly exceeding expectations in several key areas. The implementation of intelligent peer selection algorithms, ML-based adaptive caching, and comprehensive performance optimization has transformed NoiseFS into a **production-ready, enterprise-grade distributed file system**.
