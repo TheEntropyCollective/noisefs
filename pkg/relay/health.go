@@ -17,6 +17,9 @@ type HealthMonitor struct {
 	wg       sync.WaitGroup
 }
 
+// RelayHealthMonitor is an alias for compatibility
+type RelayHealthMonitor = HealthMonitor
+
 // HealthCheck represents a health check operation
 type HealthCheck struct {
 	PeerID    peer.ID
@@ -124,16 +127,16 @@ func (b *BlockRetrievalHealthChecker) CheckHealth(ctx context.Context, relay *Re
 	}
 }
 
-// NewHealthMonitor creates a new health monitor
-func NewHealthMonitor(pool *RelayPool, interval time.Duration) *HealthMonitor {
-	return &HealthMonitor{
+// NewRelayHealthMonitor creates a new relay health monitor
+func NewRelayHealthMonitor(pool *RelayPool, interval time.Duration) *RelayHealthMonitor {
+	return &RelayHealthMonitor{
 		pool:     pool,
 		interval: interval,
 	}
 }
 
 // Start starts the health monitoring
-func (h *HealthMonitor) Start(ctx context.Context) error {
+func (h *RelayHealthMonitor) Start(ctx context.Context) error {
 	h.ctx, h.cancel = context.WithCancel(ctx)
 	
 	h.wg.Add(1)
@@ -143,7 +146,7 @@ func (h *HealthMonitor) Start(ctx context.Context) error {
 }
 
 // Stop stops the health monitoring
-func (h *HealthMonitor) Stop() error {
+func (h *RelayHealthMonitor) Stop() error {
 	if h.cancel != nil {
 		h.cancel()
 	}
@@ -152,7 +155,7 @@ func (h *HealthMonitor) Stop() error {
 }
 
 // monitorLoop runs the health monitoring loop
-func (h *HealthMonitor) monitorLoop() {
+func (h *RelayHealthMonitor) monitorLoop() {
 	defer h.wg.Done()
 	
 	ticker := time.NewTicker(h.interval)
@@ -172,7 +175,7 @@ func (h *HealthMonitor) monitorLoop() {
 }
 
 // checkAllRelays checks the health of all relays
-func (h *HealthMonitor) checkAllRelays(checker HealthChecker) {
+func (h *RelayHealthMonitor) checkAllRelays(checker HealthChecker) {
 	h.pool.mu.RLock()
 	relays := make([]*RelayNode, 0, len(h.pool.relays))
 	for _, relay := range h.pool.relays {
@@ -193,7 +196,7 @@ func (h *HealthMonitor) checkAllRelays(checker HealthChecker) {
 }
 
 // checkRelay checks the health of a single relay
-func (h *HealthMonitor) checkRelay(checker HealthChecker, relay *RelayNode) {
+func (h *RelayHealthMonitor) checkRelay(checker HealthChecker, relay *RelayNode) {
 	ctx, cancel := context.WithTimeout(h.ctx, 10*time.Second)
 	defer cancel()
 	
@@ -220,7 +223,7 @@ func (h *HealthMonitor) checkRelay(checker HealthChecker, relay *RelayNode) {
 }
 
 // GetHealthReport returns a health report for all relays
-func (h *HealthMonitor) GetHealthReport() *HealthReport {
+func (h *RelayHealthMonitor) GetHealthReport() *HealthReport {
 	h.pool.mu.RLock()
 	defer h.pool.mu.RUnlock()
 	

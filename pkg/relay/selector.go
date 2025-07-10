@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"sort"
 	"sync"
-	"time"
 )
 
 var (

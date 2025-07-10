@@ -311,3 +311,8 @@ func expandMixedDataset(datasets map[string]*Dataset) {
 	}
 }
 
+// GetBuiltinDatasets returns the built-in public domain datasets
+func GetBuiltinDatasets() map[string]*Dataset {
+	return getBuiltinDatasets()
+}
+

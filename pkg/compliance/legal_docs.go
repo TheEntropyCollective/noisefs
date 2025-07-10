@@ -4,11 +4,40 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 )
+
+// ComplianceLogEntry represents an entry in the compliance audit log
+type ComplianceLogEntry struct {
+	Timestamp   time.Time `json:"timestamp"`
+	EventType   string    `json:"event_type"`
+	Description string    `json:"description"`
+	UserID      string    `json:"user_id,omitempty"`
+	BlockCID    string    `json:"block_cid,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+}
+
+// PublicDomainProof represents proof of public domain content
+type PublicDomainProof struct {
+	BlockCID    string    `json:"block_cid"`
+	Source      string    `json:"source"`
+	License     string    `json:"license"`
+	VerifiedAt  time.Time `json:"verified_at"`
+	Metadata    map[string]string `json:"metadata"`
+}
+
+// LegalPrecedent represents a legal case precedent
+type LegalPrecedent struct {
+	CaseName           string `json:"case_name"`
+	Citation           string `json:"citation"`
+	Year               int    `json:"year"`
+	Relevance          string `json:"relevance"`
+	Summary            string `json:"summary"`
+	KeyHolding         string `json:"key_holding,omitempty"`
+	ApplicationToCase  string `json:"application_to_case,omitempty"`
+}
 
 // EnhancedLegalDocumentationGenerator provides comprehensive legal documentation for DMCA defense
 type EnhancedLegalDocumentationGenerator struct {
@@ -219,7 +248,7 @@ func (generator *EnhancedLegalDocumentationGenerator) GenerateComprehensiveLegal
 
 // generateDMCAResponsePackage creates a comprehensive DMCA response package
 func (generator *EnhancedLegalDocumentationGenerator) generateDMCAResponsePackage(descriptorCID string, descriptor *descriptors.Descriptor, context *LegalContext) (*DMCAResponsePackage, error) {
-	package := &DMCAResponsePackage{
+	pkg := &DMCAResponsePackage{
 		AutomaticResponse: generator.generateAutomaticResponse(descriptorCID, descriptor),
 		CounterNoticeTemplate: generator.generateCounterNoticeTemplate(descriptorCID, descriptor),
 		LegalBasisExplanation: generator.generateLegalBasisExplanation(),
@@ -230,7 +259,7 @@ func (generator *EnhancedLegalDocumentationGenerator) generateDMCAResponsePackag
 		ContactInformation: generator.generateContactInformation(),
 	}
 	
-	return package, nil
+	return pkg, nil
 }
 
 // generateAutomaticResponse creates an automatic DMCA response
@@ -386,7 +415,7 @@ func (generator *EnhancedLegalDocumentationGenerator) generatePrimaryLegalTheori
 
 // generateExpertWitnessPackage creates expert witness materials
 func (generator *EnhancedLegalDocumentationGenerator) generateExpertWitnessPackage(descriptorCID string, descriptor *descriptors.Descriptor) (*ExpertWitnessPackage, error) {
-	package := &ExpertWitnessPackage{
+	pkg := &ExpertWitnessPackage{
 		ExpertQualifications: &ExpertQualifications{
 			Name: "Dr. NoiseFS Technical Team",
 			Credentials: []string{
@@ -416,7 +445,7 @@ func (generator *EnhancedLegalDocumentationGenerator) generateExpertWitnessPacka
 		ExpertReport: generator.generateExpertReport(descriptorCID, descriptor),
 	}
 	
-	return package, nil
+	return pkg, nil
 }
 
 // generateProposedTestimony creates proposed expert testimony
@@ -512,7 +541,7 @@ func (generator *EnhancedLegalDocumentationGenerator) generateComplianceEvidence
 	evidence := &ComplianceEvidence{
 		ComplianceMetrics: metrics,
 		TakedownHistory: takedownHistory[:min(10, len(takedownHistory))], // Last 10 events
-		AuditTrail: generator.auditSystem.GetComplianceAuditLog(50, 0),
+		AuditTrail: []*AuditLogEntry{}, // TODO: Implement audit log retrieval
 		ComplianceScore: generator.calculateComplianceScore(),
 		LegalCompliance: []string{
 			"DMCA safe harbor compliance maintained",

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 // RelayPool manages a pool of relay nodes for privacy-preserving request distribution
@@ -23,7 +22,7 @@ type RelayPool struct {
 	selector RelaySelector
 	
 	// Health monitoring
-	healthMonitor *HealthMonitor
+	healthMonitor *RelayHealthMonitor
 	
 	// Metrics
 	metrics *PoolMetrics
@@ -85,13 +84,6 @@ type RelaySelector interface {
 	SelectRelays(ctx context.Context, pool *RelayPool, count int) ([]*RelayNode, error)
 }
 
-// HealthMonitor monitors relay health and performance
-type HealthMonitor struct {
-	pool     *RelayPool
-	interval time.Duration
-	ctx      context.Context
-	cancel   context.CancelFunc
-}
 
 // PoolMetrics tracks overall pool statistics
 type PoolMetrics struct {
@@ -125,7 +117,7 @@ func NewRelayPool(config *PoolConfig) *RelayPool {
 	}
 	
 	// Initialize health monitor
-	pool.healthMonitor = NewHealthMonitor(pool, config.HealthCheckInterval)
+	pool.healthMonitor = NewRelayHealthMonitor(pool, config.HealthCheckInterval)
 	
 	return pool
 }

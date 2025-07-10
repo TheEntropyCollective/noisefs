@@ -39,7 +39,15 @@ func NewReuseAwareClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*R
 	}
 
 	// Initialize reuse components
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), ipfsClient.(*ipfs.Client))
+	// Note: We need the actual IPFS client for the pool
+	var actualIPFSClient *ipfs.Client
+	if ipfsClientConcrete, ok := ipfsClient.(*ipfs.Client); ok {
+		actualIPFSClient = ipfsClientConcrete
+	} else {
+		return nil, fmt.Errorf("ipfsClient must be of type *ipfs.Client for reuse functionality")
+	}
+	
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), actualIPFSClient)
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 	mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
 
@@ -106,7 +114,8 @@ func (client *ReuseAwareClient) UploadFile(reader io.Reader, filename string, bl
 	}
 
 	// Step 4: Store descriptor in IPFS
-	descriptorStore, err := descriptors.NewStore(client.baseClient.GetIPFSClient())
+	// Get the IPFS client from the pool (which we know has it)
+	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -145,14 +154,50 @@ func (client *ReuseAwareClient) UploadFile(reader io.Reader, filename string, bl
 
 // DownloadFile downloads a file, preserving reuse tracking
 func (client *ReuseAwareClient) DownloadFile(descriptorCID string) ([]byte, error) {
-	// Use base client for download - no reuse enforcement needed for downloads
-	return client.baseClient.DownloadFile(descriptorCID)
+	// Load descriptor
+	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	descriptor, err := descriptorStore.Load(descriptorCID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load descriptor: %w", err)
+	}
+	
+	// Retrieve all blocks
+	fileData := make([]byte, 0, len(descriptor.Blocks)*128*1024) // Pre-allocate approximate size
+	
+	for _, blockPair := range descriptor.Blocks {
+		// Retrieve data block
+		dataBlock, err := client.baseClient.RetrieveBlockWithCache(blockPair.DataCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve data block %s: %w", blockPair.DataCID, err)
+		}
+		
+		// Retrieve randomizer block (use first randomizer for 2-tuple compatibility)
+		randBlock, err := client.baseClient.RetrieveBlockWithCache(blockPair.RandomizerCID1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer block %s: %w", blockPair.RandomizerCID1, err)
+		}
+		
+		// XOR to reconstruct original
+		originalData := xorData(dataBlock.Data, randBlock.Data)
+		fileData = append(fileData, originalData...)
+	}
+	
+	// Trim to exact file size
+	if descriptor.FileSize > 0 && int64(len(fileData)) > descriptor.FileSize {
+		fileData = fileData[:descriptor.FileSize]
+	}
+	
+	return fileData, nil
 }
 
 // ValidateDescriptor validates that a descriptor meets reuse requirements
 func (client *ReuseAwareClient) ValidateDescriptor(descriptorCID string) (*ValidationResult, error) {
 	// Load descriptor
-	descriptorStore, err := descriptors.NewStore(client.baseClient.GetIPFSClient())
+	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -202,7 +247,7 @@ func (client *ReuseAwareClient) GetLegalDocumentation(descriptorCID string) (*Le
 	}
 
 	// Load descriptor for analysis
-	descriptorStore, err := descriptors.NewStore(client.baseClient.GetIPFSClient())
+	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -547,4 +592,19 @@ func (client *ReuseAwareClient) DisableReuse() {
 // IsReuseEnabled returns whether reuse enforcement is enabled
 func (client *ReuseAwareClient) IsReuseEnabled() bool {
 	return client.enabled
+}
+
+// xorData performs XOR operation on two byte slices
+func xorData(data1, data2 []byte) []byte {
+	minLen := len(data1)
+	if len(data2) < minLen {
+		minLen = len(data2)
+	}
+	
+	result := make([]byte, minLen)
+	for i := 0; i < minLen; i++ {
+		result[i] = data1[i] ^ data2[i]
+	}
+	
+	return result
 }

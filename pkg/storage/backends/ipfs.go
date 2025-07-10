@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -724,3 +723,27 @@ func (ipfs *IPFSBackend) assessNetworkHealth(peers []string) string {
 // Ensure IPFSBackend implements all required interfaces
 var _ storage.Backend = (*IPFSBackend)(nil)
 var _ storage.PeerAwareBackend = (*IPFSBackend)(nil)
+
+// init registers the IPFS backend constructor
+func init() {
+	storage.RegisterBackend(storage.BackendTypeIPFS, func(config *storage.BackendConfig) (storage.Backend, error) {
+		// Get endpoint from connection config
+		endpoint := "localhost:5001" // default
+		if config.Connection != nil && config.Connection.Endpoint != "" {
+			endpoint = config.Connection.Endpoint
+		}
+		
+		// Create IPFS shell
+		sh := shell.NewShell(endpoint)
+		
+		return &IPFSBackend{
+			config:          config,
+			shell:           sh,
+			errorClassifier: storage.NewErrorClassifier("ipfs"),
+			healthStatus: &storage.HealthStatus{
+				Healthy:   true,
+				LastCheck: time.Now(),
+			},
+		}, nil
+	})
+}

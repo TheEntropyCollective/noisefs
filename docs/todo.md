@@ -1,28 +1,31 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 1 - Critical Risk Validation (3-6 months)
+## Current Milestone: Privacy-Enhanced Request Distribution
 
-### Sprint 1: Legal Stress Testing Framework ✅
-- [x] Create legal test case generator for synthetic DMCA scenarios
-- [x] Build court simulation system to test legal arguments
-- [x] Develop precedent analysis engine for relevant case law
-- [x] Generate expert legal review documentation packages
+### Sprint 1: Request Distribution Architecture ✅
+- [x] Design relay pool management system for distributing block requests
+- [x] Implement relay selection algorithm with load balancing
+- [x] Create encrypted communication protocol for relay requests
+- [x] Build connection pooling for efficient relay usage
+- [x] Add relay health monitoring and automatic failover
 
-### Sprint 2: Economic Model Validation ⏳
-- [ ] Build cost analysis framework for storage/bandwidth/operations
-- [ ] Design revenue model options (freemium, enterprise, grants)
-- [ ] Create economic sustainability calculator
-- [ ] Conduct market research and competitive analysis
+### Sprint 2: Cover Traffic Generation ✅
+- [x] Implement popular block identification system
+- [x] Create cover traffic generator with configurable noise ratio
+- [x] Build request mixing to combine real and cover blocks
+- [x] Add bandwidth throttling for cover traffic
+- [x] Implement cover block caching to avoid waste
 
-### Sprint 3: Governance & Compliance Framework ⏳
-- [ ] Design decentralized governance model for policy updates
-- [ ] Create international compliance matrix for major jurisdictions
-- [ ] Develop regulatory engagement strategy
-- [ ] Define crisis response protocols
+### Sprint 3: Privacy Metrics & Testing
+- [ ] Create privacy measurement framework
+- [ ] Build traffic analysis resistance tests
+- [ ] Implement correlation attack simulations
+- [ ] Add performance benchmarks with privacy features
+- [ ] Generate privacy guarantee documentation
 
-### Completed Sprints:
+### Completed Milestones from Phase 1:
+- [x] **Sprint 1: Legal Stress Testing Framework**: Legal defense validation system with test case generation, court simulation, precedent analysis, and expert review documentation
 - [x] **IPFS Redundancy Research**: Built complete storage abstraction layer with multi-backend support
-- [x] **Legal Stress Testing Framework**: Comprehensive legal defense validation system with test case generation, court simulation, precedent analysis, and expert review documentation
 
 ## Completed Major Milestones
 

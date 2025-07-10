@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
 )
 

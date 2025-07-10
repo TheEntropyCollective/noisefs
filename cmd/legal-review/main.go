@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,7 +16,6 @@ func main() {
 	var (
 		outputDir   = flag.String("output", "./legal-review-output", "Output directory for review packages")
 		format      = flag.String("format", "all", "Output format: json, html, markdown, or all")
-		runTests    = flag.Bool("run-tests", true, "Run test case simulations")
 		verbose     = flag.Bool("verbose", false, "Verbose output")
 	)
 	

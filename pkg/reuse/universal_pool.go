@@ -188,7 +188,14 @@ func (pool *UniversalBlockPool) loadPublicDomainBlocks() error {
 	// Get available public domain datasets
 	datasets := bootstrap.GetBuiltinDatasets()
 	
+	// Create a slice of datasets from the map
+	datasetList := make([]*bootstrap.Dataset, 0, len(datasets))
 	for _, dataset := range datasets {
+		datasetList = append(datasetList, dataset)
+	}
+	
+	// Process each dataset
+	for _, dataset := range datasetList {
 		// For now, simulate loading public domain blocks
 		// In full implementation, this would download and process the content
 		if err := pool.simulatePublicDomainBlocks(dataset); err != nil {
@@ -410,6 +417,39 @@ func (pool *UniversalBlockPool) GetPublicDomainBlock(size int) (*PoolBlock, erro
 	poolBlock.PopularityScore = pool.calculatePopularity(poolBlock)
 
 	return poolBlock, nil
+}
+
+// GetPublicDomainBlocks returns multiple public domain blocks
+func (pool *UniversalBlockPool) GetPublicDomainBlocks(count int) ([]*PoolBlock, error) {
+	pool.mutex.RLock()
+	defer pool.mutex.RUnlock()
+
+	publicBlocks := make([]*PoolBlock, 0)
+	for cid, isPublic := range pool.publicDomainCIDs {
+		if isPublic {
+			if block, exists := pool.blocks[cid]; exists {
+				publicBlocks = append(publicBlocks, block)
+			}
+		}
+	}
+
+	if len(publicBlocks) == 0 {
+		return nil, fmt.Errorf("no public domain blocks available")
+	}
+
+	// If we need more blocks than available, return all
+	if count >= len(publicBlocks) {
+		return publicBlocks, nil
+	}
+
+	// Randomly select the requested number of blocks
+	selected := make([]*PoolBlock, count)
+	perm := rand.Perm(len(publicBlocks))
+	for i := 0; i < count; i++ {
+		selected[i] = publicBlocks[perm[i]]
+	}
+
+	return selected, nil
 }
 
 // calculatePopularity calculates a block's popularity score

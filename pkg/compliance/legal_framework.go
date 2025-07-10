@@ -88,6 +88,14 @@ type ComplianceProcedures struct {
 
 // Detailed policy structures
 
+type RecordKeeping struct {
+	RecordTypes      []string          `json:"record_types"`
+	RetentionPeriod  string            `json:"retention_period"`
+	AccessControls   []string          `json:"access_controls"`
+	AuditTrail       bool              `json:"audit_trail"`
+	Compliance       map[string]string `json:"compliance"`
+}
+
 type DataCollectionPolicy struct {
 	MinimalCollection     bool     `json:"minimal_collection"`
 	CollectedData         []string `json:"collected_data"`

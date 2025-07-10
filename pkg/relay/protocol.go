@@ -311,11 +311,9 @@ func (rp *RelayProtocol) GetPublicKey() *[32]byte {
 
 // CleanupNonces removes old nonces to prevent memory leaks
 func (rp *RelayProtocol) CleanupNonces() {
-	cutoff := time.Now().Add(-10 * time.Minute)
-	
-	for id, _ := range rp.nonces {
-		// In a real implementation, you'd store the timestamp with the nonce
-		// For now, we'll just clean up randomly
+	// In a real implementation, you'd store the timestamp with the nonce
+	// For now, we'll just clean up based on size
+	for id := range rp.nonces {
 		if len(rp.nonces) > 1000 {
 			delete(rp.nonces, id)
 		}

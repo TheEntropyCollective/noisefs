@@ -400,7 +400,7 @@ func (rm *RequestMixer) executeRequest(mixed *MixedRequest) *MixedRequestResult 
 	blockIDs := []string{mixed.BlockID}
 	
 	// Submit to distributor
-	distributedReq, err := rm.distributor.DistributeRequest(rm.ctx, mixed.ID, blockIDs)
+	_, err := rm.distributor.DistributeRequest(rm.ctx, mixed.ID, blockIDs)
 	if err != nil {
 		mixed.Status = MixedStatusFailed
 		return &MixedRequestResult{

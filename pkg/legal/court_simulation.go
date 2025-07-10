@@ -58,7 +58,7 @@ func (cs *CourtSimulator) SimulateCase(testCase *TestCase) (*SimulationResult, e
 	cs.simulateTrialPhase(testCase, jurisdiction, result)
 	
 	// Phase 4: Verdict prediction
-	cs.predictVerdict(testCase, result)
+	cs.simulateVerdictPhase(testCase, jurisdiction, result)
 	
 	// Phase 5: Appeals analysis
 	cs.simulateAppealsPhase(testCase, jurisdiction, result)
@@ -99,6 +99,7 @@ type SimulationResult struct {
 	
 	// Risk assessment
 	RiskAssessment  *RiskAssessment        `json:"risk_assessment"`
+	RiskScore       float64                `json:"risk_score"`
 	
 	// Recommendations
 	Recommendations []string               `json:"recommendations"`
@@ -148,6 +149,7 @@ type StageOutcome struct {
 // FinalOutcome represents the final predicted outcome
 type FinalOutcome struct {
 	Result           string    `json:"result"`
+	Success          bool      `json:"success"` // True if defendant wins
 	Confidence       float64   `json:"confidence"`
 	EstimatedDamages float64   `json:"estimated_damages,omitempty"`
 	EstimatedCost    float64   `json:"estimated_cost"`
@@ -362,6 +364,52 @@ func (cs *CourtSimulator) simulateTrialPhase(testCase *TestCase, jurisdiction *J
 	
 	// Predict trial outcome
 	result.TrialOutcome = cs.predictTrialOutcome(testCase, result, jurisdiction)
+}
+
+func (cs *CourtSimulator) simulateVerdictPhase(testCase *TestCase, jurisdiction *JurisdictionRules, result *SimulationResult) {
+	// Calculate verdict based on trial arguments
+	defenseScore := 0.0
+	plaintiffScore := 0.0
+	
+	for _, arg := range result.Arguments {
+		if arg.Side == "defendant" {
+			defenseScore += arg.Strength
+		} else {
+			plaintiffScore += arg.Strength
+		}
+	}
+	
+	// Normalize scores
+	totalScore := defenseScore + plaintiffScore
+	if totalScore > 0 {
+		defenseScore /= totalScore
+		plaintiffScore /= totalScore
+	}
+	
+	// Apply jurisdiction bias
+	defenseScore *= (1.0 + jurisdiction.TechSavviness * 0.2)
+	plaintiffScore *= (1.0 + jurisdiction.CopyrightStrength * 0.2)
+	
+	// Create verdict outcome
+	outcome := &StageOutcome{
+		Stage:        "verdict",
+		Confidence:   math.Max(defenseScore, plaintiffScore),
+		Alternatives: make(map[string]float64),
+	}
+	
+	if defenseScore > plaintiffScore {
+		outcome.PredictedResult = "defendant_wins"
+	} else {
+		outcome.PredictedResult = "plaintiff_wins"
+	}
+	
+	outcome.Alternatives["defendant_wins"] = defenseScore
+	outcome.Alternatives["plaintiff_wins"] = plaintiffScore
+	
+	result.TrialOutcome = outcome
+	
+	// Calculate risk score
+	result.RiskScore = plaintiffScore * 0.8 + (1.0 - outcome.Confidence) * 0.2
 }
 
 func (cs *CourtSimulator) simulateAppealsPhase(testCase *TestCase, jurisdiction *JurisdictionRules, result *SimulationResult) {
@@ -716,6 +764,7 @@ func (cs *CourtSimulator) calculateFinalOutcome(result *SimulationResult) {
 	
 	result.FinalOutcome = &FinalOutcome{
 		Result:     relevantOutcome.PredictedResult,
+		Success:    relevantOutcome.PredictedResult == "defendant_wins" || relevantOutcome.PredictedResult == "case_dismissed",
 		Confidence: relevantOutcome.Confidence,
 	}
 	
@@ -756,7 +805,6 @@ func (cs *CourtSimulator) calculateFinalOutcome(result *SimulationResult) {
 
 func (cs *CourtSimulator) calculateSettlementRange(result *SimulationResult) *SettlementRange {
 	// Base settlement on trial outcome probabilities
-	defenseWinProb := result.TrialOutcome.Alternatives["defendant_wins"]
 	plaintiffWinProb := result.TrialOutcome.Alternatives["plaintiff_wins"]
 	
 	// Expected value calculation

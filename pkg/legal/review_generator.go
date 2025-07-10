@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -246,7 +244,7 @@ type PrecedentReport struct {
 
 // RiskReport assesses legal risks
 type RiskReport struct {
-	RiskMatrix       map[string]*RiskAssessment    `json:"risk_matrix"`
+	RiskMatrix       map[string]*RiskItem          `json:"risk_matrix"`
 	MitigationPlan   map[string][]string           `json:"mitigation_plan"`
 	WorstCase        *ScenarioAnalysis             `json:"worst_case"`
 	BestCase         *ScenarioAnalysis             `json:"best_case"`
@@ -302,7 +300,7 @@ type PrecedentSummary struct {
 	Application string `json:"application"`
 }
 
-type RiskAssessment struct {
+type RiskItem struct {
 	Description string  `json:"description"`
 	Likelihood  float64 `json:"likelihood"`
 	Impact      float64 `json:"impact"`
@@ -329,15 +327,18 @@ func (rg *ReviewGenerator) runTestCaseAnalysis() ([]*TestCaseReport, error) {
 	
 	// Generate diverse test cases
 	scenarios := []string{
-		"valid_dmca_movie",
-		"invalid_dmca_troll", 
-		"edge_case_mixed_content",
-		"international_claim",
-		"repeat_infringer",
+		"dmca",
+		"dmca", 
+		"privacy",
+		"regulatory",
+		"criminal",
 	}
 	
 	for _, scenario := range scenarios {
-		testCase := rg.caseGenerator.GenerateScenario(scenario)
+		testCase, err := rg.caseGenerator.GenerateTestCase(scenario)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate test case %s: %w", scenario, err)
+		}
 		
 		// Run court simulation
 		result, err := rg.courtSimulator.SimulateCase(testCase)
@@ -588,7 +589,7 @@ func (rg *ReviewGenerator) suggestMitigations(testCase *TestCase, result *Simula
 // Assess overall risks
 func (rg *ReviewGenerator) assessRisks() *RiskReport {
 	return &RiskReport{
-		RiskMatrix: map[string]*RiskAssessment{
+		RiskMatrix: map[string]*RiskItem{
 			"major_studio_lawsuit": {
 				Description: "Major content owner files comprehensive lawsuit",
 				Likelihood:  0.3,

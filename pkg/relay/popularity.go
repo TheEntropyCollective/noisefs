@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/noisefs/noisefs/pkg/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 )
 
 // PopularBlockTracker tracks and identifies popular blocks for cover traffic
@@ -282,9 +282,6 @@ func (pbt *PopularBlockTracker) refreshLoop() {
 
 // refreshFromCache updates popularity data from the cache system
 func (pbt *PopularBlockTracker) refreshFromCache() {
-	// Get cache statistics
-	stats := pbt.cache.GetStats()
-	
 	pbt.mu.Lock()
 	defer pbt.mu.Unlock()
 	
@@ -298,25 +295,24 @@ func (pbt *PopularBlockTracker) refreshFromCache() {
 	categoryCount := make(map[BlockCategory]int64)
 	
 	// Get popular blocks from cache
-	if randomizers := pbt.cache.GetRandomizers(pbt.config.MaxPopularBlocks); randomizers != nil {
-		for i, cid := range randomizers {
+	randomizers, err := pbt.cache.GetRandomizers(pbt.config.MaxPopularBlocks)
+	if err == nil && randomizers != nil {
+		for i, blockInfo := range randomizers {
 			// Get or create popularity info
-			info, exists := pbt.popularBlocks[cid]
+			info, exists := pbt.popularBlocks[blockInfo.CID]
 			if !exists {
 				info = &PopularityInfo{
-					BlockID:     cid,
-					Category:    pbt.inferCategory(cid),
+					BlockID:     blockInfo.CID,
+					Category:    pbt.inferCategory(blockInfo.CID),
 					PeerReports: make(map[string]int64),
 					FirstSeen:   time.Now(),
 				}
-				pbt.popularBlocks[cid] = info
+				pbt.popularBlocks[blockInfo.CID] = info
 			}
 			
-			// Update from cache stats if available
-			if stats != nil {
-				if count, exists := stats.PopularBlocks[cid]; exists {
-					info.AccessCount = count
-				}
+			// Update from cache block info
+			if blockInfo.Popularity > 0 {
+				info.AccessCount = int64(blockInfo.Popularity)
 			}
 			
 			// Update popularity score

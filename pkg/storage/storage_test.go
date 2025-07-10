@@ -338,83 +338,12 @@ func TestBackendBatchOperations(t *testing.T) {
 }
 
 func TestStorageManager(t *testing.T) {
-	// Create test configuration
-	config := &Config{
-		DefaultBackend: "mock1",
-		Backends: map[string]*BackendConfig{
-			"mock1": {
-				Type:    "mock",
-				Enabled: true,
-				Priority: 100,
-				Connection: &ConnectionConfig{
-					Endpoint: "mock://mock1",
-				},
-				Retry: &RetryConfig{
-					MaxAttempts: 3,
-					BaseDelay:   100 * time.Millisecond,
-					MaxDelay:    1 * time.Second,
-					Multiplier:  2.0,
-				},
-				Timeouts: &TimeoutConfig{
-					Connect:   5 * time.Second,
-					Operation: 30 * time.Second,
-				},
-			},
-			"mock2": {
-				Type:    "mock",
-				Enabled: true,
-				Priority: 90,
-				Connection: &ConnectionConfig{
-					Endpoint: "mock://mock2",
-				},
-				Retry: &RetryConfig{
-					MaxAttempts: 3,
-					BaseDelay:   100 * time.Millisecond,
-					MaxDelay:    1 * time.Second,
-					Multiplier:  2.0,
-				},
-				Timeouts: &TimeoutConfig{
-					Connect:   5 * time.Second,
-					Operation: 30 * time.Second,
-				},
-			},
-		},
-		Distribution: &DistributionConfig{
-			Strategy: "single",
-			Selection: &SelectionConfig{
-				RequiredCapabilities: []string{CapabilityContentAddress},
-			},
-			LoadBalancing: &LoadBalancingConfig{
-				Algorithm:      "performance",
-				RequireHealthy: true,
-			},
-		},
-		HealthCheck: &HealthCheckConfig{
-			Enabled:  false, // Disable for testing
-			Interval: 30 * time.Second,
-			Timeout:  10 * time.Second,
-		},
-		Performance: &PerformanceConfig{
-			MaxConcurrentOperations: 10,
-			MaxConcurrentPerBackend: 5,
-		},
-	}
-	
-	// Create manager with mock factory
-	manager, err := NewManager(config)
-	if err != nil {
-		t.Fatalf("Failed to create manager: %v", err)
-	}
-	
-	// Override factory to create mock backends
-	manager.factory = &MockBackendFactory{backends: map[string]*MockBackend{
-		"mock1": NewMockBackend("mock1"),
-		"mock2": NewMockBackend("mock2"),
-	}}
+	// Create manager with mock backends
+	manager := createMockManager(t)
 	
 	// Start manager
 	ctx := context.Background()
-	err = manager.Start(ctx)
+	err := manager.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed to start manager: %v", err)
 	}
@@ -452,8 +381,6 @@ func TestStorageManager(t *testing.T) {
 }
 
 func TestErrorHandling(t *testing.T) {
-	ctx := context.Background()
-	
 	// Test error classification
 	classifier := NewErrorClassifier("test")
 	
@@ -598,25 +525,86 @@ func TestHealthMonitoring(t *testing.T) {
 	}
 }
 
-// MockBackendFactory for testing
-type MockBackendFactory struct {
-	backends map[string]*MockBackend
-}
-
-func (f *MockBackendFactory) CreateBackend(name string) (Backend, error) {
-	backend, exists := f.backends[name]
-	if !exists {
-		return nil, fmt.Errorf("mock backend %s not found", name)
+// MockBackendFactory for testing - create a wrapper around the real factory
+func createMockManager(t *testing.T) *Manager {
+	// Create test configuration
+	config := &Config{
+		DefaultBackend: "mock1",
+		Backends: map[string]*BackendConfig{
+			"mock1": {
+				Type:    "mock",
+				Enabled: true,
+				Priority: 100,
+				Connection: &ConnectionConfig{
+					Endpoint: "mock://mock1",
+				},
+				Retry: &RetryConfig{
+					MaxAttempts: 3,
+					BaseDelay:   100 * time.Millisecond,
+					MaxDelay:    1 * time.Second,
+					Multiplier:  2.0,
+				},
+				Timeouts: &TimeoutConfig{
+					Connect:   5 * time.Second,
+					Operation: 30 * time.Second,
+				},
+			},
+			"mock2": {
+				Type:    "mock",
+				Enabled: true,
+				Priority: 90,
+				Connection: &ConnectionConfig{
+					Endpoint: "mock://mock2",
+				},
+				Retry: &RetryConfig{
+					MaxAttempts: 3,
+					BaseDelay:   100 * time.Millisecond,
+					MaxDelay:    1 * time.Second,
+					Multiplier:  2.0,
+				},
+				Timeouts: &TimeoutConfig{
+					Connect:   5 * time.Second,
+					Operation: 30 * time.Second,
+				},
+			},
+		},
+		Distribution: &DistributionConfig{
+			Strategy: "single",
+			Selection: &SelectionConfig{
+				RequiredCapabilities: []string{CapabilityContentAddress},
+			},
+			LoadBalancing: &LoadBalancingConfig{
+				Algorithm:      "performance",
+				RequireHealthy: true,
+			},
+		},
+		HealthCheck: &HealthCheckConfig{
+			Enabled:  false, // Disable for testing
+			Interval: 30 * time.Second,
+			Timeout:  10 * time.Second,
+		},
+		Performance: &PerformanceConfig{
+			MaxConcurrentOperations: 10,
+			MaxConcurrentPerBackend: 5,
+		},
 	}
-	return backend, nil
-}
-
-func (f *MockBackendFactory) CreateAllBackends() (map[string]Backend, error) {
-	result := make(map[string]Backend)
-	for name, backend := range f.backends {
-		result[name] = backend
+	
+	// Register mock backend constructor
+	RegisterBackend("mock", func(config *BackendConfig) (Backend, error) {
+		// Extract name from endpoint
+		name := "mock1"
+		if config.Connection.Endpoint == "mock://mock2" {
+			name = "mock2"
+		}
+		return NewMockBackend(name), nil
+	})
+	
+	manager, err := NewManager(config)
+	if err != nil {
+		t.Fatalf("Failed to create manager: %v", err)
 	}
-	return result, nil
+	
+	return manager
 }
 
 // Benchmark tests
@@ -656,13 +644,16 @@ func BenchmarkBackendGet(b *testing.B) {
 }
 
 func BenchmarkManagerOperations(b *testing.B) {
+	// Create simple mock manager for benchmarking
 	config := DefaultConfig()
 	config.HealthCheck.Enabled = false
 	
+	// Use mock backend
+	RegisterBackend("ipfs", func(config *BackendConfig) (Backend, error) {
+		return NewMockBackend("ipfs"), nil
+	})
+	
 	manager, _ := NewManager(config)
-	manager.factory = &MockBackendFactory{backends: map[string]*MockBackend{
-		"ipfs": NewMockBackend("ipfs"),
-	}}
 	
 	ctx := context.Background()
 	manager.Start(ctx)

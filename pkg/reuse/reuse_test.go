@@ -2,14 +2,14 @@ package reuse
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // MockIPFSClient for testing
@@ -32,9 +32,19 @@ func (m *MockIPFSClient) StoreBlock(block *blocks.Block) (string, error) {
 func (m *MockIPFSClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	data, exists := m.blocks[cid]
 	if !exists {
-		return nil, ipfs.ErrBlockNotFound
+		return nil, errors.New("block not found")
 	}
 	return blocks.NewBlock(data)
+}
+
+func (m *MockIPFSClient) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+	// Mock implementation - just call regular RetrieveBlock
+	return m.RetrieveBlock(cid)
+}
+
+func (m *MockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
+	// Mock implementation - just call regular StoreBlock
+	return m.StoreBlock(block)
 }
 
 func (m *MockIPFSClient) Add(reader interface{}) (string, error) {
@@ -50,7 +60,7 @@ func (m *MockIPFSClient) Cat(cid string) (interface{}, error) {
 // Test Universal Block Pool
 func TestUniversalBlockPool(t *testing.T) {
 	t.Run("Initialization", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		
 		if pool.IsInitialized() {
 			t.Error("Pool should not be initialized before calling Initialize()")
@@ -67,7 +77,7 @@ func TestUniversalBlockPool(t *testing.T) {
 	})
 
 	t.Run("Genesis Block Generation", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		err := pool.Initialize()
 		if err != nil {
 			t.Fatalf("Failed to initialize pool: %v", err)
@@ -87,7 +97,7 @@ func TestUniversalBlockPool(t *testing.T) {
 	})
 
 	t.Run("Public Domain Block Retrieval", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		err := pool.Initialize()
 		if err != nil {
 			t.Fatalf("Failed to initialize pool: %v", err)
@@ -108,7 +118,7 @@ func TestUniversalBlockPool(t *testing.T) {
 	})
 
 	t.Run("Pool Statistics", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		err := pool.Initialize()
 		if err != nil {
 			t.Fatalf("Failed to initialize pool: %v", err)
@@ -135,7 +145,7 @@ func TestUniversalBlockPool(t *testing.T) {
 // Test Block Reuse Enforcer
 func TestReuseEnforcer(t *testing.T) {
 	setupEnforcer := func() (*ReuseEnforcer, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		pool.Initialize()
 		enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 		return enforcer, pool
@@ -251,7 +261,7 @@ func TestReuseEnforcer(t *testing.T) {
 // Test Public Domain Mixer
 func TestPublicDomainMixer(t *testing.T) {
 	setupMixer := func() (*PublicDomainMixer, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		pool.Initialize()
 		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
 		return mixer, pool
@@ -433,7 +443,7 @@ func TestReuseAwareClient(t *testing.T) {
 // Test Legal Proof System
 func TestLegalProofSystem(t *testing.T) {
 	setupLegalSystem := func() (*LegalProofSystem, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		pool.Initialize()
 		enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
@@ -615,7 +625,7 @@ func TestReuseSystemIntegration(t *testing.T) {
 	})
 
 	t.Run("Pool Statistics Integration", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		err := pool.Initialize()
 		if err != nil {
 			t.Fatalf("Failed to initialize pool: %v", err)
@@ -644,13 +654,13 @@ func TestReuseSystemIntegration(t *testing.T) {
 // Benchmark tests
 func BenchmarkPoolInitialization(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		pool.Initialize()
 	}
 }
 
 func BenchmarkBlockRetrieval(b *testing.B) {
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 	pool.Initialize()
 
 	b.ResetTimer()
@@ -663,7 +673,7 @@ func BenchmarkBlockRetrieval(b *testing.B) {
 }
 
 func BenchmarkValidation(b *testing.B) {
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), NewMockIPFSClient())
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 	pool.Initialize()
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 

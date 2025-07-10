@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
 )
 
 // LegacyIPFSAdapter provides backward compatibility for old IPFS client interface
@@ -163,18 +162,8 @@ func (factory *BackendFactory) CreateBackend(backendName string) (Backend, error
 		return nil, fmt.Errorf("backend '%s' is disabled", backendName)
 	}
 	
-	switch backendConfig.Type {
-	case BackendTypeIPFS:
-		return backends.NewIPFSBackend(backendConfig)
-	case BackendTypeLocal:
-		// TODO: Implement local backend
-		return nil, fmt.Errorf("local backend not yet implemented")
-	case BackendTypeS3:
-		// TODO: Implement S3 backend
-		return nil, fmt.Errorf("S3 backend not yet implemented")
-	default:
-		return nil, fmt.Errorf("unsupported backend type: %s", backendConfig.Type)
-	}
+	// Use the registry to create the backend
+	return CreateBackend(backendConfig)
 }
 
 // CreateAllBackends creates all enabled backends
