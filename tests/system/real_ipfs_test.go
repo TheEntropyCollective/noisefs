@@ -1,3 +1,4 @@
+//go:build real_ipfs
 // +build real_ipfs
 
 package system
@@ -12,11 +13,11 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 )
 
 // RealIPFSTestSuite provides real IPFS network testing
@@ -47,13 +48,13 @@ type NetworkMetrics struct {
 }
 
 type NodeMetric struct {
-	NodeURL               string
-	OperationsHandled     int64
-	AverageResponseTime   time.Duration
-	ErrorRate             float64
-	ConnectedPeers        int
-	BlocksStored          int64
-	BlocksRetrieved       int64
+	NodeURL             string
+	OperationsHandled   int64
+	AverageResponseTime time.Duration
+	ErrorRate           float64
+	ConnectedPeers      int
+	BlocksStored        int64
+	BlocksRetrieved     int64
 }
 
 // TestRealIPFSNetworkInitialization tests that the multi-node IPFS network starts correctly
@@ -116,13 +117,13 @@ func TestMultiNodeBlockDistribution(t *testing.T) {
 	for i, block := range testBlocks {
 		nodeIndex := i % len(suite.ipfsNodes)
 		client := suite.ipfsNodes[nodeIndex]
-		
+
 		cid, err := client.StoreBlock(block)
 		if err != nil {
 			t.Fatalf("Failed to store block %d on node %d: %v", i, nodeIndex, err)
 		}
 		storedCIDs[i] = cid
-		
+
 		t.Logf("Stored block %d (CID: %s) on node %d", i, cid[:8], nodeIndex+1)
 	}
 
@@ -178,7 +179,7 @@ func TestNoiseFS_RealIPFS_E2E_Workflow(t *testing.T) {
 		t.Run(fmt.Sprintf("E2E_%s", testFile.Name), func(t *testing.T) {
 			// Use the first NoiseFS client for upload
 			uploadClient := suite.noisefsClients[0]
-			
+
 			// Upload file
 			reader := bytes.NewReader(testFile.Content)
 			descriptorCID, err := uploadClient.Upload(reader, testFile.Name)
@@ -223,7 +224,7 @@ func TestReuseSystemWithRealIPFS(t *testing.T) {
 
 	// Test reuse system functionality
 	testContent := []byte("Test content for reuse system validation with real IPFS network")
-	
+
 	reuseClient := suite.reuseClients[0]
 	reader := bytes.NewReader(testContent)
 
@@ -232,7 +233,7 @@ func TestReuseSystemWithRealIPFS(t *testing.T) {
 	if err != nil {
 		// This might fail due to insufficient reuse, which is expected
 		t.Logf("Upload rejected due to reuse enforcement: %v", err)
-		
+
 		// Verify that the rejection was due to reuse requirements
 		if result != nil && result.ValidationResult != nil && !result.ValidationResult.Valid {
 			t.Logf("Validation failed as expected: %v", result.ValidationResult.Violations)
@@ -241,7 +242,7 @@ func TestReuseSystemWithRealIPFS(t *testing.T) {
 	}
 
 	t.Logf("Upload succeeded with descriptor CID: %s", result.DescriptorCID)
-	
+
 	// Verify reuse statistics
 	stats := reuseClient.GetReuseStatistics()
 	t.Logf("Reuse statistics: %+v", stats)
@@ -269,11 +270,11 @@ func TestNetworkPerformanceMetrics(t *testing.T) {
 
 	// Initialize node metrics
 	nodeURLs := []string{
-		"http://localhost:5001",
-		"http://localhost:5002", 
-		"http://localhost:5003",
-		"http://localhost:5004",
-		"http://localhost:5005",
+		"http://127.0.0.1:5001",
+		"http://127.0.0.1:5002",
+		"http://127.0.0.1:5003",
+		"http://127.0.0.1:5004",
+		"http://127.0.0.1:5005",
 	}
 
 	for _, url := range nodeURLs {
@@ -323,7 +324,7 @@ func TestNetworkPerformanceMetrics(t *testing.T) {
 		// Update metrics
 		metrics.SuccessfulOperations++
 		metrics.TotalBytesTransferred += int64(len(content))
-		
+
 		nodeMetric := metrics.NodeMetrics[nodeURL]
 		nodeMetric.OperationsHandled++
 		nodeMetric.AverageResponseTime = (nodeMetric.AverageResponseTime + storeDuration + retrieveDuration) / 2
@@ -368,11 +369,11 @@ func TestNetworkPerformanceMetrics(t *testing.T) {
 func setupRealIPFSTest(t *testing.T) *RealIPFSTestSuite {
 	// Check if IPFS nodes are available
 	nodeURLs := []string{
-		"http://localhost:5001",
-		"http://localhost:5002",
-		"http://localhost:5003", 
-		"http://localhost:5004",
-		"http://localhost:5005",
+		"http://127.0.0.1:5001",
+		"http://127.0.0.1:5002",
+		"http://127.0.0.1:5003",
+		"http://127.0.0.1:5004",
+		"http://127.0.0.1:5005",
 	}
 
 	// Verify IPFS nodes are running
@@ -494,7 +495,7 @@ func TestRealIPFSNetworkStability(t *testing.T) {
 			// Verify retrieval from a different node
 			retrieveNodeIndex := (i + 1) % len(suite.ipfsNodes)
 			retrieveClient := suite.ipfsNodes[retrieveNodeIndex]
-			
+
 			_, err = retrieveClient.RetrieveBlock(cid)
 			if err != nil {
 				t.Errorf("Failed to retrieve block at operation %d from node %d: %v", operationCount, retrieveNodeIndex, err)

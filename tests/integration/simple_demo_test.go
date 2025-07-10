@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // TestSimpleUploadDownload demonstrates the core NoiseFS flow
@@ -23,7 +23,7 @@ func TestSimpleUploadDownload(t *testing.T) {
 
 	// Configuration
 	cfg := config.DefaultConfig()
-	cfg.IPFS.APIEndpoint = "http://localhost:5001"
+	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
 
 	// Initialize IPFS client
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
@@ -196,7 +196,7 @@ func TestBlockAnonymization(t *testing.T) {
 		// Generate two randomizers
 		randomizer1 := make([]byte, len(dataBlock.Data))
 		randomizer2 := make([]byte, len(dataBlock.Data))
-		
+
 		// Fill with random data
 		for j := range randomizer1 {
 			randomizer1[j] = byte(j % 256)

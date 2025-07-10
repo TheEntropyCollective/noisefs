@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 )
 
 // TestEndToEndFlow demonstrates the complete upload/download cycle
@@ -27,8 +27,8 @@ func TestEndToEndFlow(t *testing.T) {
 
 	// Create test configuration
 	cfg := config.DefaultConfig()
-	cfg.IPFS.APIEndpoint = "http://localhost:5001"
-	
+	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
+
 	// Initialize components
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestEndToEndFlow(t *testing.T) {
 
 		// Note: In the OFFSystem, individual blocks are anonymized by design
 		// The descriptor CID is sufficient for download verification
-		
+
 		// Download file
 		downloadedData, err := noisefsClient.Download(descriptorCID)
 		if err != nil {
@@ -79,7 +79,7 @@ func TestEndToEndFlow(t *testing.T) {
 	t.Run("Block Anonymization Verification", func(t *testing.T) {
 		// Create known test data
 		knownData := bytes.Repeat([]byte("AAAA"), 1024) // Predictable pattern
-		
+
 		// Upload file
 		reader := bytes.NewReader(knownData)
 		descriptorCID, err := noisefsClient.Upload(reader, "pattern.txt")
@@ -90,7 +90,7 @@ func TestEndToEndFlow(t *testing.T) {
 		// Note: The OFFSystem automatically anonymizes blocks through XOR operations
 		// Individual blocks cannot be directly accessed as they appear random
 		// This provides the core plausible deniability guarantee
-		
+
 		t.Logf("✓ Upload successful with descriptor CID: %s", descriptorCID)
 		t.Log("✓ All blocks are anonymized by design in the OFFSystem")
 	})
@@ -118,7 +118,7 @@ func TestEndToEndFlow(t *testing.T) {
 			if result1.ReuseProof != nil && result2.ReuseProof != nil {
 				t.Logf("File 1 reuse result: %+v", result1.ReuseProof)
 				t.Logf("File 2 reuse result: %+v", result2.ReuseProof)
-				
+
 				// Note: Reuse system provides storage efficiency through block mixing
 				t.Log("✓ Block reuse system operational - storage efficiency achieved")
 			}
@@ -155,7 +155,7 @@ func TestEndToEndFlow(t *testing.T) {
 		downloadTime := time.Since(start)
 
 		t.Logf("Large file downloaded in %v. Total bytes: %d", downloadTime, len(downloadedData))
-		
+
 		if len(downloadedData) != len(largeData) {
 			t.Errorf("Downloaded size mismatch: got %d, expected %d", len(downloadedData), len(largeData))
 		}
@@ -190,12 +190,12 @@ func TestEndToEndFlow(t *testing.T) {
 		// Store descriptor (simplified since store methods may not be available)
 		ctx := context.Background()
 		_ = ctx // Use ctx to avoid unused warning
-		
+
 		// Test that we can create and work with descriptors
 		if descriptor == nil {
 			t.Error("Descriptor should not be nil")
 		}
-		
+
 		t.Logf("Descriptor created successfully for file with CID: %s", descriptorCID)
 
 		t.Log("✓ Descriptor storage and retrieval verified")
@@ -204,15 +204,15 @@ func TestEndToEndFlow(t *testing.T) {
 
 // Helper function to check if IPFS is available
 func isIPFSAvailable() bool {
-	client, err := ipfs.NewClient("http://localhost:5001")
+	client, err := ipfs.NewClient("http://127.0.0.1:5001")
 	if err != nil {
 		return false
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = ctx // Use ctx to avoid unused warning
-	
+
 	// Test basic IPFS connection instead of ID method
 	_, err = client.StoreBlock(&blocks.Block{Data: []byte("test"), ID: "test"})
 	return err == nil
@@ -278,7 +278,7 @@ func TestBlockSplittingAndXOR(t *testing.T) {
 			t.Fatalf("Failed to XOR blocks: %v", err)
 		}
 		xoredBlocks = append(xoredBlocks, *xored)
-		
+
 		// Verify XOR property: data XOR randomizer XOR randomizer = data
 		recovered, err := xored.XOR(&randomizerBlocks[i])
 		if err != nil {
@@ -317,7 +317,7 @@ func BenchmarkUploadDownload(b *testing.B) {
 	}
 
 	// Setup
-	ipfsClient, _ := ipfs.NewClient("http://localhost:5001")
+	ipfsClient, _ := ipfs.NewClient("http://127.0.0.1:5001")
 	blockCache := cache.NewMemoryCache(100)
 	noisefsClient, _ := noisefs.NewClient(ipfsClient, blockCache)
 

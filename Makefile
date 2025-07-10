@@ -27,7 +27,10 @@ LDFLAGS += -X 'main.BuildDate=$(BUILD_DATE)'
 BUILD_TAGS ?=
 
 # Binaries to build
-BINARIES := noisefs noisefs-mount noisefs-benchmark noisefs-config webui
+BINARIES := noisefs noisefs-mount noisefs-config noisefs-security webui legal-review simulation demo
+
+# Sub-tools under noisefs-tools (built separately)
+TOOLS := noisefs-bootstrap inspect-index benchmark docker-benchmark enterprise-benchmark impact-demo
 
 # Docker configuration
 DOCKER_IMAGE := $(PROJECT_NAME)
@@ -40,7 +43,7 @@ YELLOW := \033[1;33m
 BLUE := \033[0;34m
 NC := \033[0m # No Color
 
-.PHONY: help build clean test bench lint fmt vet deps docker docker-build docker-push install dist dev check all
+.PHONY: help build build-all tools clean test bench lint fmt vet deps docker docker-build docker-push install dist dev check all demo demo-reuse impact-demo benchmark simulation
 
 # Default target
 all: clean build test
@@ -51,6 +54,8 @@ help:
 	@echo ""
 	@echo "$(YELLOW)Available targets:$(NC)"
 	@echo "  $(GREEN)build$(NC)         Build all binaries"
+	@echo "  $(GREEN)tools$(NC)         Build all sub-tools"
+	@echo "  $(GREEN)build-all$(NC)     Build binaries and tools"
 	@echo "  $(GREEN)clean$(NC)         Clean build artifacts"
 	@echo ""
 	@echo "$(YELLOW)Testing:$(NC)"
@@ -69,7 +74,9 @@ help:
 	@echo "  $(GREEN)ipfs-status$(NC)   Show IPFS network status"
 	@echo ""
 	@echo "$(YELLOW)Demos & Simulations:$(NC)"
-	@echo "  $(GREEN)demo$(NC)          Run NoiseFS impact demo"
+	@echo "  $(GREEN)demo$(NC)          Run NoiseFS core functionality demo"
+	@echo "  $(GREEN)demo-reuse$(NC)    Run NoiseFS block reuse demo"
+	@echo "  $(GREEN)impact-demo$(NC)   Run NoiseFS impact analysis demo"
 	@echo "  $(GREEN)benchmark$(NC)     Run NoiseFS benchmarks"
 	@echo "  $(GREEN)simulation$(NC)    Run medium-scale simulation"
 	@echo "  $(GREEN)simulation-large$(NC) Run large-scale simulation"
@@ -100,6 +107,14 @@ help:
 build: $(BUILD_DIR) $(addprefix $(BUILD_DIR)/,$(BINARIES))
 	@echo "$(GREEN)✓ Build completed$(NC)"
 
+# Build all tools (binaries + sub-tools)
+build-all: build tools
+	@echo "$(GREEN)✓ All binaries and tools built$(NC)"
+
+# Build sub-tools
+tools: $(BUILD_DIR) $(addprefix $(BUILD_DIR)/,$(TOOLS))
+	@echo "$(GREEN)✓ Tools completed$(NC)"
+
 # Build individual binaries
 $(BUILD_DIR)/%: cmd/%
 	@echo "$(BLUE)Building $*...$(NC)"
@@ -108,6 +123,55 @@ $(BUILD_DIR)/%: cmd/%
 		-ldflags "$(LDFLAGS)" \
 		-o $@ \
 		./cmd/$*
+
+# Build sub-tools under noisefs-tools
+$(BUILD_DIR)/noisefs-bootstrap:
+	@echo "$(BLUE)Building noisefs-bootstrap...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/bootstrap/noisefs-bootstrap
+
+$(BUILD_DIR)/inspect-index:
+	@echo "$(BLUE)Building inspect-index...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/inspect/inspect-index
+
+$(BUILD_DIR)/benchmark:
+	@echo "$(BLUE)Building benchmark...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/benchmark/benchmark
+
+$(BUILD_DIR)/docker-benchmark:
+	@echo "$(BLUE)Building docker-benchmark...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/benchmark/docker-benchmark
+
+$(BUILD_DIR)/enterprise-benchmark:
+	@echo "$(BLUE)Building enterprise-benchmark...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/benchmark/enterprise-benchmark
+
+$(BUILD_DIR)/impact-demo:
+	@echo "$(BLUE)Building impact-demo...$(NC)"
+	@CGO_ENABLED=$(CGO_ENABLED) $(GO) build \
+		$(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) \
+		-ldflags "$(LDFLAGS)" \
+		-o $@ \
+		./cmd/noisefs-tools/benchmark/impact-demo
 
 # Create build directory
 $(BUILD_DIR):
@@ -165,13 +229,13 @@ test:
 # Run unit tests only
 test-unit:
 	@echo "$(BLUE)Running unit tests...$(NC)"
-	@$(GO) test -short $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/blocks ./pkg/cache ./pkg/noisefs ./pkg/ipfs
+	@$(GO) test -short $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/core/blocks ./pkg/storage/cache ./pkg/core/client ./pkg/storage/ipfs
 	@echo "$(GREEN)✓ Unit tests completed$(NC)"
 
 # Run integration tests (with mocks)
 test-integration:
 	@echo "$(BLUE)Running integration tests...$(NC)"
-	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/integration/ -run "TestMilestone4"
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./tests/integration/ -run "TestMilestone4"
 	@echo "$(GREEN)✓ Integration tests completed$(NC)"
 
 # Run real end-to-end tests with IPFS
@@ -179,16 +243,16 @@ test-real: docker-check start-ipfs
 	@echo "$(BLUE)Running real end-to-end tests...$(NC)"
 	@echo "$(YELLOW)Waiting for IPFS network to stabilize...$(NC)"
 	@sleep 60
-	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./pkg/testing/ -timeout=10m || ($(MAKE) stop-ipfs && exit 1)
+	@$(GO) test $(if $(BUILD_TAGS),-tags $(BUILD_TAGS)) -v ./tests/system/ -timeout=10m || ($(MAKE) stop-ipfs && exit 1)
 	@$(MAKE) stop-ipfs
 	@echo "$(GREEN)✓ Real end-to-end tests completed$(NC)"
 
 # Run Milestone 4 specific tests
 test-milestone4:
 	@echo "$(BLUE)Running Milestone 4 tests...$(NC)"
-	@$(GO) test ./pkg/integration/ -run "TestMilestone4" -v
-	@$(GO) run cmd/impact-demo/main.go
-	@$(GO) run cmd/benchmark-runner/main.go
+	@$(GO) test ./tests/integration/ -run "TestMilestone4" -v
+	@$(GO) run cmd/noisefs-tools/benchmark/impact-demo/main.go
+	@$(GO) run cmd/noisefs-tools/benchmark/benchmark/main.go
 	@echo "$(GREEN)✓ Milestone 4 tests completed$(NC)"
 
 # Run tests with coverage
@@ -244,13 +308,22 @@ ipfs-status:
 	done
 
 # Demo and simulation targets
-demo:
-	@echo "$(BLUE)Running NoiseFS impact demo...$(NC)"
-	@$(GO) run cmd/impact-demo/main.go
+demo: bin/demo
+	@echo "$(BLUE)Running NoiseFS core functionality demo...$(NC)"
+	@./bin/demo
 
 benchmark:
 	@echo "$(BLUE)Running NoiseFS benchmarks...$(NC)"
-	@$(GO) run cmd/benchmark-runner/main.go
+	@$(GO) run cmd/noisefs-tools/benchmark/benchmark/main.go
+
+# Additional demo targets
+demo-reuse: bin/demo
+	@echo "$(BLUE)Running NoiseFS block reuse demo...$(NC)"
+	@./bin/demo -reuse
+
+impact-demo:
+	@echo "$(BLUE)Running NoiseFS impact demo...$(NC)"
+	@$(GO) run cmd/noisefs-tools/benchmark/impact-demo/main.go
 
 simulation:
 	@echo "$(BLUE)Running medium-scale simulation...$(NC)"
@@ -263,19 +336,19 @@ simulation-large:
 # Quick testing shortcuts
 quick-test:
 	@echo "$(BLUE)Running quick unit tests...$(NC)"
-	@$(GO) test ./pkg/noisefs/ ./pkg/blocks/ ./pkg/cache/ -v
+	@$(GO) test ./pkg/core/client/ ./pkg/core/blocks/ ./pkg/storage/cache/ -v
 
 real-quick: start-ipfs
 	@echo "$(BLUE)Running quick real test...$(NC)"
 	@sleep 25
-	@$(GO) test ./pkg/testing/ -run TestRealSingleNode -v -timeout=5m || ($(MAKE) stop-ipfs && exit 1)
+	@$(GO) test ./tests/system/ -run TestRealSingleNode -v -timeout=5m || ($(MAKE) stop-ipfs && exit 1)
 	@$(MAKE) stop-ipfs
 
 # Performance testing
 perf-test: start-ipfs
 	@echo "$(BLUE)Running performance tests...$(NC)"
 	@sleep 30
-	@$(GO) test ./pkg/testing/ -bench=. -benchtime=30s -timeout=15m || ($(MAKE) stop-ipfs && exit 1)
+	@$(GO) test ./tests/benchmarks/ -bench=. -benchtime=30s -timeout=15m || ($(MAKE) stop-ipfs && exit 1)
 	@$(MAKE) stop-ipfs
 
 # Build Docker image
@@ -370,6 +443,21 @@ stop:
 	@echo "$(BLUE)Stopping deployment...$(NC)"
 	@cd deployments && docker-compose down
 	@echo "$(GREEN)✓ Deployment stopped$(NC)"
+
+# List all available binaries and tools
+list-targets:
+	@echo "$(BLUE)Available Binaries:$(NC)"
+	@for binary in $(BINARIES); do \
+		echo "  $(GREEN)$$binary$(NC) -> cmd/$$binary/"; \
+	done
+	@echo ""
+	@echo "$(BLUE)Available Tools:$(NC)"
+	@echo "  $(GREEN)noisefs-bootstrap$(NC) -> cmd/noisefs-tools/bootstrap/noisefs-bootstrap/"
+	@echo "  $(GREEN)inspect-index$(NC) -> cmd/noisefs-tools/inspect/inspect-index/"
+	@echo "  $(GREEN)benchmark$(NC) -> cmd/noisefs-tools/benchmark/benchmark/"
+	@echo "  $(GREEN)docker-benchmark$(NC) -> cmd/noisefs-tools/benchmark/docker-benchmark/"
+	@echo "  $(GREEN)enterprise-benchmark$(NC) -> cmd/noisefs-tools/benchmark/enterprise-benchmark/"
+	@echo "  $(GREEN)impact-demo$(NC) -> cmd/noisefs-tools/benchmark/impact-demo/"
 
 # Show project status
 status:

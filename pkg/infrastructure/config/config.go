@@ -27,10 +27,10 @@ type Config struct {
 
 	// Performance Configuration
 	Performance PerformanceConfig `json:"performance"`
-	
+
 	// WebUI Configuration
 	WebUI WebUIConfig `json:"webui"`
-	
+
 	// Security Configuration
 	Security SecurityConfig `json:"security"`
 }
@@ -49,12 +49,12 @@ type CacheConfig struct {
 
 // FUSEConfig holds FUSE filesystem configuration
 type FUSEConfig struct {
-	MountPath   string `json:"mount_path"`
-	VolumeName  string `json:"volume_name"`
-	ReadOnly    bool   `json:"read_only"`
-	AllowOther  bool   `json:"allow_other"`
-	Debug       bool   `json:"debug"`
-	IndexPath   string `json:"index_path"`
+	MountPath  string `json:"mount_path"`
+	VolumeName string `json:"volume_name"`
+	ReadOnly   bool   `json:"read_only"`
+	AllowOther bool   `json:"allow_other"`
+	Debug      bool   `json:"debug"`
+	IndexPath  string `json:"index_path"`
 }
 
 // LoggingConfig holds logging configuration
@@ -86,13 +86,13 @@ type WebUIConfig struct {
 
 // SecurityConfig holds security-related configuration
 type SecurityConfig struct {
-	EncryptDescriptors bool   `json:"encrypt_descriptors"`
-	DefaultEncrypted   bool   `json:"default_encrypted"`
-	RequirePassword    bool   `json:"require_password"`
-	PasswordPrompt     bool   `json:"password_prompt"`
-	EncryptLocalIndex  bool   `json:"encrypt_local_index"`
-	SecureMemory       bool   `json:"secure_memory"`
-	AntiForensics      bool   `json:"anti_forensics"`
+	EncryptDescriptors bool `json:"encrypt_descriptors"`
+	DefaultEncrypted   bool `json:"default_encrypted"`
+	RequirePassword    bool `json:"require_password"`
+	PasswordPrompt     bool `json:"password_prompt"`
+	EncryptLocalIndex  bool `json:"encrypt_local_index"`
+	SecureMemory       bool `json:"secure_memory"`
+	AntiForensics      bool `json:"anti_forensics"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults
@@ -102,7 +102,7 @@ func DefaultConfig() *Config {
 
 	return &Config{
 		IPFS: IPFSConfig{
-			APIEndpoint: "localhost:5001",
+			APIEndpoint: "127.0.0.1:5001",
 			Timeout:     30,
 		},
 		Cache: CacheConfig{

@@ -10,8 +10,8 @@ func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
 
 	// Test defaults
-	if config.IPFS.APIEndpoint != "localhost:5001" {
-		t.Errorf("Expected default IPFS endpoint localhost:5001, got %s", config.IPFS.APIEndpoint)
+	if config.IPFS.APIEndpoint != "127.0.0.1:5001" {
+		t.Errorf("Expected default IPFS endpoint 127.0.0.1:5001, got %s", config.IPFS.APIEndpoint)
 	}
 
 	if config.Cache.BlockCacheSize != 1000 {
@@ -109,7 +109,7 @@ func TestLoadNonexistentConfig(t *testing.T) {
 	}
 
 	// Should have default values
-	if config.IPFS.APIEndpoint != "localhost:5001" {
+	if config.IPFS.APIEndpoint != "127.0.0.1:5001" {
 		t.Errorf("Non-existent config should use defaults, got %s", config.IPFS.APIEndpoint)
 	}
 }
