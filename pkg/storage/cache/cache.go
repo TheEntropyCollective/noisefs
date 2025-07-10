@@ -31,6 +31,9 @@ type Cache interface {
 	
 	// Clear removes all blocks from the cache
 	Clear()
+	
+	// GetStats returns cache statistics
+	GetStats() *Stats
 }
 
 // BlockInfo contains block metadata for cache management
@@ -43,3 +46,11 @@ type BlockInfo struct {
 
 // ErrNotFound is returned when a block is not found in the cache
 var ErrNotFound = errors.New("block not found in cache")
+
+// Stats holds cache statistics
+type Stats struct {
+	Hits   int64
+	Misses int64
+	Evictions int64
+	Size   int
+}

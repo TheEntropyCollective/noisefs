@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
@@ -175,13 +174,19 @@ func TestBlockAnonymization(t *testing.T) {
 	// Create test data with a predictable pattern
 	testData := bytes.Repeat([]byte("PATTERN"), 1000)
 
-	// Create block manager
-	blockManager := blocks.NewBlockManager(blocks.DefaultBlockConfig())
-
-	// Split into blocks
-	dataBlocks, err := blockManager.SplitIntoBlocks(bytes.NewReader(testData))
-	if err != nil {
-		t.Fatalf("Failed to split data: %v", err)
+	// Split into blocks manually
+	blockSize := 128 * 1024 // 128KB
+	var dataBlocks []*blocks.Block
+	for i := 0; i < len(testData); i += blockSize {
+		end := i + blockSize
+		if end > len(testData) {
+			end = len(testData)
+		}
+		block, err := blocks.NewBlock(testData[i:end])
+		if err != nil {
+			t.Fatalf("Failed to create block: %v", err)
+		}
+		dataBlocks = append(dataBlocks, block)
 	}
 
 	t.Logf("Split %d bytes into %d blocks", len(testData), len(dataBlocks))
@@ -201,9 +206,11 @@ func TestBlockAnonymization(t *testing.T) {
 		randBlock1 := &blocks.Block{Data: randomizer1, ID: fmt.Sprintf("rand1_%d", i)}
 		randBlock2 := &blocks.Block{Data: randomizer2, ID: fmt.Sprintf("rand2_%d", i)}
 
-		// XOR with both randomizers
-		xorBlock := blockManager.XORBlocks(dataBlock, randBlock1)
-		xorBlock = blockManager.XORBlocks(xorBlock, randBlock2)
+		// XOR with both randomizers using block methods
+		xorBlock, err := dataBlock.XOR3(randBlock1, randBlock2)
+		if err != nil {
+			t.Fatalf("Failed to XOR block %d: %v", i, err)
+		}
 
 		// Check if pattern is still visible in XORed data
 		patternCount := 0
@@ -220,9 +227,11 @@ func TestBlockAnonymization(t *testing.T) {
 			t.Logf("Block %d: ✓ Successfully anonymized (no patterns detected)", i)
 		}
 
-		// Verify reconstruction
-		reconstructed := blockManager.XORBlocks(xorBlock, randBlock2)
-		reconstructed = blockManager.XORBlocks(reconstructed, randBlock1)
+		// Verify reconstruction using block methods
+		reconstructed, err := xorBlock.XOR3(randBlock1, randBlock2)
+		if err != nil {
+			t.Fatalf("Failed to reconstruct block %d: %v", i, err)
+		}
 
 		originalData := bytes.TrimRight(dataBlock.Data, "\x00")
 		reconstructedData := bytes.TrimRight(reconstructed.Data, "\x00")

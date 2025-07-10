@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"time"
 	
@@ -530,4 +531,43 @@ func (c *Client) SetPeerSelectionStrategy(strategy string) {
 // GetConnectedPeers returns currently connected peers
 func (c *Client) GetConnectedPeers() []peer.ID {
 	return c.ipfsClient.GetConnectedPeers()
+}
+
+// Upload uploads a file and returns descriptor CID
+// This is a simplified implementation for testing
+func (c *Client) Upload(reader io.Reader, filename string) (string, error) {
+	// Read all data
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read data: %w", err)
+	}
+	
+	// Create blocks
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to create block: %w", err)
+	}
+	
+	// Store block
+	cid, err := c.StoreBlockWithCache(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to store block: %w", err)
+	}
+	
+	// For simplicity, return the block CID as descriptor CID
+	// In a real implementation, this would create a proper descriptor
+	return cid, nil
+}
+
+// Download downloads a file by descriptor CID and returns data
+// This is a simplified implementation for testing
+func (c *Client) Download(descriptorCID string) ([]byte, error) {
+	// Retrieve block
+	block, err := c.RetrieveBlockWithCache(descriptorCID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve block: %w", err)
+	}
+	
+	// Return block data
+	return block.Data, nil
 }

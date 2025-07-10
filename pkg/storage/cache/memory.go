@@ -14,6 +14,7 @@ type MemoryCache struct {
 	blocks      map[string]*cacheEntry
 	lru         *list.List
 	popularityMap map[string]int
+	stats       Stats
 }
 
 type cacheEntry struct {
@@ -71,11 +72,13 @@ func (c *MemoryCache) Get(cid string) (*blocks.Block, error) {
 	
 	entry, exists := c.blocks[cid]
 	if !exists {
+		c.stats.Misses++
 		return nil, ErrNotFound
 	}
 	
 	// Move to front of LRU
 	c.lru.MoveToFront(entry.element)
+	c.stats.Hits++
 	
 	return entry.block, nil
 }
@@ -179,5 +182,20 @@ func (c *MemoryCache) evictOldest() {
 		c.lru.Remove(oldest)
 		delete(c.blocks, cid)
 		delete(c.popularityMap, cid)
+		c.stats.Evictions++
+	}
+}
+
+// GetStats returns cache statistics
+func (c *MemoryCache) GetStats() *Stats {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	
+	// Create a copy to avoid data races
+	return &Stats{
+		Hits:      c.stats.Hits,
+		Misses:    c.stats.Misses,
+		Evictions: c.stats.Evictions,
+		Size:      len(c.blocks),
 	}
 }

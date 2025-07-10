@@ -8,27 +8,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // E2ETestSuite provides comprehensive end-to-end testing
 type E2ETestSuite struct {
-	mockBlockStore    *MockBlockStore
-	memoryCache       cache.Cache
-	noisefsClient     *noisefs.Client
-	reuseClient       *reuse.ReuseAwareClient
-	storageManager    *storage.Manager
-	complianceSystem  *compliance.ComplianceAuditSystem
-	testConfig        *config.Config
+	mockBlockStore   *MockBlockStore
+	memoryCache      cache.Cache
+	noisefsClient    *noisefs.Client
+	reuseClient      *reuse.ReuseAwareClient
+	storageManager   *storage.Manager
+	complianceSystem *compliance.ComplianceAuditSystem
+	testConfig       *config.Config
 }
 
 type MockBlockStore struct {
@@ -103,14 +101,14 @@ func TestCompleteUploadDownloadWorkflow(t *testing.T) {
 			// Step 1: Upload file
 			reader := bytes.NewReader(tc.content)
 			descriptorCID, err := suite.noisefsClient.Upload(reader, tc.filename)
-			
+
 			if tc.expectError {
 				if err == nil {
 					t.Errorf("Expected error but upload succeeded")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Fatalf("Upload failed: %v", err)
 			}
@@ -161,7 +159,7 @@ func TestMultiClientWorkflow(t *testing.T) {
 	suite := setupE2ETestSuite(t)
 
 	// Create a second client with shared storage but separate cache
-	secondBlockStore := suite.mockBlockStore // Shared storage
+	secondBlockStore := suite.mockBlockStore              // Shared storage
 	secondCache := cache.NewMemoryCache(10 * 1024 * 1024) // 10MB cache
 	secondClient, err := noisefs.NewClient(secondBlockStore, secondCache)
 	if err != nil {
@@ -222,7 +220,7 @@ func TestReuseSystemIntegration(t *testing.T) {
 		// Upload might fail due to reuse requirements, which is expected behavior
 		if result != nil && result.ValidationResult != nil {
 			t.Logf("Upload rejected due to reuse validation: %v", result.ValidationResult.Violations)
-			
+
 			// Verify the system properly enforced reuse requirements
 			if !result.ValidationResult.Valid {
 				t.Logf("Reuse enforcement working correctly - upload rejected")
@@ -234,7 +232,7 @@ func TestReuseSystemIntegration(t *testing.T) {
 
 	// If upload succeeded, validate the reuse system
 	t.Logf("Upload succeeded with descriptor: %s", result.DescriptorCID)
-	
+
 	// Verify reuse validation was performed
 	if result.ValidationResult == nil {
 		t.Error("Validation result should not be nil")
@@ -252,8 +250,8 @@ func TestReuseSystemIntegration(t *testing.T) {
 		return
 	}
 
-	t.Logf("Reuse validation: ratio=%.2f, public_domain_ratio=%.2f", 
-		result.ValidationResult.ReuseRatio, 
+	t.Logf("Reuse validation: ratio=%.2f, public_domain_ratio=%.2f",
+		result.ValidationResult.ReuseRatio,
 		result.ValidationResult.PublicDomainRatio)
 
 	// Test legal documentation generation
@@ -262,8 +260,8 @@ func TestReuseSystemIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to generate legal documentation: %v", err)
 		} else {
-			t.Logf("Generated legal documentation with %d block evidence entries and %d public domain proofs", 
-				len(legalDoc.BlockReuseEvidence), 
+			t.Logf("Generated legal documentation with %d block evidence entries and %d public domain proofs",
+				len(legalDoc.BlockReuseEvidence),
 				len(legalDoc.PublicDomainProof))
 		}
 	}
@@ -315,7 +313,7 @@ func TestStorageBackendIntegration(t *testing.T) {
 
 	// Test storage manager status
 	status := suite.storageManager.GetManagerStatus()
-	t.Logf("Storage manager status: total_backends=%d, active_backends=%d", 
+	t.Logf("Storage manager status: total_backends=%d, active_backends=%d",
 		status.TotalBackends, status.ActiveBackends)
 
 	if status.TotalBackends == 0 {
@@ -363,7 +361,7 @@ func TestComplianceSystemIntegration(t *testing.T) {
 	// Test compliance report generation
 	startDate := time.Now().Add(-24 * time.Hour)
 	endDate := time.Now()
-	
+
 	report, err := suite.complianceSystem.GenerateComplianceReport(startDate, endDate, "integration_test")
 	if err != nil {
 		t.Errorf("Failed to generate compliance report: %v", err)
@@ -378,7 +376,7 @@ func TestErrorHandlingAndRecovery(t *testing.T) {
 
 	// Test with corrupted block store
 	corruptedBlockStore := &CorruptedMockBlockStore{
-		blocks:     make(map[string]*blocks.Block),
+		blocks:      make(map[string]*blocks.Block),
 		failureRate: 0.3, // 30% failure rate
 	}
 
@@ -439,9 +437,9 @@ func setupE2ETestSuite(t *testing.T) *E2ETestSuite {
 
 	// Try to create storage manager (may fail if not configured)
 	var storageManager *storage.Manager
-	config := storage.DefaultConfig()
-	if config != nil {
-		storageManager, err = storage.NewManager(config)
+	storageConfig := storage.DefaultConfig()
+	if storageConfig != nil {
+		storageManager, err = storage.NewManager(storageConfig)
 		if err != nil {
 			t.Logf("Warning: Could not create storage manager: %v", err)
 		}
@@ -478,23 +476,23 @@ func generateTestData(size int) []byte {
 
 // CorruptedMockBlockStore simulates a unreliable storage backend
 type CorruptedMockBlockStore struct {
-	blocks      map[string]*blocks.Block
-	failureRate float64
+	blocks         map[string]*blocks.Block
+	failureRate    float64
 	operationCount int
 }
 
 func (c *CorruptedMockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
 	c.operationCount++
-	
+
 	// Simulate intermittent failures
-	if float64(c.operationCount % 10) < c.failureRate * 10 {
+	if float64(c.operationCount%10) < c.failureRate*10 {
 		return "", errors.New("simulated storage failure")
 	}
-	
+
 	if block == nil {
 		return "", errors.New("block cannot be nil")
 	}
-	
+
 	cid := fmt.Sprintf("corrupted_%s", block.ID)
 	c.blocks[cid] = block
 	return cid, nil
@@ -502,12 +500,12 @@ func (c *CorruptedMockBlockStore) StoreBlock(block *blocks.Block) (string, error
 
 func (c *CorruptedMockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
 	c.operationCount++
-	
+
 	// Simulate intermittent failures
-	if float64(c.operationCount % 10) < c.failureRate * 10 {
+	if float64(c.operationCount%10) < c.failureRate*10 {
 		return nil, errors.New("simulated retrieval failure")
 	}
-	
+
 	block, exists := c.blocks[cid]
 	if !exists {
 		return nil, errors.New("block not found")
