@@ -2,13 +2,13 @@ package comparative_analysis
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
@@ -259,7 +259,7 @@ func BenchmarkCacheEffectiveness(b *testing.B) {
 	
 	// Calculate cache learning effectiveness
 	initialStats := suite.cache.GetStats()
-	metrics.CustomMetrics["cache_learning_score"] = calculateCacheLearningScore(initialStats)
+	metrics.CustomMetrics["cache_learning_score"] = calculateCacheLearningScore(*initialStats)
 	
 	saveMetrics(b, metrics)
 	b.ReportMetric(metrics.CacheHitRate*100, "cache_hit_rate_percent")
@@ -528,9 +528,13 @@ func estimateStoredSize(originalSize int64) int64 {
 	blockSize := int64(128 * 1024) // 128KB blocks
 	numBlocks := (originalSize + blockSize - 1) / blockSize
 	
+	// Calculate overhead based on number of blocks and randomizer requirements
+	metadataPerBlock := int64(32) // bytes per block for metadata
+	totalMetadata := numBlocks * metadataPerBlock
+	
 	// Assume some overhead for randomizer blocks and metadata
 	overhead := float64(1.3) // 30% overhead estimate
-	return int64(float64(originalSize) * overhead)
+	return int64(float64(originalSize)*overhead) + totalMetadata
 }
 
 func calculateDeduplicationRatio(numFiles int, fileSize int64) float64 {
@@ -594,7 +598,7 @@ func (m *MockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
 	return block, nil
 }
 
-func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []interface{}) (*blocks.Block, error) {
+func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
 	return m.RetrieveBlock(cid)
 }
 
