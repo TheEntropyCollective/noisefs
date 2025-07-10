@@ -1,0 +1,185 @@
+{
+  "server": {
+    "address": "localhost:8080",
+    "tls": {
+      "enabled": false,
+      "cert_file": "",
+      "key_file": ""
+    },
+    "cors": {
+      "allowed_origins": ["*"],
+      "allowed_methods": ["GET", "POST", "PUT", "DELETE"],
+      "allowed_headers": ["Content-Type", "Authorization"]
+    }
+  },
+  "ipfs": {
+    "api_url": "http://localhost:5001",
+    "gateway_url": "http://localhost:8080",
+    "timeout": "30s",
+    "retry_attempts": 3,
+    "retry_delay": "1s"
+  },
+  "storage": {
+    "default_backend": "ipfs",
+    "backends": {
+      "ipfs": {
+        "type": "ipfs",
+        "enabled": true,
+        "priority": 100,
+        "connection": {
+          "endpoint": "http://localhost:5001",
+          "timeout": "30s"
+        },
+        "retry": {
+          "max_attempts": 3,
+          "base_delay": "1s",
+          "max_delay": "10s",
+          "multiplier": 2.0
+        },
+        "timeouts": {
+          "connect": "5s",
+          "operation": "30s"
+        }
+      }
+    },
+    "distribution": {
+      "strategy": "single",
+      "selection": {
+        "required_capabilities": ["content_address"],
+        "preferred_backends": ["ipfs"],
+        "exclude_backends": []
+      },
+      "load_balancing": {
+        "algorithm": "performance",
+        "require_healthy": true,
+        "health_threshold": 0.8
+      }
+    },
+    "health_check": {
+      "enabled": true,
+      "interval": "30s",
+      "timeout": "10s",
+      "failure_threshold": 3,
+      "recovery_threshold": 2
+    },
+    "performance": {
+      "max_concurrent_operations": 10,
+      "max_concurrent_per_backend": 5,
+      "operation_timeout": "5m"
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "type": "adaptive",
+    "size_mb": 100,
+    "ttl": "1h",
+    "adaptive": {
+      "enabled": true,
+      "ml_prediction_interval": "5m",
+      "popularity_window": "24h",
+      "prediction_accuracy_threshold": 0.7
+    },
+    "privacy": {
+      "differential_privacy_enabled": true,
+      "epsilon": 1.0,
+      "temporal_quantization": "1h",
+      "bloom_filter_false_positive_rate": 0.01,
+      "dummy_access_ratio": 0.1
+    }
+  },
+  "reuse": {
+    "enabled": true,
+    "enforcement": {
+      "strict_mode": true,
+      "minimum_reuse_ratio": 0.8,
+      "minimum_public_domain_ratio": 0.3,
+      "block_registration_required": true
+    },
+    "universal_pool": {
+      "enabled": true,
+      "genesis_block_sizes": [65536, 131072, 262144, 1048576],
+      "public_domain_sources": ["gutenberg", "wikimedia"],
+      "max_pool_size_gb": 1
+    },
+    "legal_protection": {
+      "generate_proofs": true,
+      "court_ready_documentation": true,
+      "expert_witness_reports": true
+    }
+  },
+  "privacy": {
+    "relay": {
+      "enabled": true,
+      "pool_size": 10,
+      "selection_strategy": "privacy_optimal",
+      "health_monitoring": true
+    },
+    "cover_traffic": {
+      "enabled": true,
+      "noise_ratio": 0.2,
+      "bandwidth_limit_mbps": 10,
+      "cover_block_cache_size_mb": 50
+    },
+    "request_mixing": {
+      "enabled": true,
+      "mixing_strategy": "temporal_jitter",
+      "batch_size": 5,
+      "jitter_max_delay": "5s"
+    }
+  },
+  "compliance": {
+    "dmca": {
+      "enabled": true,
+      "designated_agent": {
+        "name": "NoiseFS DMCA Agent",
+        "email": "dmca@noisefs.test",
+        "address": "123 Test Street, Test City, TC 12345"
+      },
+      "processing": {
+        "auto_process_valid": true,
+        "counter_notice_wait_time": "336h",
+        "max_processing_time": "24h"
+      }
+    },
+    "audit": {
+      "enabled": true,
+      "real_time_logging": true,
+      "cryptographic_proof": true,
+      "retention_period": "2555h",
+      "legal_hold_enabled": true
+    },
+    "notifications": {
+      "email_enabled": true,
+      "sms_enabled": false,
+      "in_app_enabled": true,
+      "retention_period": "8760h"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "output": "stdout",
+    "file": {
+      "enabled": false,
+      "path": "/tmp/noisefs-test.log",
+      "max_size_mb": 100,
+      "max_age_days": 7,
+      "max_backups": 3
+    }
+  },
+  "metrics": {
+    "enabled": true,
+    "prometheus": {
+      "enabled": true,
+      "address": ":9090",
+      "path": "/metrics"
+    },
+    "collection_interval": "10s"
+  },
+  "testing": {
+    "mode": "integration",
+    "mock_external_services": false,
+    "performance_monitoring": true,
+    "trace_requests": true
+  }
+}

@@ -1,0 +1,192 @@
+version: '3.8'
+
+services:
+  ipfs-node-1:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-ipfs-1
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8080:8080"
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    volumes:
+      - ipfs1_data:/data/ipfs
+      - ./configs/ipfs-config.json:/data/ipfs/config:ro
+    networks:
+      - noisefs-test-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/api/v0/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ipfs-node-2:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-ipfs-2
+    ports:
+      - "4002:4001"
+      - "5002:5001"
+      - "8081:8080"
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    volumes:
+      - ipfs2_data:/data/ipfs
+      - ./configs/ipfs-config.json:/data/ipfs/config:ro
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/api/v0/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ipfs-node-3:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-ipfs-3
+    ports:
+      - "4003:4001"
+      - "5003:5001"
+      - "8082:8080"
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    volumes:
+      - ipfs3_data:/data/ipfs
+      - ./configs/ipfs-config.json:/data/ipfs/config:ro
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/api/v0/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ipfs-node-4:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-ipfs-4
+    ports:
+      - "4004:4001"
+      - "5004:5001"
+      - "8083:8080"
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    volumes:
+      - ipfs4_data:/data/ipfs
+      - ./configs/ipfs-config.json:/data/ipfs/config:ro
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/api/v0/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  ipfs-node-5:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-ipfs-5
+    ports:
+      - "4005:4001"
+      - "5005:5001"
+      - "8084:8080"
+    environment:
+      - IPFS_PROFILE=server
+      - IPFS_PATH=/data/ipfs
+    volumes:
+      - ipfs5_data:/data/ipfs
+      - ./configs/ipfs-config.json:/data/ipfs/config:ro
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5001/api/v0/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Network bootstrapper to help nodes discover each other
+  ipfs-bootstrap:
+    image: ipfs/go-ipfs:latest
+    container_name: noisefs-test-bootstrap
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+      - ipfs-node-2
+      - ipfs-node-3
+      - ipfs-node-4
+      - ipfs-node-5
+    command: >
+      sh -c "
+        sleep 60 &&
+        echo 'Bootstrapping IPFS network connections...' &&
+        wget -qO- http://ipfs-node-1:5001/api/v0/id | jq -r '.Addresses[]' | head -1 | xargs -I {} wget -qO- 'http://ipfs-node-2:5001/api/v0/bootstrap/add?arg={}' &&
+        wget -qO- http://ipfs-node-1:5001/api/v0/id | jq -r '.Addresses[]' | head -1 | xargs -I {} wget -qO- 'http://ipfs-node-3:5001/api/v0/bootstrap/add?arg={}' &&
+        wget -qO- http://ipfs-node-1:5001/api/v0/id | jq -r '.Addresses[]' | head -1 | xargs -I {} wget -qO- 'http://ipfs-node-4:5001/api/v0/bootstrap/add?arg={}' &&
+        wget -qO- http://ipfs-node-1:5001/api/v0/id | jq -r '.Addresses[]' | head -1 | xargs -I {} wget -qO- 'http://ipfs-node-5:5001/api/v0/bootstrap/add?arg={}' &&
+        echo 'Network bootstrap completed' &&
+        sleep infinity
+      "
+
+  # Monitoring service for test network health
+  ipfs-monitor:
+    image: alpine:latest
+    container_name: noisefs-test-monitor
+    networks:
+      - noisefs-test-network
+    depends_on:
+      - ipfs-node-1
+      - ipfs-node-2
+      - ipfs-node-3
+      - ipfs-node-4
+      - ipfs-node-5
+    command: >
+      sh -c "
+        apk add --no-cache curl jq &&
+        sleep 90 &&
+        while true; do
+          echo '=== IPFS Network Status ===' &&
+          for node in ipfs-node-1 ipfs-node-2 ipfs-node-3 ipfs-node-4 ipfs-node-5; do
+            echo -n \"$$node: \"
+            curl -s http://$$node:5001/api/v0/version | jq -r '.Version' 2>/dev/null || echo 'NOT RESPONDING'
+          done &&
+          echo &&
+          echo 'Peer connections:' &&
+          curl -s http://ipfs-node-1:5001/api/v0/swarm/peers | jq -r '.Peers | length' 2>/dev/null | xargs echo 'Node 1 peers:' &&
+          sleep 300
+        done
+      "
+
+networks:
+  noisefs-test-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  ipfs1_data:
+    driver: local
+  ipfs2_data:
+    driver: local
+  ipfs3_data:
+    driver: local
+  ipfs4_data:
+    driver: local
+  ipfs5_data:
+    driver: local
