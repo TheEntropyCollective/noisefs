@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
-	"github.com/TheEntropyCollective/noisefs/pkg/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 )
 
 // RealIPFSTestSuite provides real IPFS network testing

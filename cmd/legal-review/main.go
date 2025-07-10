@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/legal"
+	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 	fmt.Println()
 	
 	// Create generator
-	generator := legal.NewReviewGenerator()
+	generator := compliance.NewReviewGenerator()
 	
 	// Generate review package
 	fmt.Println("Generating legal review package...")
@@ -64,7 +64,7 @@ func main() {
 	fmt.Printf("📁 Files saved to: %s\n", *outputDir)
 }
 
-func exportPackage(gen *legal.ReviewGenerator, pkg *legal.ReviewPackage, outputDir, format string) error {
+func exportPackage(gen *compliance.ReviewGenerator, pkg *compliance.ReviewPackage, outputDir, format string) error {
 	formats := []string{}
 	
 	switch format {
@@ -85,7 +85,7 @@ func exportPackage(gen *legal.ReviewGenerator, pkg *legal.ReviewPackage, outputD
 	return nil
 }
 
-func exportFormat(gen *legal.ReviewGenerator, pkg *legal.ReviewPackage, outputDir, format string) error {
+func exportFormat(gen *compliance.ReviewGenerator, pkg *compliance.ReviewPackage, outputDir, format string) error {
 	filename := gen.GenerateFilename(pkg, format)
 	filepath := filepath.Join(outputDir, filename)
 	
@@ -117,7 +117,7 @@ func exportFormat(gen *legal.ReviewGenerator, pkg *legal.ReviewPackage, outputDi
 	return nil
 }
 
-func printSummary(pkg *legal.ReviewPackage, verbose bool) {
+func printSummary(pkg *compliance.ReviewPackage, verbose bool) {
 	fmt.Println("\n📊 Review Package Summary")
 	fmt.Println("========================")
 	
@@ -234,7 +234,7 @@ func printSummary(pkg *legal.ReviewPackage, verbose bool) {
 }
 
 // Additional helper for creating a summary report
-func createSummaryReport(pkg *legal.ReviewPackage, outputDir string) error {
+func createSummaryReport(pkg *compliance.ReviewPackage, outputDir string) error {
 	summaryPath := filepath.Join(outputDir, "SUMMARY.txt")
 	
 	file, err := os.Create(summaryPath)

@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/crypto"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 )
 
 // EncryptedFileIndex provides encrypted storage for the file index

@@ -5,9 +5,9 @@ This directory contains the comprehensive testing infrastructure for NoiseFS, pr
 ## Directory Structure
 
 ### Core Testing
-- **`unit/`** - Unit tests for individual packages (moved from pkg/*_test.go)
 - **`integration/`** - Integration tests between components
 - **`system/`** - System-level tests with real infrastructure
+- **Note:** Unit tests remain in their respective pkg/ directories following Go conventions
 
 ### Specialized Testing
 - **`benchmarks/`** - Performance benchmarking and comparative analysis
@@ -21,11 +21,11 @@ This directory contains the comprehensive testing infrastructure for NoiseFS, pr
 
 ## Test Categories
 
-### 1. Unit Tests (`tests/unit/`)
-Fast, isolated tests for individual packages:
+### 1. Unit Tests (in `pkg/*/`)
+Fast, isolated tests for individual packages (located with the code):
 ```bash
-make test-unit                    # Run all unit tests
-make test-unit-package PKG=cache  # Run specific package tests
+go test ./pkg/...                 # Run all unit tests
+go test ./pkg/storage/cache      # Run specific package tests
 ```
 
 ### 2. Integration Tests (`tests/integration/`)

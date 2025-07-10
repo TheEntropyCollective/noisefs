@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 )
 
 // AnonymizationTestSuite manages privacy validation tests

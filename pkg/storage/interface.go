@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 // Backend defines the interface that all storage backends must implement

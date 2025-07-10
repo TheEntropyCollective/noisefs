@@ -9,9 +9,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
-	"github.com/TheEntropyCollective/noisefs/pkg/security"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
 	"github.com/hanwen/go-fuse/v2/fuse/pathfs"

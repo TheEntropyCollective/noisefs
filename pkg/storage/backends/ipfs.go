@@ -13,8 +13,8 @@ import (
 	shell "github.com/ipfs/go-ipfs-api"
 	"github.com/libp2p/go-libp2p/core/peer"
 	
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 

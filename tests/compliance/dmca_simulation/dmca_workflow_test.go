@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
-	"github.com/TheEntropyCollective/noisefs/pkg/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 )
 
 // DMCATestSuite manages DMCA compliance testing scenarios

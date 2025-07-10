@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
 )

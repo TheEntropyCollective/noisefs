@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 // Manager orchestrates operations across multiple storage backends

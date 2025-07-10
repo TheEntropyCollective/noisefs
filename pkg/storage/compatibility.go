@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 // LegacyIPFSAdapter provides backward compatibility for old IPFS client interface

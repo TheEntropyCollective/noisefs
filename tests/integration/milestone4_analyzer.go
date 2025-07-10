@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // Milestone4ImpactAnalyzer conducts comprehensive analysis of Milestone 4 improvements

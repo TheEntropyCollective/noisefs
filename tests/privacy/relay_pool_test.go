@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/p2p"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy"
 )
 

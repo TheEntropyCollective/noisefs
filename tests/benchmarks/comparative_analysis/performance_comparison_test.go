@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // PerformanceMetrics tracks comprehensive performance data

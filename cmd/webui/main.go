@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/noisefs"
-	noisefsX509 "github.com/TheEntropyCollective/noisefs/pkg/tls"
-	"github.com/TheEntropyCollective/noisefs/pkg/validation"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	noisefsX509 "github.com/TheEntropyCollective/noisefs/cmd/webui/tls"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 )
 
 type WebUI struct {

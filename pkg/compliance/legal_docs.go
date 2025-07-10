@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 )
 
 // ComplianceLogEntry represents an entry in the compliance audit log

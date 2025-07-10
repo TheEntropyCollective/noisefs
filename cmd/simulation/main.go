@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/simulation"
+	"github.com/TheEntropyCollective/noisefs/tests/benchmarks/simulation"
 )
 
 func main() {

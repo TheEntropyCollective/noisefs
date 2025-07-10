@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 // MockBackend implements the Backend interface for testing

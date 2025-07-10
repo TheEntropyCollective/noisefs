@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
-	"github.com/TheEntropyCollective/noisefs/pkg/legal"
-	"github.com/TheEntropyCollective/noisefs/pkg/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 )
 
 // LegalDocumentationTestSuite tests legal documentation generation and validation
