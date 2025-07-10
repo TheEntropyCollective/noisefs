@@ -1,4 +1,4 @@
-package testing
+package system
 
 import (
 	"crypto/rand"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	fixtures "github.com/TheEntropyCollective/noisefs/tests/fixtures"
 )
 
 // TestRealEndToEnd tests NoiseFS with real IPFS network
@@ -18,14 +19,14 @@ func TestRealEndToEnd(t *testing.T) {
 	}
 
 	// Setup real IPFS network
-	config := NodeConfig{
+	config := fixtures.NodeConfig{
 		NodeCount:   3,
 		CacheSize:   50,
 		NetworkName: "noisefs-e2e-test",
 		StartPort:   5001,
 	}
 
-	harness := NewRealIPFSTestHarness(config)
+	harness := fixtures.NewRealIPFSTestHarness(config)
 	
 	err := harness.StartNetwork()
 	if err != nil {
@@ -60,7 +61,7 @@ func TestRealEndToEnd(t *testing.T) {
 }
 
 // testRealSingleNodeOperations tests real upload/download on a single node
-func testRealSingleNodeOperations(t *testing.T, harness *RealIPFSTestHarness) {
+func testRealSingleNodeOperations(t *testing.T, harness *fixtures.RealIPFSTestHarness) {
 	// Test with various data sizes
 	testCases := []struct {
 		name string
@@ -119,7 +120,7 @@ func testRealSingleNodeOperations(t *testing.T, harness *RealIPFSTestHarness) {
 }
 
 // testRealCrossNodeReplication tests real replication between nodes
-func testRealCrossNodeReplication(t *testing.T, harness *RealIPFSTestHarness) {
+func testRealCrossNodeReplication(t *testing.T, harness *fixtures.RealIPFSTestHarness) {
 	// Check how many nodes are actually available
 	availableNodes := 0
 	nodes := harness.GetAllNodes()
@@ -207,7 +208,7 @@ func testRealCrossNodeReplication(t *testing.T, harness *RealIPFSTestHarness) {
 }
 
 // testRealFileReconstruction tests real file upload, splitting, and reconstruction
-func testRealFileReconstruction(t *testing.T, harness *RealIPFSTestHarness) {
+func testRealFileReconstruction(t *testing.T, harness *fixtures.RealIPFSTestHarness) {
 	node, err := harness.GetNode(0)
 	if err != nil {
 		t.Fatalf("Failed to get node: %v", err)
@@ -264,7 +265,7 @@ func testRealFileReconstruction(t *testing.T, harness *RealIPFSTestHarness) {
 }
 
 // testRealCacheEfficiency tests real cache performance
-func testRealCacheEfficiency(t *testing.T, harness *RealIPFSTestHarness) {
+func testRealCacheEfficiency(t *testing.T, harness *fixtures.RealIPFSTestHarness) {
 	node, err := harness.GetNode(0)
 	if err != nil {
 		t.Fatalf("Failed to get node: %v", err)
@@ -339,7 +340,7 @@ func testRealCacheEfficiency(t *testing.T, harness *RealIPFSTestHarness) {
 }
 
 // testRealStorageEfficiency tests real storage overhead
-func testRealStorageEfficiency(t *testing.T, harness *RealIPFSTestHarness) {
+func testRealStorageEfficiency(t *testing.T, harness *fixtures.RealIPFSTestHarness) {
 	node, err := harness.GetNode(0)
 	if err != nil {
 		t.Fatalf("Failed to get node: %v", err)
@@ -398,7 +399,7 @@ func testRealStorageEfficiency(t *testing.T, harness *RealIPFSTestHarness) {
 }
 
 // realFileUpload performs real file upload with block splitting and randomizers
-func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descriptors.Descriptor, error) {
+func realFileUpload(client *fixtures.RealIPFSNode, data []byte, blockSize int) (*descriptors.Descriptor, error) {
 	descriptor := descriptors.NewDescriptor("test_file.bin", int64(len(data)), blockSize)
 
 	offset := 0
@@ -452,7 +453,7 @@ func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descript
 }
 
 // realFileDownload performs real file download and reconstruction
-func realFileDownload(client *RealIPFSNode, descriptor *descriptors.Descriptor) ([]byte, error) {
+func realFileDownload(client *fixtures.RealIPFSNode, descriptor *descriptors.Descriptor) ([]byte, error) {
 	var result []byte
 
 	for i, blockPair := range descriptor.Blocks {
