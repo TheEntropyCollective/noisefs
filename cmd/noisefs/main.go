@@ -25,6 +25,7 @@ func main() {
 		output     = flag.String("output", "", "Output file path for download")
 		stats      = flag.Bool("stats", false, "Show NoiseFS statistics")
 		quiet      = flag.Bool("quiet", false, "Minimal output (only show errors and results)")
+		jsonOutput = flag.Bool("json", false, "Output results in JSON format")
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
 	)
@@ -34,13 +35,21 @@ func main() {
 	// Load configuration
 	cfg, err := loadConfig(*configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
 		os.Exit(1)
 	}
 
 	// Initialize logging
 	if err := logging.InitFromConfig(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.Output, cfg.Logging.File); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
 		os.Exit(1)
 	}
 	
@@ -67,6 +76,11 @@ func main() {
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
 		os.Exit(1)
 	}
 	
@@ -82,6 +96,11 @@ func main() {
 		logger.Error("Failed to create NoiseFS client", map[string]interface{}{
 			"error": err.Error(),
 		})
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
 		os.Exit(1)
 	}
 	
@@ -90,11 +109,14 @@ func main() {
 			"file":       *upload,
 			"block_size": cfg.Performance.BlockSize,
 		})
-		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, *quiet, logger); err != nil {
+		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, logger); err != nil {
 			logger.Error("Upload failed", map[string]interface{}{
 				"file":  *upload,
 				"error": err.Error(),
 			})
+			if *jsonOutput {
+				util.PrintJSONError(err)
+			}
 			os.Exit(1)
 		}
 		if !*quiet {
@@ -102,19 +124,28 @@ func main() {
 		}
 	} else if *download != "" {
 		if *output == "" {
+			err := fmt.Errorf("output file path required for download")
 			logger.Error("Output file path required for download", nil)
+			if *jsonOutput {
+				util.PrintJSONError(err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %s\n💡 Suggestion: Use -output to specify where to save the downloaded file\n", err)
+			}
 			os.Exit(1)
 		}
 		logger.Info("Starting file download", map[string]interface{}{
 			"descriptor_cid": *download,
 			"output_file":    *output,
 		})
-		if err := downloadFile(ipfsClient, client, *download, *output, *quiet, logger); err != nil {
+		if err := downloadFile(ipfsClient, client, *download, *output, *quiet, *jsonOutput, logger); err != nil {
 			logger.Error("Download failed", map[string]interface{}{
 				"descriptor_cid": *download,
 				"output_file":    *output,
 				"error":          err.Error(),
 			})
+			if *jsonOutput {
+				util.PrintJSONError(err)
+			}
 			os.Exit(1)
 		}
 		if !*quiet {
@@ -122,7 +153,7 @@ func main() {
 		}
 	} else if *stats {
 		// Show statistics
-		showSystemStats(ipfsClient, client, blockCache, logger)
+		showSystemStats(ipfsClient, client, blockCache, *jsonOutput, logger)
 	} else {
 		flag.Usage()
 	}
@@ -141,7 +172,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, quiet bool, logger *logging.Logger) error {
+func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -267,7 +298,16 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	})
 	
 	// Display results for user
-	if quiet {
+	if jsonOutput {
+		result := util.UploadResult{
+			DescriptorCID: descriptorCID,
+			Filename:      filepath.Base(filePath),
+			FileSize:      fileInfo.Size(),
+			BlockCount:    len(fileBlocks),
+			BlockSize:     blockSize,
+		}
+		util.PrintJSONSuccess(result)
+	} else if quiet {
 		fmt.Println(descriptorCID)
 	} else {
 		fmt.Println("\nUpload complete!")
@@ -286,7 +326,7 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	return nil
 }
 
-func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, logger *logging.Logger) error {
+func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	// Create descriptor store
 	store, err := descriptors.NewStore(ipfsClient)
 	if err != nil {
@@ -419,7 +459,15 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 		return fmt.Errorf("failed to assemble file: %w", err)
 	}
 	
-	if !quiet {
+	if jsonOutput {
+		result := util.DownloadResult{
+			OutputPath: outputPath,
+			Filename:   descriptor.Filename,
+			FileSize:   descriptor.FileSize,
+			BlockCount: len(descriptor.Blocks),
+		}
+		util.PrintJSONSuccess(result)
+	} else if !quiet {
 		fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
 	}
 	
@@ -465,25 +513,77 @@ func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 }
 
 // showSystemStats displays comprehensive system statistics
-func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache cache.Cache, logger *logging.Logger) {
+func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache cache.Cache, jsonOutput bool, logger *logging.Logger) {
+	// Gather all statistics
+	var ipfsConnected bool
+	var peerCount int
+	
+	// Test IPFS connection
+	testBlock, _ := blocks.NewBlock([]byte("test"))
+	if _, err := ipfsClient.StoreBlock(testBlock); err == nil {
+		ipfsConnected = true
+		peerCount = len(ipfsClient.GetConnectedPeers())
+	}
+	
+	// Get cache stats
+	cacheStats := blockCache.GetStats()
+	var cacheHitRate float64
+	if total := cacheStats.Hits + cacheStats.Misses; total > 0 {
+		cacheHitRate = float64(cacheStats.Hits) / float64(total) * 100
+	}
+	
+	// Get NoiseFS metrics
+	metrics := client.GetMetrics()
+	
+	if jsonOutput {
+		// Output as JSON
+		result := util.StatsResult{
+			IPFS: util.IPFSStats{
+				Connected: ipfsConnected,
+				Peers:     peerCount,
+			},
+			Cache: util.CacheStats{
+				Size:      cacheStats.Size,
+				Hits:      cacheStats.Hits,
+				Misses:    cacheStats.Misses,
+				Evictions: cacheStats.Evictions,
+				HitRate:   cacheHitRate,
+			},
+			Blocks: util.BlockStats{
+				Reused:    metrics.BlocksReused,
+				Generated: metrics.BlocksGenerated,
+				ReuseRate: metrics.BlockReuseRate,
+			},
+			Storage: util.StorageStats{
+				OriginalBytes: metrics.BytesUploadedOriginal,
+				StoredBytes:   metrics.BytesStoredIPFS,
+				Overhead:      metrics.StorageEfficiency,
+			},
+			Activity: util.ActivityStats{
+				Uploads:   metrics.TotalUploads,
+				Downloads: metrics.TotalDownloads,
+			},
+		}
+		util.PrintJSONSuccess(result)
+		return
+	}
+	
+	// Regular text output
 	fmt.Println("=== NoiseFS System Statistics ===\n")
 	
 	// IPFS Connection Status
 	fmt.Println("--- IPFS Connection ---")
-	// Try a simple operation to check if IPFS is connected
-	testBlock, _ := blocks.NewBlock([]byte("test"))
-	if _, err := ipfsClient.StoreBlock(testBlock); err == nil {
+	if ipfsConnected {
 		fmt.Println("IPFS Status: Connected")
-		if peers := ipfsClient.GetConnectedPeers(); len(peers) > 0 {
-			fmt.Printf("Connected Peers: %d\n", len(peers))
+		if peerCount > 0 {
+			fmt.Printf("Connected Peers: %d\n", peerCount)
 		}
 	} else {
-		fmt.Printf("IPFS Status: Connection Error (%v)\n", err)
+		fmt.Println("IPFS Status: Disconnected")
 	}
 	
 	// Cache Statistics
 	fmt.Println("\n--- Cache Statistics ---")
-	cacheStats := blockCache.GetStats()
 	fmt.Printf("Cache Size: %d blocks\n", cacheStats.Size)
 	fmt.Printf("Cache Hits: %d\n", cacheStats.Hits)
 	fmt.Printf("Cache Misses: %d\n", cacheStats.Misses)
@@ -492,9 +592,6 @@ func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache
 		hitRate := float64(cacheStats.Hits) / float64(total) * 100
 		fmt.Printf("Cache Hit Rate: %.1f%%\n", hitRate)
 	}
-	
-	// NoiseFS Metrics
-	metrics := client.GetMetrics()
 	
 	fmt.Println("\n--- Block Management ---")
 	fmt.Printf("Blocks Reused: %d\n", metrics.BlocksReused)
