@@ -449,3 +449,19 @@ func (cbc *CoverBlockCache) GetStats() map[string]interface{} {
 func (cbc *CoverBlockCache) Stop() {
 	cbc.cancel()
 }
+
+// GetCachedBlock retrieves block data from cache (convenience method)
+func (cbc *CoverBlockCache) GetCachedBlock(blockID string) []byte {
+	block, exists := cbc.Get(blockID)
+	if !exists || block == nil {
+		return nil
+	}
+	return block.Data
+}
+
+// CacheBlock stores a block in the cache (convenience method)
+func (cbc *CoverBlockCache) CacheBlock(blockID string, data []byte) error {
+	// Use a default category and popularity score
+	cbc.Put(blockID, data, CategoryUnknown, 0.5)
+	return nil
+}

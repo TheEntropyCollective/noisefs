@@ -20,9 +20,18 @@ type RequestMixer struct {
 	activeMixes        map[string]*MixedRequest
 	mixingPools        map[string]*MixingPool
 	metrics            *MixerMetrics
+	enhancedExecutor   *EnhancedMixerExecutor // Optional enhanced executor
+	logger             Logger // Optional logger interface
 	mu                 sync.RWMutex
 	ctx                context.Context
 	cancel             context.CancelFunc
+}
+
+// Logger interface for optional logging
+type Logger interface {
+	Warn(msg string, fields ...interface{})
+	Info(msg string, fields ...interface{})
+	Debug(msg string, fields ...interface{})
 }
 
 // MixerConfig contains configuration for request mixing
@@ -396,6 +405,13 @@ func (rm *RequestMixer) executeRequest(mixed *MixedRequest) *MixedRequestResult 
 	start := time.Now()
 	mixed.Status = MixedStatusSent
 	
+	// Check if we have an enhanced executor available
+	// If not, fall back to simplified implementation
+	if rm.enhancedExecutor != nil {
+		return rm.enhancedExecutor.ExecuteMixedRequest(rm.ctx, mixed)
+	}
+	
+	// Simplified fallback implementation
 	// Create block request array
 	blockIDs := []string{mixed.BlockID}
 	
@@ -412,7 +428,12 @@ func (rm *RequestMixer) executeRequest(mixed *MixedRequest) *MixedRequestResult 
 		}
 	}
 	
-	// Wait for completion (simplified - in real implementation would wait for actual completion)
+	// Log that enhanced executor should be used
+	if rm.logger != nil {
+		rm.logger.Warn("Using simplified request execution. Consider using EnhancedMixerExecutor for proper tracking and data retrieval")
+	}
+	
+	// Wait for completion (simplified)
 	time.Sleep(50 * time.Millisecond) // Simulate processing time
 	
 	mixed.Status = MixedStatusCompleted
@@ -420,7 +441,7 @@ func (rm *RequestMixer) executeRequest(mixed *MixedRequest) *MixedRequestResult 
 	
 	return &MixedRequestResult{
 		BlockID:   mixed.BlockID,
-		Data:      []byte("simulated block data"),
+		Data:      []byte("simulated block data - use EnhancedMixerExecutor for real data"),
 		Success:   true,
 		Latency:   time.Since(start),
 		MixID:     mixed.MixID,
