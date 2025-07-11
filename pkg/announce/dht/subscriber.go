@@ -216,7 +216,7 @@ func (s *Subscriber) checkAllSubscriptions() {
 // checkSubscription checks a single subscription for new announcements
 func (s *Subscriber) checkSubscription(sub *subscription) {
 	// Construct DHT key pattern
-	dhtKey := dhtPrefix + sub.topicHash
+	// dhtKey := dhtPrefix + sub.topicHash
 	
 	// In a real implementation, this would query the DHT
 	// For now, we'll check IPFS for announcements stored with a specific naming pattern

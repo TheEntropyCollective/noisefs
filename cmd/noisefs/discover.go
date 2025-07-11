@@ -11,6 +11,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
+	"github.com/TheEntropyCollective/noisefs/pkg/announce/tags"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
@@ -24,6 +25,8 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		limit    = flagSet.Int("limit", 50, "Maximum number of results")
 		topic    = flagSet.String("topic", "", "Filter by specific topic")
 		category = flagSet.String("category", "", "Filter by category (video/audio/document/etc)")
+		expand   = flagSet.Bool("expand", true, "Expand query tags to include related tags")
+		ranked   = flagSet.Bool("ranked", false, "Rank results by tag match score")
 		help     = flagSet.Bool("help", false, "Show help for discover command")
 	)
 	
@@ -34,7 +37,8 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		flagSet.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  noisefs discover                          # Show recent announcements\n")
-		fmt.Fprintf(os.Stderr, "  noisefs discover --tags \"4k,scifi\"        # Filter by tags\n")
+		fmt.Fprintf(os.Stderr, "  noisefs discover --tags \"res:4k,genre:scifi\"  # Filter by tags\n")
+		fmt.Fprintf(os.Stderr, "  noisefs discover --tags \"4k,scifi\" --ranked    # Ranked search\n")
 		fmt.Fprintf(os.Stderr, "  noisefs discover --category video         # Show only videos\n")
 		fmt.Fprintf(os.Stderr, "  noisefs discover --since 1h               # Last hour only\n")
 	}
@@ -65,7 +69,20 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		for i, tag := range tagList {
 			tagList[i] = strings.TrimSpace(tag)
 		}
-		announcements, err = annStore.Search(tagList, *limit)
+		
+		// Expand tags if requested
+		if *expand {
+			// Import the tags package for expansion
+			expandedTags := expandQueryTags(tagList)
+			tagList = expandedTags
+		}
+		
+		// Use ranked search if requested
+		if *ranked {
+			announcements, err = annStore.SearchWithScore(tagList, *limit)
+		} else {
+			announcements, err = annStore.Search(tagList, *limit)
+		}
 	} else if *topic != "" {
 		// Get by specific topic
 		topicHash := announce.HashTopic(*topic)
@@ -196,4 +213,9 @@ func formatDuration(d time.Duration) string {
 		days := int(d.Hours() / 24)
 		return fmt.Sprintf("%dd", days)
 	}
+}
+
+// expandQueryTags expands tags to include related tags
+func expandQueryTags(queryTags []string) []string {
+	return tags.ExpandQuery(queryTags)
 }

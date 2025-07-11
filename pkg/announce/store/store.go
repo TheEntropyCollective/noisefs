@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -210,6 +209,56 @@ func (s *Store) Search(tags []string, limit int) ([]*StoredAnnouncement, error) 
 	return results, nil
 }
 
+// SearchWithScore searches and ranks announcements by tag match score
+func (s *Store) SearchWithScore(tags []string, limit int) ([]*StoredAnnouncement, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	type scoredAnn struct {
+		ann   *StoredAnnouncement
+		score float64
+	}
+	
+	scored := make([]scoredAnn, 0)
+	
+	// Score all non-expired announcements
+	for _, ann := range s.byTimestamp {
+		if ann.IsExpired() {
+			continue
+		}
+		
+		// Calculate match score
+		if ann.TagBloom != "" {
+			matches, possibleMatches, err := announce.MatchesTags(ann.TagBloom, tags)
+			if err == nil && matches {
+				// Basic scoring: ratio of possible matches to query tags
+				score := float64(len(possibleMatches)) / float64(len(tags))
+				if score > 1.0 {
+					score = 1.0
+				}
+				scored = append(scored, scoredAnn{ann: ann, score: score})
+			}
+		}
+	}
+	
+	// Sort by score descending
+	for i := 0; i < len(scored)-1; i++ {
+		for j := 0; j < len(scored)-i-1; j++ {
+			if scored[j].score < scored[j+1].score {
+				scored[j], scored[j+1] = scored[j+1], scored[j]
+			}
+		}
+	}
+	
+	// Return top results
+	results := make([]*StoredAnnouncement, 0, limit)
+	for i := 0; i < len(scored) && i < limit; i++ {
+		results = append(results, scored[i].ann)
+	}
+	
+	return results, nil
+}
+
 // GetAll returns all non-expired announcements
 func (s *Store) GetAll() ([]*StoredAnnouncement, error) {
 	s.mu.RLock()
@@ -249,20 +298,24 @@ func (s *Store) hasAnnouncement(ann *announce.Announcement) bool {
 // removeFromIndices removes an announcement from all indices
 func (s *Store) removeFromIndices(stored *StoredAnnouncement) {
 	// Remove from topic index
-	s.removeFromSlice(&s.byTopic[stored.TopicHash], stored)
+	if topicAnns, ok := s.byTopic[stored.TopicHash]; ok {
+		s.byTopic[stored.TopicHash] = s.removeFromSlice(topicAnns, stored)
+	}
 	
 	// Remove from descriptor index
-	s.removeFromSlice(&s.byDescriptor[stored.Descriptor], stored)
+	if descAnns, ok := s.byDescriptor[stored.Descriptor]; ok {
+		s.byDescriptor[stored.Descriptor] = s.removeFromSlice(descAnns, stored)
+	}
 }
 
-// removeFromSlice removes an item from a slice
-func (s *Store) removeFromSlice(slice *[]*StoredAnnouncement, item *StoredAnnouncement) {
-	for i, v := range *slice {
+// removeFromSlice removes an item from a slice and returns the new slice
+func (s *Store) removeFromSlice(slice []*StoredAnnouncement, item *StoredAnnouncement) []*StoredAnnouncement {
+	for i, v := range slice {
 		if v == item {
-			*slice = append((*slice)[:i], (*slice)[i+1:]...)
-			break
+			return append(slice[:i], slice[i+1:]...)
 		}
 	}
+	return slice
 }
 
 // cleanupLoop periodically cleans up old announcements

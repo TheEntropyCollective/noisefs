@@ -240,7 +240,7 @@ func (s *RealtimeSubscriber) processMessages(ctx context.Context, sub *realtimeS
 }
 
 // processMessage processes a single PubSub message
-func (s *RealtimeSubscriber) processMessage(msg *shell.PubSubMessage, sub *realtimeSubscription) error {
+func (s *RealtimeSubscriber) processMessage(msg *shell.Message, sub *realtimeSubscription) error {
 	// Parse announcement
 	var ann announce.Announcement
 	if err := json.Unmarshal([]byte(msg.Data), &ann); err != nil {

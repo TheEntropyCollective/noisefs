@@ -1,20 +1,55 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Ready for Next Phase
+## Current Milestone: Distributed Descriptor Discovery System
 
-NoiseFS has successfully completed the "System Integration & End-to-End Functionality" milestone. The system is now:
-- Fully integrated with passing tests across all components
-- Proven to work end-to-end with demo scripts
-- Usable from the command line with a polished user experience
+### Sprint 5: Privacy and Security (pending)
+- [ ] Implement announcement validation
+- [ ] Add rate limiting
+- [ ] Create spam detection
+- [ ] Add reputation system
 
-Potential next milestones:
-1. **Web Interface Enhancement** - Improve the web UI with upload/download progress, file management
-2. **Performance Optimization** - Implement parallel block processing, smarter caching strategies
-3. **Advanced Privacy Features** - Add relay pool activation, cover traffic generation
-4. **Multi-Backend Support** - Add Filecoin, Arweave backends alongside IPFS
-5. **Production Hardening** - Add monitoring, metrics, deployment automation
+### Sprint 6: Advanced Features (pending)
+- [ ] Topic hierarchy
+- [ ] Cross-topic discovery
+- [ ] Enhanced search
+- [ ] Announcement aggregation
 
 ## Completed Major Milestones
+
+### ✅ Milestone 10 - Distributed Descriptor Discovery System (Sprints 1-4)
+Protocol-neutral descriptor announcement system with privacy-preserving tag-based discovery:
+
+**Sprint 1 - Core Infrastructure**: Built foundation for decentralized descriptor sharing:
+- Announcement structure with hashed topics for protocol neutrality
+- Bloom filter implementation for privacy-preserving tag matching
+- DHT and PubSub publishers for distributed announcement delivery
+- Topic normalization and validation
+
+**Sprint 2 - Publisher & Subscriber**: Implemented announcement distribution:
+- DHT publisher with composite key storage
+- Real-time PubSub channels for instant updates
+- Dual subscriber system (DHT + PubSub)
+- Local announcement store with expiry management
+
+**Sprint 3 - CLI Integration**: Added user-friendly commands:
+- `noisefs announce` - Announce files with topic and tags
+- `noisefs subscribe` - Subscribe to topics for automated discovery
+- `noisefs discover` - Search and filter announcements
+- Configuration management for subscriptions
+
+**Sprint 4 - Tag System**: Advanced content discovery features:
+- Tag parser with namespace validation (res:4k, genre:scifi)
+- Auto-tagging from file metadata using ffprobe
+- Tag conventions for standardized discovery
+- Tag matching with expansion and ranking
+- Bloom filter integration for privacy
+
+**Key Features**:
+- Protocol remains neutral through SHA-256 topic hashing
+- No curation features to minimize legal liability
+- Tags enable rich discovery without exposing file contents
+- Distributed architecture with no central authority
+- Privacy-preserving search through bloom filters
 
 ### ✅ Milestone 9 - System Integration & End-to-End Functionality
 Complete system integration with polished user experience:
