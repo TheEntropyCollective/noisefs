@@ -14,6 +14,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
+	shell "github.com/ipfs/go-ipfs-api"
 )
 
 func main() {
@@ -29,6 +30,15 @@ func main() {
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
 	)
+	
+	// Check for subcommands first
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "announce", "subscribe", "discover":
+			handleSubcommand(os.Args[1], os.Args[2:])
+			return
+		}
+	}
 	
 	flag.Parse()
 	
@@ -641,5 +651,98 @@ func formatBytes(bytes int64) string {
 		return fmt.Sprintf("%.2f KB", float64(bytes)/KB)
 	default:
 		return fmt.Sprintf("%d bytes", bytes)
+	}
+}
+
+// handleSubcommand handles announcement-related subcommands
+func handleSubcommand(cmd string, args []string) {
+	// Parse global flags that might be before the subcommand
+	var (
+		configFile = ""
+		ipfsAPI    = ""
+		quiet      = false
+		jsonOutput = false
+	)
+	
+	// Look for global flags in args
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-config":
+			if i+1 < len(args) {
+				configFile = args[i+1]
+				i++
+			}
+		case "-api":
+			if i+1 < len(args) {
+				ipfsAPI = args[i+1]
+				i++
+			}
+		case "-quiet":
+			quiet = true
+		case "-json":
+			jsonOutput = true
+		}
+	}
+	
+	// Special case for discover - doesn't need IPFS connection
+	if cmd == "discover" {
+		if err := discoverCommand(args, quiet, jsonOutput); err != nil {
+			if jsonOutput {
+				util.PrintJSONError(err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+			}
+			os.Exit(1)
+		}
+		return
+	}
+	
+	// Load configuration for commands that need IPFS
+	cfg, err := loadConfig(configFile)
+	if err != nil {
+		if jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error loading config: %s\n", err)
+		}
+		os.Exit(1)
+	}
+	
+	// Apply command-line override
+	if ipfsAPI != "" {
+		cfg.IPFS.APIEndpoint = ipfsAPI
+	}
+	
+	// Create IPFS client
+	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	if err != nil {
+		if jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error connecting to IPFS: %s\n", err)
+		}
+		os.Exit(1)
+	}
+	
+	// Create shell for PubSub
+	ipfsShell := shell.NewShell(cfg.IPFS.APIEndpoint)
+	
+	// Handle subcommands
+	switch cmd {
+	case "announce":
+		err = announceCommand(args, ipfsClient, ipfsShell, quiet, jsonOutput)
+	case "subscribe":
+		err = subscribeCommand(args, ipfsClient, ipfsShell, quiet, jsonOutput)
+	default:
+		err = fmt.Errorf("unknown command: %s", cmd)
+	}
+	
+	if err != nil {
+		if jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		}
+		os.Exit(1)
 	}
 }
