@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -178,11 +179,11 @@ func (cbc *CoverBlockCache) PrefetchPopular(popularBlocks []*PopularityInfo) {
 			continue
 		}
 		
-		// Create prefetched block entry (without actual data for now)
-		// In a real implementation, this would fetch the data
+		// Create prefetched block entry with placeholder
+		// Use EnhancedPrefetchPopular for real data fetching
 		cachedBlock := &CachedCoverBlock{
 			BlockID:         block.BlockID,
-			Data:            []byte("prefetched_placeholder"), // Would be actual data
+			Data:            []byte(fmt.Sprintf("prefetch_placeholder_%s", block.BlockID)),
 			Category:        block.Category,
 			PopularityScore: block.PopularityScore,
 			CachedAt:        time.Now(),

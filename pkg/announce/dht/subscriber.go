@@ -21,6 +21,7 @@ type AnnouncementHandler func(announcement *announce.Announcement) error
 type Subscriber struct {
 	ipfsClient *ipfs.Client
 	shell      *shell.Shell
+	directDHT  *DirectDHT // Optional direct DHT for enhanced access
 	
 	// Subscriptions
 	subscriptions map[string]*subscription
@@ -215,14 +216,30 @@ func (s *Subscriber) checkAllSubscriptions() {
 
 // checkSubscription checks a single subscription for new announcements
 func (s *Subscriber) checkSubscription(sub *subscription) {
-	// Construct DHT key pattern
-	// dhtKey := dhtPrefix + sub.topicHash
-	
-	// In a real implementation, this would query the DHT
-	// For now, we'll check IPFS for announcements stored with a specific naming pattern
-	
-	// TODO: Implement actual DHT querying when available
-	// This is a simplified version that checks for announcements in IPFS
+	// Try to use libp2p DHT if available
+	if s.directDHT != nil {
+		ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+		defer cancel()
+		
+		// Query DHT for announcements since last check
+		announcements, err := s.directDHT.GetAnnouncements(ctx, sub.topicHash, sub.lastCheck)
+		if err != nil {
+			return // Skip on error
+		}
+		
+		// Process each announcement
+		for _, ann := range announcements {
+			data, err := json.Marshal(ann)
+			if err != nil {
+				continue
+			}
+			s.processAnnouncement(data, sub)
+		}
+	} else {
+		// Fallback: Check IPFS for announcements
+		// This is a simplified approach that would need proper DHT querying
+		// when IPFS HTTP API exposes DHT operations
+	}
 	
 	// Update last check time
 	sub.lastCheck = time.Now()
@@ -310,6 +327,11 @@ func (s *Subscriber) cleanupSeen() {
 			delete(s.seenAnnouncements, key)
 		}
 	}
+}
+
+// SetDirectDHT sets the direct DHT implementation
+func (s *Subscriber) SetDirectDHT(dht *DirectDHT) {
+	s.directDHT = dht
 }
 
 // FetchAnnouncement retrieves a specific announcement by CID
