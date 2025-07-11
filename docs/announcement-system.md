@@ -225,14 +225,16 @@ The system carefully avoids features that could create liability:
 descriptorCID := noiseFS.Upload(file)
 
 // 2. Create announcement
-announcement := announce.Create(
+announcement, err := announce.Create(
     descriptorCID,
-    topic: "books/classic/shakespeare",
-    tags: ["format:pdf", "lang:en", "public-domain"],
+    announce.CreateOptions{
+        Topic: "books/classic/shakespeare",
+        Tags: []string{"format:pdf", "lang:en", "public-domain"},
+    },
 )
 
 // 3. Publish to network
-publisher.Publish(announcement)
+err = publisher.Publish(announcement)
 // - Stores in DHT
 // - Broadcasts to PubSub
 // - Topics are hashed automatically
@@ -255,9 +257,9 @@ handler := func(ann *Announcement) {
 }
 
 // 3. Search stored announcements
-results := discover.Search(
-    tags: ["format:pdf", "public-domain"],
-    since: 24*time.Hour,
+results, err := discover.Search(
+    []string{"format:pdf", "public-domain"},
+    24*time.Hour,
 )
 ```
 
@@ -332,13 +334,16 @@ All announcements are validated:
 validator := announce.NewValidator(config)
 
 // Checks performed:
-- Version compatibility
-- Descriptor CID format
-- Topic hash format (64 hex chars)
-- Timestamp reasonableness
-- TTL limits (min 1 hour, max 7 days)
-- Size limits (max 4KB)
-- Required fields presence
+if err := validator.Validate(announcement); err != nil {
+    // Handle validation error
+}
+// - Version compatibility
+// - Descriptor CID format
+// - Topic hash format (64 hex chars)
+// - Timestamp reasonableness
+// - TTL limits (min 1 hour, max 7 days)
+// - Size limits (max 4KB)
+// - Required fields presence
 ```
 
 ### 2. Rate Limiting
@@ -349,10 +354,10 @@ Prevents spam and abuse:
 rateLimiter := announce.NewRateLimiter(config)
 
 // Default limits:
-- 10 announcements per minute
-- 100 per hour  
-- 500 per day
-- Burst allowance: 5
+// - 10 announcements per minute
+// - 100 per hour  
+// - 500 per day
+// - Burst allowance: 5
 
 // Per-source tracking
 sourceID := topicHash + ":" + nonce
@@ -369,11 +374,11 @@ Multi-layered spam detection:
 spamDetector := announce.NewSpamDetector(config)
 
 // Detection methods:
-1. Duplicate detection (same content hash)
-2. Rapid reannouncement detection
-3. Suspicious pattern matching
-4. Cross-topic spam identification
-5. Anomaly detection (unusual TTL, future timestamps)
+// 1. Duplicate detection (same content hash)
+// 2. Rapid reannouncement detection
+// 3. Suspicious pattern matching
+// 4. Cross-topic spam identification
+// 5. Anomaly detection (unusual TTL, future timestamps)
 
 // Spam scoring
 score := spamDetector.SpamScore(announcement)
@@ -390,17 +395,17 @@ Trust-based filtering:
 reputation := announce.NewReputationSystem(config)
 
 // Reputation tracking:
-- Initial score: 50 (neutral)
-- Valid announcement: +1 point
-- Spam/invalid: -5 points
-- Time decay: -0.1 points/day inactive
+// - Initial score: 50 (neutral)
+// - Valid announcement: +1 point
+// - Spam/invalid: -5 points
+// - Time decay: -0.1 points/day inactive
 
 // Trust levels:
-- 80-100: Trusted
-- 60-79: Good
-- 40-59: Neutral
-- 20-39: Suspicious
-- 0-19: Untrusted
+// - 80-100: Trusted
+// - 60-79: Good
+// - 40-59: Neutral
+// - 20-39: Suspicious
+// - 0-19: Untrusted
 
 // Usage
 if reputation.IsBlacklisted(sourceID) {
@@ -444,8 +449,8 @@ results := discovery.DiscoverRelated("content/books/technical",
     })
 
 // Results include:
-- Announcements from content/books/educational (sibling)
-- Announcements from content/papers/technical (semantic relation)
+// - Announcements from content/books/educational (sibling)
+// - Announcements from content/papers/technical (semantic relation)
 ```
 
 ### 3. Advanced Search

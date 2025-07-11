@@ -86,7 +86,7 @@ announcement, err := creator.CreateFromFile(
 )
 
 // Create manual announcement
-announcement := creator.Create(
+announcement, err := creator.Create(
     descriptorCID,
     announce.CreateOptions{
         Topic:     "documents/books/technical",
@@ -190,7 +190,7 @@ score, err := matcher.MatchWithScore(contentTags, queryTags)
 // Returns: 0.5 (1 out of 2 query tags match)
 
 // Rank items by tag match
-items := []tags.TaggedItem{...}
+items := []tags.TaggedItem{} // populate with actual items
 ranked := matcher.RankByTags(items, queryTags)
 ```
 
@@ -413,10 +413,12 @@ manager := security.NewManager(&security.Config{
 err := manager.CheckAnnouncement(announcement, sourceID)
 
 // Get source information
-info := manager.GetSourceInfo(sourceID)
-fmt.Printf("Trust level: %s\n", info.TrustLevel)
-fmt.Printf("Rate limit remaining: %d/hour\n", 
-    info.RateLimit.HourRemaining)
+info, err := manager.GetSourceInfo(sourceID)
+if err == nil {
+    fmt.Printf("Trust level: %s\n", info.TrustLevel)
+    fmt.Printf("Rate limit remaining: %d/hour\n", 
+        info.RateLimit.HourRemaining)
+}
 
 // Get security report
 report := manager.SecurityReport()
@@ -439,15 +441,18 @@ store, err := store.NewStore(store.StoreConfig{
 err = store.Add(announcement, "dht")  // source: "dht" or "pubsub"
 
 // Query announcements
-byTopic := store.GetByTopic(topicHash)
-recent := store.GetRecent(time.Now().Add(-24*time.Hour), 100)
-byDescriptor := store.GetByDescriptor(descriptorCID)
+byTopic, err := store.GetByTopic(topicHash)
+recent, err := store.GetRecent(time.Now().Add(-24*time.Hour), 100)
+byDescriptor, err := store.GetByDescriptor(descriptorCID)
 
 // Search by tags
-results := store.Search([]string{"res:4k", "genre:scifi"}, 50)
+results, err := store.Search([]string{"res:4k", "genre:scifi"}, 50)
 
 // Get statistics
-total, byTopic, expired := store.GetStats()
+stats := store.GetStats()
+total := stats.Total
+byTopicCount := stats.ByTopic
+expired := stats.Expired
 ```
 
 ### Search Engine
@@ -457,6 +462,7 @@ total, byTopic, expired := store.GetStats()
 engine := announce.NewSearchEngine(store, hierarchy)
 
 // Build search query
+sinceTime := time.Now().Add(-30*24*time.Hour)
 query := announce.SearchQuery{
     Keywords:    []string{"complete", "edition"},
     IncludeTags: []string{"format:pdf", "public-domain"},
@@ -472,10 +478,10 @@ query := announce.SearchQuery{
 results, err := engine.Search(query)
 
 // Find similar content
-similar := engine.SearchSimilar(announcementID, 20)
+similar, err := engine.SearchSimilar(announcementID, 20)
 
 // Get search suggestions
-suggestions := engine.Suggest("sci", 10)
+suggestions, err := engine.Suggest("sci", 10)
 ```
 
 ### Cross-Topic Discovery

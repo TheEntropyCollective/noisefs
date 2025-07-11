@@ -212,7 +212,8 @@ coverTopics := []string{
 }
 
 // Real interest hidden among others
-for _, topic := range append(coverTopics, realTopic) {
+allTopics := append(coverTopics, realTopic)
+for _, topic := range allTopics {
     subscribe(topic)
 }
 ```
@@ -286,10 +287,10 @@ announcement := {
 }
 
 // What system CANNOT determine:
-- Is this copyrighted content?
-- What does the topic mean?
-- What tags are actually present?
-- Who published this?
+// - Is this copyrighted content?
+// - What does the topic mean?
+// - What tags are actually present?
+// - Who published this?
 ```
 
 ## Comparison with Other Systems
