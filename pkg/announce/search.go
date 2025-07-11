@@ -12,6 +12,7 @@ type SearchEngine struct {
 	store       AnnouncementStore
 	hierarchy   *TopicHierarchy
 	tagMatcher  *TagMatcher
+	tagRecovery *TagRecovery
 	
 	// Indexing
 	tagIndex    map[string][]string // tag -> announcement IDs
@@ -104,14 +105,24 @@ type SearchResult struct {
 
 // NewSearchEngine creates a new search engine
 func NewSearchEngine(store AnnouncementStore, hierarchy *TopicHierarchy) *SearchEngine {
+	// Create tag recovery with default config
+	tagRecoveryConfig := TagRecoveryConfig{
+		MinConfidence:      0.7,
+		MaxCandidates:      1000,
+		LearningRate:       0.1,
+		PatternRetention:   7 * 24 * time.Hour,
+		EnablePrefixSearch: true,
+	}
+	
 	return &SearchEngine{
-		store:      store,
-		hierarchy:  hierarchy,
-		tagMatcher: NewTagMatcher(TagMatchAny),
-		tagIndex:   make(map[string][]string),
-		topicIndex: make(map[string][]string),
-		timeIndex:  newTimeIndex(),
-		maxResults: 1000,
+		store:       store,
+		hierarchy:   hierarchy,
+		tagMatcher:  NewTagMatcher(TagMatchAny),
+		tagRecovery: NewTagRecovery(tagRecoveryConfig),
+		tagIndex:    make(map[string][]string),
+		topicIndex:  make(map[string][]string),
+		timeIndex:   newTimeIndex(),
+		maxResults:  1000,
 	}
 }
 
@@ -521,8 +532,15 @@ func (se *SearchEngine) sortResults(results []*SearchResult, sortBy SortField, o
 }
 
 func (se *SearchEngine) extractTagsFromBloom(bloomStr string) []string {
-	// This is approximate - bloom filters don't allow extraction
-	// In practice, we'd test known tags against the bloom filter
+	// Use enhanced tag recovery if available
+	if se.tagRecovery != nil {
+		tags, err := se.tagRecovery.RecoverTags(bloomStr)
+		if err == nil {
+			return tags
+		}
+	}
+	
+	// Fallback to basic recovery
 	knownTags := []string{
 		"res:4k", "res:1080p", "res:720p",
 		"genre:scifi", "genre:drama", "genre:comedy",
@@ -599,4 +617,32 @@ type TagMatcher struct {
 
 func NewTagMatcher(mode TagMatchMode) *TagMatcher {
 	return &TagMatcher{mode: mode}
+}
+
+// LearnFromSearch learns from user search interactions
+func (se *SearchEngine) LearnFromSearch(query SearchQuery, selectedResults []*SearchResult) {
+	// Learn tags from the query
+	if se.tagRecovery != nil && len(query.IncludeTags) > 0 {
+		se.tagRecovery.LearnFromTags(query.IncludeTags)
+	}
+	
+	// Learn tags from selected results
+	for _, result := range selectedResults {
+		if result.Announcement.TagBloom != "" {
+			tags := se.extractTagsFromBloom(result.Announcement.TagBloom)
+			if len(tags) > 0 && se.tagRecovery != nil {
+				se.tagRecovery.LearnFromTags(tags)
+			}
+		}
+	}
+}
+
+// GetTagRecoveryStats returns tag recovery statistics
+func (se *SearchEngine) GetTagRecoveryStats() map[string]interface{} {
+	if se.tagRecovery != nil {
+		return se.tagRecovery.GetStatistics()
+	}
+	return map[string]interface{}{
+		"enabled": false,
+	}
 }
