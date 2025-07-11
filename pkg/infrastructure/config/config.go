@@ -33,6 +33,9 @@ type Config struct {
 
 	// Security Configuration
 	Security SecurityConfig `json:"security"`
+	
+	// Tor Configuration
+	Tor TorConfig `json:"tor"`
 }
 
 // IPFSConfig holds IPFS-related configuration
@@ -98,6 +101,24 @@ type SecurityConfig struct {
 	AntiForensics      bool `json:"anti_forensics"`
 }
 
+// TorConfig holds Tor-related configuration
+type TorConfig struct {
+	Enabled      bool   `json:"enabled"`
+	SOCKSProxy   string `json:"socks_proxy"`
+	ControlPort  string `json:"control_port"`
+	
+	// Upload settings (default: enabled for privacy)
+	UploadEnabled     bool `json:"upload_enabled"`
+	UploadJitterMin   int  `json:"upload_jitter_min_seconds"`
+	UploadJitterMax   int  `json:"upload_jitter_max_seconds"`
+	
+	// Download settings (default: disabled for performance)  
+	DownloadEnabled   bool `json:"download_enabled"`
+	
+	// Announcement settings
+	AnnounceEnabled   bool `json:"announce_enabled"`
+}
+
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
@@ -151,6 +172,16 @@ func DefaultConfig() *Config {
 			EncryptLocalIndex:  false, // Disabled by default for backward compatibility
 			SecureMemory:       true,  // Enable secure memory handling
 			AntiForensics:      false, // Disabled by default (user choice)
+		},
+		Tor: TorConfig{
+			Enabled:         true,
+			SOCKSProxy:      "127.0.0.1:9050",
+			ControlPort:     "127.0.0.1:9051",
+			UploadEnabled:   true,  // ON by default for privacy
+			UploadJitterMin: 1,     // 1 second minimum jitter
+			UploadJitterMax: 5,     // 5 second maximum jitter
+			DownloadEnabled: false, // OFF by default for performance
+			AnnounceEnabled: true,  // ON by default for privacy
 		},
 	}
 }
