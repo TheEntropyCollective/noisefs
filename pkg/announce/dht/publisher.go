@@ -69,8 +69,9 @@ func NewPublisher(config PublisherConfig) (*Publisher, error) {
 
 // Publish publishes an announcement to the DHT
 func (p *Publisher) Publish(ctx context.Context, announcement *announce.Announcement) error {
-	// Validate announcement
-	if err := announcement.Validate(); err != nil {
+	// Use comprehensive validation
+	validator := announce.NewValidator(nil)
+	if err := validator.ValidateAnnouncement(announcement); err != nil {
 		return fmt.Errorf("invalid announcement: %w", err)
 	}
 	

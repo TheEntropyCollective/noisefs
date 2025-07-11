@@ -11,6 +11,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/dht"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/pubsub"
+	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
@@ -195,8 +196,21 @@ func monitorSubscriptions(subConfig *config.Subscriptions, ipfsClient *ipfs.Clie
 		return fmt.Errorf("failed to create realtime subscriber: %w", err)
 	}
 	
-	// Create handler
+	// Create security manager
+	securityManager := security.NewManager(nil)
+	defer securityManager.Close()
+	
+	// Create handler with security checks
 	handler := func(ann *announce.Announcement) error {
+		// Perform security checks
+		sourceID := ann.TopicHash + ":" + ann.Nonce // Use topic+nonce as source ID
+		if err := securityManager.CheckAnnouncement(ann, sourceID); err != nil {
+			if !quiet {
+				fmt.Printf("\n[%s] Announcement rejected: %s\n", time.Now().Format("15:04:05"), err)
+			}
+			return nil // Don't propagate security errors
+		}
+		
 		// Store announcement
 		if err := annStore.Add(ann, "monitor"); err != nil {
 			return err
