@@ -193,6 +193,20 @@ func (pm *PeerManager) RegisterStrategy(name string, strategy PeerSelectionStrat
 	pm.strategies[name] = strategy
 }
 
+// SetDefaultStrategy sets the default peer selection strategy
+func (pm *PeerManager) SetDefaultStrategy(strategy string) error {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	
+	// Verify the strategy exists
+	if _, exists := pm.strategies[strategy]; !exists {
+		return fmt.Errorf("unknown selection strategy: %s", strategy)
+	}
+	
+	pm.defaultStrategy = strategy
+	return nil
+}
+
 // SelectPeers selects peers using the specified strategy
 func (pm *PeerManager) SelectPeers(ctx context.Context, strategy string, criteria SelectionCriteria) ([]peer.ID, error) {
 	pm.mu.RLock()

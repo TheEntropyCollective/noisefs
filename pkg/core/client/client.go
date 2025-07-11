@@ -566,17 +566,17 @@ func (c *Client) OptimizeForRandomizers() {
 	
 	// Switch to randomizer-aware eviction policy if adaptive cache is enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-		// TODO: Implement NewRandomizerAwareEvictionPolicy
-		// For now, keep the existing policy
+		randomizerPolicy := cache.NewRandomizerAwareEvictionPolicy()
+		c.adaptiveCache.SetEvictionPolicy(randomizerPolicy)
 	}
 }
 
 // SetPeerSelectionStrategy sets the default peer selection strategy
-func (c *Client) SetPeerSelectionStrategy(strategy string) {
+func (c *Client) SetPeerSelectionStrategy(strategy string) error {
 	if c.peerManager != nil {
-		// TODO: Implement SetDefaultStrategy method on PeerManager
-		// For now, this is a no-op
+		return c.peerManager.SetDefaultStrategy(strategy)
 	}
+	return fmt.Errorf("peer manager not initialized")
 }
 
 // GetConnectedPeers returns currently connected peers
