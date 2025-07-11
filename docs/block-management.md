@@ -2,343 +2,241 @@
 
 ## Overview
 
-The Block Management System is the foundational component of NoiseFS, implementing the core OFFSystem (Owner-Free File System) architecture. It provides the cryptographic anonymization that enables plausible deniability and privacy protection for all stored content.
+The Block Management System is the foundational component of NoiseFS, implementing the core OFFSystem (Owner-Free File System) architecture. It provides cryptographic anonymization through XOR operations and enforces mandatory block reuse with public domain content mixing for legal protection.
 
 ## Core Architecture
 
 ### OFFSystem Principles
 
-NoiseFS implements a revolutionary approach to anonymous storage through the OFFSystem architecture:
+NoiseFS implements the OFFSystem architecture with these core principles:
 
 1. **No Original Content Storage**: Files are never stored in their original form
 2. **Mathematical Anonymization**: All blocks appear as cryptographically random data
-3. **Multi-Use Blocks**: Each stored block simultaneously serves multiple files
-4. **Plausible Deniability**: Storage nodes cannot determine what content they host
+3. **Mandatory Block Reuse**: Every block MUST be part of multiple files
+4. **Public Domain Mixing**: Files include public domain content for legal protection
+5. **Plausible Deniability**: Storage nodes cannot determine what content they host
 
-### Block Splitting Strategy
+### Block Implementation
 
-#### Block Size Selection: 128 KiB
-
-The selection of 128 KiB (131,072 bytes) as the standard block size represents an optimal balance between multiple competing factors:
-
-**Performance Considerations:**
-- **Network Efficiency**: 128 KiB minimizes protocol overhead while avoiding fragmentation
-- **IPFS Optimization**: Aligns with IPFS chunk sizes for efficient DHT operations
-- **Memory Management**: Fits comfortably in CPU caches for XOR operations
-- **Parallel Processing**: Enables efficient multi-threaded processing
-
-**Privacy Considerations:**
-- **Anonymity Set**: Large enough to prevent statistical analysis
-- **Pattern Obfuscation**: Masks file size patterns effectively
-- **Randomizer Reuse**: Optimal size for maximizing block reuse
-
-**Storage Considerations:**
-- **Deduplication**: Balances granularity with storage efficiency
-- **Overhead Minimization**: Reduces metadata overhead per byte stored
+The core block structure is defined in `pkg/core/blocks/block.go`:
 
 ```go
-const (
-    DefaultBlockSize = 128 * 1024  // 128 KiB
-    MinBlockSize     = 4 * 1024    // 4 KiB minimum
-    MaxBlockSize     = 1024 * 1024 // 1 MiB maximum
-)
+// Block represents a data block in the NoiseFS system
+type Block struct {
+    ID   string  // SHA-256 content hash
+    Data []byte  // Block data
+}
+
+const DefaultBlockSize = 128 * 1024  // 128 KiB standard block size
 ```
 
 ### 3-Tuple XOR Anonymization
 
-The heart of NoiseFS's privacy guarantee lies in its 3-tuple XOR anonymization scheme:
+NoiseFS uses a 3-tuple XOR scheme for anonymization:
 
 ```
 AnonymizedBlock = SourceBlock ⊕ Randomizer1 ⊕ Randomizer2
 ```
 
-#### Mathematical Foundation
-
-The XOR operation provides perfect secrecy when combined with truly random data:
-
-1. **Information-Theoretic Security**: Without both randomizers, the anonymized block is indistinguishable from random data
-2. **Reversibility**: `Source = Anonymized ⊕ Randomizer1 ⊕ Randomizer2`
-3. **Commutativity**: Order of operations doesn't matter: `A ⊕ B = B ⊕ A`
-
-#### Implementation Details
+This is implemented in the `XOR3` method:
 
 ```go
-func (b *Block) Anonymize(r1, r2 *Block) (*Block, error) {
-    if len(b.Data) != len(r1.Data) || len(b.Data) != len(r2.Data) {
-        return nil, ErrBlockSizeMismatch
+// XOR3 performs XOR operation between three blocks (data XOR randomizer1 XOR randomizer2)
+// This implements the 3-tuple anonymization used in OFFSystem
+func (b *Block) XOR3(randomizer1, randomizer2 *Block) (*Block, error) {
+    if len(b.Data) != len(randomizer1.Data) {
+        return nil, errors.New("data block and randomizer1 must have the same size")
+    }
+    if len(b.Data) != len(randomizer2.Data) {
+        return nil, errors.New("data block and randomizer2 must have the same size")
     }
     
-    anonymized := make([]byte, len(b.Data))
+    result := make([]byte, len(b.Data))
     for i := range b.Data {
-        anonymized[i] = b.Data[i] ^ r1.Data[i] ^ r2.Data[i]
+        result[i] = b.Data[i] ^ randomizer1.Data[i] ^ randomizer2.Data[i]
     }
     
-    return &Block{
-        ID:   generateBlockID(anonymized),
-        Data: anonymized,
-    }, nil
+    return NewBlock(result)
 }
 ```
 
-### Block ID Generation
+## Mandatory Block Reuse System
 
-Block IDs use SHA-256 hashes for content addressing:
+### Universal Block Pool
+
+The `UniversalBlockPool` (in `pkg/privacy/reuse/universal_pool.go`) manages a mandatory pool of reusable blocks that includes public domain content:
 
 ```go
-func generateBlockID(data []byte) string {
-    hash := sha256.Sum256(data)
-    return hex.EncodeToString(hash[:])
+type UniversalBlockPool struct {
+    blocks           map[string]*PoolBlock      // CID -> PoolBlock
+    blocksBySize     map[int][]string          // size -> []CID
+    publicDomainCIDs map[string]bool           // Track public domain blocks
+    config           *PoolConfig
+    initialized      bool
+}
+
+type PoolBlock struct {
+    CID              string
+    Block            *blocks.Block
+    Size             int
+    IsPublicDomain   bool
+    Source           string    // "bootstrap", "upload", "genesis"
+    ContentType      string    // "text", "image", "audio", etc.
+    UsageCount       int64
+    PopularityScore  float64
 }
 ```
 
-**Properties:**
-- **Deterministic**: Same content always produces same ID
-- **Collision Resistant**: SHA-256 provides 2^128 collision resistance
-- **Uniform Distribution**: IDs are evenly distributed across keyspace
+### Pool Initialization
 
-## Block Selection and Guaranteed Reuse
+The pool is initialized with:
 
-NoiseFS implements a sophisticated block selection system with a fundamental guarantee: **every stored block MUST be part of multiple files**. This isn't just an optimization—it's a core security requirement.
-
-### Why This Matters
-
-The block selection strategy determines:
-- **Storage Efficiency**: 2x vs 10x overhead
-- **Performance**: 80% vs 20% cache hit rates  
-- **Privacy**: Size of anonymity sets
-- **Censorship Resistance**: Collateral damage from removal attempts
-
-### The Unified Reuse Architecture
+1. **Genesis Blocks**: Deterministic blocks for each standard size
+2. **Public Domain Content**: Blocks from Project Gutenberg, artwork, etc.
 
 ```go
-type BlockReuseSystem struct {
+func (pool *UniversalBlockPool) Initialize() error {
+    // Generate deterministic genesis blocks
+    if err := pool.generateGenesisBlocks(); err != nil {
+        return err
+    }
+    
+    // Load public domain blocks from bootstrap content
+    if err := pool.loadPublicDomainBlocks(); err != nil {
+        return err
+    }
+    
+    // Validate pool meets minimum requirements
+    return pool.validatePool()
+}
+```
+
+### Reuse Enforcement
+
+The `ReuseEnforcer` (in `pkg/privacy/reuse/enforcer.go`) validates that uploads meet reuse requirements:
+
+```go
+type ReusePolicy struct {
+    MinReuseRatio        float64  // Minimum % of blocks that must be reused (default: 50%)
+    PublicDomainRatio    float64  // Minimum % of public domain blocks (default: 30%)
+    PopularBlockRatio    float64  // Minimum % of popular blocks (default: 40%)
+    MaxNewBlocks         int      // Maximum new blocks per upload (default: 10)
+    MinFileAssociations  int      // Minimum files each block must serve (default: 3)
+    EnforcementLevel     string   // "strict", "moderate", "permissive"
+}
+```
+
+Validation process:
+
+```go
+func (enforcer *ReuseEnforcer) ValidateUpload(
+    descriptor *descriptors.Descriptor, 
+    fileData []byte,
+) (*ValidationResult, error) {
+    result := &ValidationResult{
+        Valid:      true,
+        Violations: make([]string, 0),
+    }
+    
+    // Extract block CIDs from descriptor
+    blockCIDs := enforcer.extractBlockCIDs(descriptor)
+    
+    // Check reuse ratio
+    enforcer.checkReuseRatio(blockCIDs, result)
+    
+    // Check public domain ratio
+    enforcer.checkPublicDomainRatio(blockCIDs, result)
+    
+    // Check new block limit
+    if result.NewBlockCount > enforcer.policy.MaxNewBlocks {
+        result.Violations = append(result.Violations, 
+            fmt.Sprintf("too many new blocks: %d", result.NewBlockCount))
+    }
+    
+    return result, nil
+}
+```
+
+## Public Domain Mixing
+
+### Legal Protection Through Mixing
+
+The `PublicDomainMixer` (in `pkg/privacy/reuse/mixer.go`) ensures every file includes public domain content for legal protection:
+
+```go
+type PublicDomainMixer struct {
     pool            *UniversalBlockPool
-    selector        *RandomizerSelector
-    enforcer        *ReuseEnforcer
-    minimumReuse    int  // Default: 3 files per block
+    config          *MixerConfig
+    mixingStrategy  MixingStrategy
 }
 
-// Every block has multiple roles across different files
-type PooledBlock struct {
-    ID              string
-    FileCount       int                  // Number of files using this
-    FileReferences  map[string]FileRole  // How each file uses it
-    Popularity      float64              // Access frequency score
+type MixerConfig struct {
+    MinPublicDomainRatio float64  // Minimum % of public domain blocks (default: 30%)
+    MixingAlgorithm      string   // "deterministic", "random", "optimal"
+    VerificationLevel    string   // "strict", "moderate", "basic"
+    LegalCompliance      bool     // Enable extra legal protections
 }
-
-type FileRole int
-const (
-    RoleSource      FileRole = iota  // Original data block
-    RoleRandomizer1                  // First XOR randomizer
-    RoleRandomizer2                  // Second XOR randomizer
-    RoleAnonymized                   // XOR result block
-)
 ```
 
-### Selection Strategies
+### Mixing Process
 
-The system chooses randomizer blocks based on context:
+Files are mixed with public domain content during upload:
 
 ```go
-func (s *RandomizerSelector) SelectRandomizers(
-    file *File,
-    sensitivity SensitivityLevel,
-) ([]*Block, error) {
-    switch sensitivity {
-    case SensitivityPublic:
-        // Maximum efficiency: reuse popular blocks
-        return s.selectPopularBlocks(2)
-        
-    case SensitivityNormal:
-        // Balanced: one popular, one medium
-        return s.selectBalancedBlocks()
-        
-    case SensitivityHigh:
-        // Privacy-focused: less popular blocks
-        return s.selectPrivateBlocks()
-        
-    case SensitivityMaximum:
-        // Maximum privacy: new random blocks
-        return s.generateNewBlocks(2)
-    }
-}
-
-// Popular block selection maximizes reuse
-func (s *RandomizerSelector) selectPopularBlocks(count int) []*Block {
-    // Get blocks already used by many files
-    popular := s.pool.GetBlocksByPopularity(95) // Top 5%
+func (mixer *PublicDomainMixer) MixFileWithPublicDomain(
+    fileBlocks []*blocks.Block,
+) (*descriptors.Descriptor, *MixingPlan, error) {
+    // Create mixing plan
+    plan, err := mixer.mixingStrategy.DetermineOptimalMixing(fileBlocks)
     
-    selected := make([]*Block, count)
-    for i := 0; i < count; i++ {
-        block := popular[i]
-        
-        // Ensure we can reuse this block
-        if s.enforcer.CanReuse(block) {
-            selected[i] = block
-            s.pool.IncrementUsage(block)
-        }
-    }
+    // Execute mixing to create descriptor
+    descriptor, err := mixer.executeMixingPlan(fileBlocks, plan)
     
-    return selected
+    // Generate legal attestation
+    attestation, err := mixer.generateLegalAttestation(fileBlocks, plan)
+    plan.LegalAttestation = attestation
+    
+    return descriptor, plan, nil
 }
 ```
 
-### Enforcing Guaranteed Reuse
+### Legal Attestation
 
-Every block must maintain minimum usage:
+Each mixed file includes a legal attestation proving public domain content inclusion:
 
 ```go
-func (e *ReuseEnforcer) EnforceOnUpload(
-    file *File,
-    blocks []*Block,
-) error {
-    for _, block := range blocks {
-        pooled := e.pool.Get(block.ID)
-        
-        if pooled == nil {
-            // New block: ensure immediate multi-use
-            if err := e.bootstrapNewBlock(block); err != nil {
-                return err
-            }
-        } else if pooled.FileCount < e.minimumReuse {
-            // Existing block: maintain minimum usage
-            if err := e.increaseUsage(pooled); err != nil {
-                return err
-            }
-        }
-    }
-    
-    return nil
-}
-
-func (e *ReuseEnforcer) bootstrapNewBlock(block *Block) error {
-    // Option 1: Use as randomizer for pending uploads
-    if files := e.findPendingFiles(block.Size); len(files) >= 2 {
-        for _, f := range files[:2] {
-            f.AddRandomizer(block)
-        }
-        return nil
-    }
-    
-    // Option 2: Generate synthetic files for cover traffic
-    for i := 0; i < e.minimumReuse; i++ {
-        synthetic := e.generateSyntheticFile(block)
-        e.pool.AddFileReference(block, synthetic)
-    }
-    
-    return nil
+type LegalAttestation struct {
+    AttestationID        string
+    FileHash             string
+    PublicDomainSources  []string  // Sources of public domain content
+    LicenseProofs        []string  // Proof of public domain status
+    MixingTimestamp      time.Time
+    ComplianceCertificate string
 }
 ```
 
-### The Lifecycle of Shared Blocks
+## Block Selection Process
 
-```
-1. Creation → Assigned to ≥3 files immediately
-2. Popular → Used by 10-100 files, cached everywhere  
-3. Aging → Still maintains minimum usage
-4. Deletion → Only when no files need it
-```
-
-### Security Properties from Guaranteed Reuse
+When creating a file, the system selects randomizer blocks from the universal pool:
 
 ```go
-// Storage provider perspective:
-// "I store random-looking blocks. Each block is part of 3-100 
-//  different files. I cannot identify which files any block 
-//  belongs to, nor can I remove specific content without 
-//  affecting many other files."
-
-type SecurityBenefits struct {
-    // Cannot identify content
-    PlausibleDeniability bool
-    
-    // Cannot target specific files
-    CensorshipResistance bool
-    
-    // Cannot analyze access patterns
-    TrafficAnalysisMitigation bool
-    
-    // Protected by Section 230
-    LegalProtection bool
-}
-```
-
-### Real-World Impact
-
-The smart selection and guaranteed reuse system delivers:
-
-```
-Storage Efficiency:
-- Naive approach: 900% overhead (9x storage)
-- Smart selection: 180% overhead (1.8x storage)
-- Savings: 7.2TB saved per 1TB stored
-
-Performance:
-- Cache hit rate: 81.8% (vs 12% naive)
-- Network calls: 60% reduction
-- Latency: 450ms → 85ms average
-
-Privacy:
-- Anonymity set: 10-100x larger
-- Correlation resistance: Near impossible
-- Censorship cost: Exponential with reuse
-
-## Technical Trade-offs
-
-### Block Size Trade-offs
-
-| Block Size | Network Efficiency | Storage Overhead | Anonymity Set | CPU Usage |
-|------------|-------------------|------------------|---------------|-----------|
-| 4 KB       | Low (high overhead) | High (metadata) | Large | High |
-| 128 KB     | **Optimal** | **Optimal** | **Optimal** | **Optimal** |
-| 1 MB       | Good | Low | Small | Low |
-
-### Randomizer Reuse Trade-offs
-
-**High Reuse (Current Approach):**
-- ✅ Excellent storage efficiency (180% overhead)
-- ✅ Improved cache performance
-- ✅ Larger anonymity sets
-- ⚠️ Potential correlation attacks if not managed carefully
-
-**Low Reuse (Random Selection):**
-- ❌ Poor storage efficiency (300%+ overhead)
-- ❌ Increased network traffic
-- ✅ Stronger isolation between files
-- ✅ Simpler security analysis
-
-### Performance Optimizations
-
-1. **Parallel XOR Operations**: Multi-threaded processing for large files
-2. **SIMD Instructions**: Vectorized XOR operations where available
-3. **Memory Pooling**: Reuse byte slices to reduce GC pressure
-4. **Streaming Processing**: Process blocks as they arrive
-
-```go
-func (b *BlockProcessor) ProcessParallel(blocks []*Block) error {
-    var wg sync.WaitGroup
-    errors := make(chan error, len(blocks))
-    
-    for _, block := range blocks {
-        wg.Add(1)
-        go func(b *Block) {
-            defer wg.Done()
-            if err := b.Process(); err != nil {
-                errors <- err
-            }
-        }(block)
+func (pool *UniversalBlockPool) GetRandomizerBlock(size int) (*PoolBlock, error) {
+    blocks := pool.blocksBySize[size]
+    if len(blocks) == 0 {
+        return nil, fmt.Errorf("no blocks available for size %d", size)
     }
     
-    wg.Wait()
-    close(errors)
+    // Select random block from pool
+    index := rand.Intn(len(blocks))
+    cid := blocks[index]
+    poolBlock := pool.blocks[cid]
     
-    // Collect any errors
-    for err := range errors {
-        if err != nil {
-            return err
-        }
-    }
-    return nil
+    // Update usage statistics
+    poolBlock.UsageCount++
+    poolBlock.LastUsed = time.Now()
+    poolBlock.PopularityScore = pool.calculatePopularity(poolBlock)
+    
+    return poolBlock, nil
 }
 ```
 
@@ -349,53 +247,45 @@ func (b *BlockProcessor) ProcessParallel(blocks []*Block) error {
 The block management system defends against:
 
 1. **Content Analysis**: Anonymized blocks are indistinguishable from random
-2. **Statistical Analysis**: Block size uniformity prevents file type detection
-3. **Correlation Attacks**: Randomizer reuse carefully managed
-4. **Timing Attacks**: Constant-time XOR operations
+2. **Censorship Attempts**: Removing blocks affects multiple unrelated files
+3. **Legal Challenges**: Public domain mixing provides plausible deniability
 
-### Cryptographic Assumptions
+### Implementation Security
 
-1. **XOR Properties**: Assumes XOR maintains perfect secrecy with random input
-2. **Hash Function Security**: Relies on SHA-256 collision resistance
-3. **Randomness Quality**: Requires cryptographically secure random generation
+1. **Constant-Time XOR**: The XOR3 implementation avoids timing side-channels
+2. **Secure Randomness**: Uses `crypto/rand` for block generation
+3. **Hash Integrity**: SHA-256 for content addressing
 
-### Best Practices
+## Performance Characteristics
 
-1. **Never Store Plaintext**: All blocks must be anonymized before storage
-2. **Verify Block Integrity**: Check hashes on retrieval
-3. **Secure Randomizer Generation**: Use crypto/rand for new randomizers
-4. **Atomic Operations**: Ensure all three blocks are available before reconstruction
+### Storage Efficiency
 
-## Future Improvements
+- **Naive Storage**: 3x overhead (source + 2 randomizers)
+- **With Mandatory Reuse**: 1.8-2.2x overhead
+- **Public Domain Blocks**: Shared across many files
 
-### Research Directions
+### Cache Performance
 
-1. **Variable Block Sizes**: Dynamic sizing based on content type
-2. **Erasure Coding**: Reed-Solomon codes for redundancy
-3. **Homomorphic Operations**: Compute on anonymized blocks
-4. **Quantum Resistance**: Post-quantum anonymization schemes
+- Popular blocks are cached across the network
+- Public domain blocks have high cache hit rates
+- Randomizer selection considers popularity
 
-### Planned Enhancements
+## Future Enhancements
 
-1. **Hardware Acceleration**: AES-NI style instructions for XOR
-2. **Compression Integration**: Compress before anonymization
-3. **Adaptive Block Sizing**: ML-based optimal size selection
-4. **Zero-Knowledge Proofs**: Prove block properties without revealing content
+The following optimizations are planned but not yet implemented:
+
+1. **Sensitivity-Based Selection**: Different strategies based on content sensitivity
+2. **ML-Based Optimization**: Machine learning for optimal randomizer selection
+3. **Advanced Caching**: Multi-tier cache integration
+4. **Zero-Knowledge Proofs**: Prove compliance without revealing content
 
 ## Conclusion
 
-The Block Management System implements the core OFFSystem architecture through:
+The Block Management System provides the cryptographic foundation for NoiseFS through:
 
-1. **3-Tuple XOR Anonymization**: Provides information-theoretic security where blocks are indistinguishable from random data
+1. **3-Tuple XOR Anonymization**: Information-theoretic security
+2. **Mandatory Block Reuse**: Every block serves multiple files
+3. **Public Domain Mixing**: Legal protection through content mixing
+4. **Reuse Enforcement**: Automated compliance validation
 
-2. **Guaranteed Block Reuse**: Every block MUST be part of multiple files, ensuring:
-   - Storage providers have plausible deniability
-   - Censorship attempts cause massive collateral damage
-   - Storage efficiency through mandatory sharing (1.8x vs 9x overhead)
-
-3. **Intelligent Selection**: Sophisticated algorithms choose randomizer blocks based on:
-   - Content sensitivity (public → maximum privacy)
-   - System state (storage, network, threat level)
-   - Popularity metrics with temporal decay
-
-The unified reuse architecture makes NoiseFS both theoretically secure and practically efficient. By treating block selection as a first-class concern, the system achieves 81.8% cache hit rates, 5x performance improvements, and exponentially increasing censorship resistance—proving that privacy-preserving systems can compete with traditional storage.
+This architecture ensures that storage providers have plausible deniability while achieving efficient storage through mandatory block sharing. The public domain mixing provides additional legal protection by ensuring that every stored block contains legitimate public domain content.
