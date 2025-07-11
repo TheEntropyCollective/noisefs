@@ -15,268 +15,258 @@ NoiseFS implements a storage abstraction layer that:
 3. **Performance Optimized**: Intelligent routing and load balancing
 4. **Fault Tolerant**: Retry mechanisms and error aggregation
 
-## Current Implementation
+## Architecture Components
 
 ### Storage Manager
 
-The core storage manager (`pkg/storage/manager.go`) provides:
+The storage manager serves as the central coordinator for all storage operations. It manages:
 
-```go
-type Manager struct {
-    backends   map[string]Backend
-    config     *Config
-    router     *Router
-    cache      Cache
-    metadata   MetadataStore
-}
-```
+- **Backend Registry**: Dynamically registers and tracks available storage backends
+- **Request Routing**: Directs operations to appropriate backends based on strategy
+- **Health Monitoring**: Continuously checks backend health and availability
+- **Cache Integration**: Coordinates with the caching layer for performance
+- **Metadata Management**: Maintains block metadata without compromising privacy
 
-Key features:
-- Multi-backend support with dynamic registration
-- Health monitoring and automatic failover
-- Batch operations for efficiency
-- Integrated caching layer
+The manager supports multiple backends simultaneously, enabling hybrid storage strategies and seamless failover when backends become unavailable.
 
 ### Storage Router
 
-The router (`pkg/storage/router.go`) handles intelligent backend selection:
+The router implements intelligent backend selection through pluggable distribution strategies:
 
-```go
-type Router struct {
-    manager      *Manager
-    config       *DistributionConfig
-    strategies   map[string]DistributionStrategy
-    loadBalancer *LoadBalancer
-}
-```
+**Single Backend Strategy**
+- Directs all operations to a primary backend
+- Simplest approach for single-node deployments
+- Minimal overhead and complexity
 
-Supported distribution strategies:
-- **SingleBackendStrategy**: Simple single backend storage
-- **ReplicationStrategy**: Multi-backend replication
-- **SmartDistributionStrategy**: Automatic strategy selection
+**Replication Strategy**
+- Stores blocks across multiple backends
+- Configurable replication factor (min/max replicas)
+- Ensures data availability even if backends fail
+- Tracks successful replications for consistency
+
+**Smart Distribution Strategy**
+- Automatically selects strategy based on available backends
+- Falls back gracefully when backends are limited
+- Balances performance, reliability, and cost
 
 ### Load Balancing
 
-The load balancer provides multiple algorithms:
+The load balancer optimizes backend selection using several algorithms:
 
-```go
-type LoadBalancer struct {
-    config    *LoadBalancingConfig
-    metrics   map[string]*BackendMetrics
-}
-```
+**Round-Robin Distribution**
+- Evenly distributes requests across backends
+- Prevents hot spots and ensures fair utilization
+- Tracks last-used timestamps for each backend
 
-Algorithms:
-- Round-robin
-- Weighted (based on performance)
-- Least connections
-- Performance-based (default)
+**Performance-Based Selection**
+- Monitors success rates, latency, and throughput
+- Calculates performance scores using weighted metrics
+- Prefers high-performing backends while avoiding failures
+
+**Least Connections**
+- Routes to backends with fewest active operations
+- Prevents overloading busy backends
+- Ideal for varying request sizes
+
+**Weighted Distribution**
+- Assigns traffic proportionally based on backend capacity
+- Considers factors like bandwidth, storage space, and reliability
+- Adapts weights based on real-time performance
 
 ## IPFS Integration
 
-### IPFS Client
+### IPFS Client Architecture
 
-The IPFS client (`pkg/storage/ipfs/client.go`) provides:
+The IPFS client extends standard IPFS operations with NoiseFS-specific optimizations:
 
-```go
-type Client struct {
-    shell          *shell.Shell
-    peerManager    *p2p.PeerManager
-    requestMetrics map[peer.ID]*RequestMetrics
-}
-```
+**Peer-Aware Operations**
+- Maintains peer performance metrics (latency, success rate, bandwidth)
+- Prefers peers with good historical performance
+- Falls back to DHT lookup when preferred peers fail
+- Implements connection pooling for efficiency
 
-Key capabilities:
-- Peer-aware operations for optimized retrieval
-- Performance metrics tracking
-- Parallel retrieval from multiple peers
-- Broadcast support for redundancy
+**Parallel Retrieval**
+- Attempts to fetch blocks from multiple peers simultaneously
+- Returns first successful response
+- Improves reliability and reduces latency
+- Configurable concurrency limits
 
-### Peer Selection Integration
-
-When a peer manager is available, the IPFS client uses intelligent peer selection:
-
-```go
-func (c *Client) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
-    // Try preferred peers first
-    // Use peer selection strategies
-    // Fall back to standard IPFS retrieval
-}
-```
+**Broadcast Support**
+- Distributes important blocks to multiple peers
+- Ensures redundancy for critical data
+- Uses strategic peer selection for optimal coverage
 
 ### Content Addressing
 
-All blocks are content-addressed using SHA-256:
-- CIDs are deterministic based on content
-- Integrity verification is automatic
-- Deduplication happens at the network level
+NoiseFS leverages IPFS's content addressing with additional privacy considerations:
 
-## Backend Interface
+- **Deterministic CIDs**: Same content always produces same identifier
+- **Integrity Verification**: Automatic validation of retrieved content
+- **Network Deduplication**: Identical blocks share storage automatically
+- **Privacy Preservation**: CIDs reveal nothing about original content due to XOR anonymization
 
-All storage backends implement a common interface:
+### Peer Selection Strategies
 
-```go
-type Backend interface {
-    // Core operations
-    Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error)
-    Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error)
-    Has(ctx context.Context, address *BlockAddress) (bool, error)
-    Delete(ctx context.Context, address *BlockAddress) error
-    
-    // Batch operations
-    PutMany(ctx context.Context, blocks []*blocks.Block) ([]*BlockAddress, error)
-    GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error)
-    
-    // Management operations
-    Pin(ctx context.Context, address *BlockAddress) error
-    Unpin(ctx context.Context, address *BlockAddress) error
-    
-    // Health and info
-    HealthCheck(ctx context.Context) *HealthStatus
-    GetBackendInfo() *BackendInfo
-    IsConnected() bool
-}
-```
+When configured with a peer manager, the IPFS client employs sophisticated peer selection:
 
-### IPFS Backend Implementation
+1. **Check Local Cache**: Avoid network requests when possible
+2. **Try Preferred Peers**: Use peers with proven reliability
+3. **Apply Selection Strategy**: Choose peers based on configured strategy
+4. **Fall Back to DHT**: Use standard IPFS discovery as last resort
 
-The IPFS backend (`pkg/storage/backends/ipfs.go`) provides:
+## Backend Interface Design
 
-```go
-type IPFSBackend struct {
-    name     string
-    client   *ipfs.Client
-    info     *BackendInfo
-}
-```
+All storage backends conform to a unified interface that provides:
 
-Features:
-- Direct IPFS API integration
-- Content-addressed storage
-- Pinning support for persistence
-- Health monitoring
+### Core Operations
+- **Put**: Store a block and return its address
+- **Get**: Retrieve a block by address
+- **Has**: Check block existence without retrieval
+- **Delete**: Remove a block (where supported)
+
+### Batch Operations
+- **PutMany**: Store multiple blocks efficiently
+- **GetMany**: Retrieve multiple blocks in parallel
+- Optimized for bulk operations
+- Reduces round-trip overhead
+
+### Management Operations
+- **Pin/Unpin**: Control block persistence
+- **HealthCheck**: Verify backend availability
+- **GetInfo**: Retrieve backend capabilities and status
+
+### Implementation Flexibility
+
+The interface design allows backends to:
+- Optimize operations for their specific architecture
+- Report capabilities (e.g., persistence, searchability)
+- Provide backend-specific metadata safely
+- Implement caching at the backend level
 
 ## Performance Optimizations
 
-### Parallel Operations
+### Parallel Processing
 
-The router supports efficient batch operations:
+The storage system maximizes throughput through parallelization:
 
-```go
-func (r *Router) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error) {
-    // Groups addresses by backend
-    // Retrieves in parallel
-    // Handles failures gracefully
-}
-```
+- **Concurrent Backend Operations**: Multiple backends process simultaneously
+- **Batch Request Grouping**: Groups operations by backend for efficiency
+- **Async Error Handling**: Continues processing despite individual failures
+- **Resource Pooling**: Reuses connections and buffers
 
-### Retry Mechanisms
+### Intelligent Retry Logic
 
-Failed operations are retried with appropriate fallbacks:
+Failed operations are handled gracefully:
 
-```go
-func (r *Router) Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error) {
-    // Try specified backend first
-    // Fall back to other available backends
-    // Return aggregated errors if all fail
-}
-```
+1. **Primary Attempt**: Try specified backend first
+2. **Fallback Selection**: Choose alternative backends by priority
+3. **Error Aggregation**: Collect all failure reasons
+4. **Smart Backoff**: Exponential delay between retries
+5. **Circuit Breaking**: Temporarily disable failing backends
 
-### Performance Metrics
+### Performance Monitoring
 
-The load balancer tracks backend performance:
+The system continuously tracks metrics to optimize performance:
 
-```go
-type BackendMetrics struct {
-    RequestCount   int64
-    SuccessRate    float64
-    AverageLatency time.Duration
-    LastUsed       time.Time
-}
-```
+- **Request Counts**: Operations per backend
+- **Success Rates**: Percentage of successful operations
+- **Latency Tracking**: Average and percentile response times
+- **Throughput Measurement**: Bytes transferred per second
+- **Resource Utilization**: Connection counts and memory usage
+
+These metrics feed back into the selection algorithms, creating a self-optimizing system that adapts to changing conditions.
 
 ## Error Handling
 
-### Error Aggregation
+### Graceful Degradation
 
-Multiple errors are collected and reported:
+The storage system maintains operation even when components fail:
 
-```go
-type ErrorAggregator struct {
-    errors []error
-}
+- **Backend Failures**: Automatically routes to healthy backends
+- **Partial Success**: Returns available data even if some operations fail
+- **Timeout Management**: Prevents hanging on slow operations
+- **Error Context**: Preserves error details for debugging
 
-func (ea *ErrorAggregator) CreateAggregateError() error {
-    // Returns a combined error message
-}
-```
+### Error Classification
 
-### Not Found Errors
+Errors are categorized for appropriate handling:
 
-Special handling for missing blocks:
+- **Transient Errors**: Network timeouts, temporary unavailability
+- **Permanent Errors**: Invalid addresses, corrupted data
+- **Resource Errors**: Quota exceeded, insufficient space
+- **Permission Errors**: Access denied, authentication failures
 
-```go
-type NotFoundError struct {
-    Backend string
-    Address *BlockAddress
-}
-```
+## Security and Privacy
 
-## Caching Integration
+### Content Protection
 
-The storage manager integrates with the cache system:
-- Frequently accessed blocks are cached locally
-- Cache checks happen before backend retrieval
-- Write-through caching for new blocks
+All storage operations maintain NoiseFS privacy guarantees:
 
-## Security Considerations
+- **Pre-Storage Anonymization**: Blocks are XOR'd before storage
+- **No Metadata Leakage**: Block addresses reveal no content information
+- **Access Pattern Obfuscation**: Random backend selection obscures patterns
+- **Secure Transport**: All backend communications use encryption
 
-1. **Content Verification**: All blocks are verified by content hash
-2. **No Semantic Leakage**: CIDs reveal nothing about content
-3. **Anonymized Storage**: All stored blocks are XOR'd
-4. **Distribution Privacy**: Routing decisions don't leak information
+### Trust Model
+
+The storage architecture assumes:
+- No single backend is trusted with content
+- Backends may be curious but follow protocol
+- Network observers cannot correlate operations
+- Content addressing prevents tampering
 
 ## Configuration
 
-### Storage Configuration
+Storage behavior is highly configurable to match deployment needs:
 
-```go
-type Config struct {
-    DefaultBackend string
-    Backends       map[string]BackendConfig
-    Distribution   *DistributionConfig
-    Cache          *CacheConfig
-}
-```
+### Backend Configuration
+- API endpoints and credentials
+- Timeout and retry parameters
+- Resource limits and quotas
+- Feature flags and capabilities
 
-### Distribution Configuration
+### Distribution Strategy
+- Default strategy selection
+- Replication requirements
+- Load balancing algorithm
+- Failover behavior
 
-```go
-type DistributionConfig struct {
-    Strategy      string            // "single", "replicate", "smart"
-    Replication   *ReplicationConfig
-    LoadBalancing *LoadBalancingConfig
-}
-```
+### Performance Tuning
+- Parallelism limits
+- Cache sizes
+- Batch operation thresholds
+- Metric collection intervals
+
+## Operational Considerations
+
+### Monitoring
+
+Key metrics to monitor in production:
+- Backend health status
+- Operation success rates
+- Storage utilization
+- Performance trends
+- Error rates by type
+
+### Capacity Planning
+
+Consider these factors for deployment:
+- Expected storage volume
+- Read/write ratio
+- Geographic distribution needs
+- Redundancy requirements
+- Growth projections
 
 ## Future Enhancements
 
-The following features are planned but not yet implemented:
+Planned improvements focus on:
 
-1. **IPFS Cluster Integration**: Coordinated pinning across nodes
-2. **Advanced Metrics**: ML-based predictive prefetching
-3. **Circuit Breaker Pattern**: Prevent cascading failures
-4. **Storage Proofs**: Cryptographic proof of storage
-5. **GraphSync Integration**: Efficient block synchronization
-
-## Testing
-
-The storage system includes comprehensive tests:
-- Unit tests for all components
-- Integration tests with mock backends
-- Performance benchmarks
-- Failure scenario testing
+- **IPFS Cluster Integration**: Native support for coordinated storage
+- **Advanced Caching**: Predictive prefetching based on access patterns
+- **Storage Proofs**: Cryptographic verification of data availability
+- **Cross-Backend Migration**: Seamless data movement between backends
+- **Enhanced Metrics**: Machine learning for anomaly detection
 
 ## Conclusion
 
-The Storage Architecture provides a robust foundation for NoiseFS's distributed storage needs. By abstracting storage operations and providing intelligent routing, it achieves excellent performance while maintaining strong privacy guarantees. The IPFS integration leverages the benefits of content-addressed storage while adding NoiseFS-specific optimizations for anonymity and performance.
+The Storage Architecture provides a robust, flexible foundation for NoiseFS's distributed storage needs. By abstracting backend details while preserving privacy guarantees, it enables deployment across diverse environments from single nodes to global networks. The intelligent routing and monitoring capabilities ensure reliable operation while maintaining the strong anonymity properties essential to NoiseFS's mission.

@@ -80,6 +80,7 @@ help:
 	@echo -e "  $(GREEN)impact-demo$(NC)   Run NoiseFS impact analysis demo"
 	@echo -e "  $(GREEN)evolution-demo$(NC) Show comprehensive evolution impact"
 	@echo -e "  $(GREEN)evolution-demo-detailed$(NC) Show detailed optimization breakdown"
+	@echo -e "  $(GREEN)directory-index$(NC) Create shareable NoiseFS index from directory"
 	@echo -e "  $(GREEN)benchmark$(NC)     Run NoiseFS benchmarks"
 	@echo -e "  $(GREEN)simulation$(NC)    Run medium-scale simulation"
 	@echo -e "  $(GREEN)simulation-large$(NC) Run large-scale simulation"
@@ -330,6 +331,11 @@ evolution-demo:
 evolution-demo-detailed:
 	@echo -e "$(BLUE)🎯 Running detailed NoiseFS evolution analysis...$(NC)"
 	@$(GO) run cmd/evolution-demo/main.go --detailed
+
+# Directory indexing tool
+directory-index:
+	@echo -e "$(BLUE)🗂️  Running NoiseFS directory indexer...$(NC)"
+	@$(GO) run cmd/noisefs-tools/directory-indexer/main.go $(ARGS)
 
 simulation:
 	@echo -e "$(BLUE)Running medium-scale simulation...$(NC)"

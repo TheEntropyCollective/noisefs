@@ -8,86 +8,55 @@ The FUSE (Filesystem in Userspace) integration enables NoiseFS to be mounted as 
 
 ### Architecture Overview
 
-The FUSE integration uses the go-fuse library to bridge between the kernel VFS layer and NoiseFS:
+The FUSE integration uses the go-fuse library to bridge between the kernel VFS layer and NoiseFS. The architecture consists of multiple layers:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    User Applications                         │
-│              (Regular file operations)                       │
-├─────────────────────────────────────────────────────────────┤
-│                     Kernel VFS Layer                         │
-│              (Virtual Filesystem Switch)                     │
-├─────────────────────────────────────────────────────────────┤
-│                      FUSE Kernel Module                      │
-│                 (Kernel ↔ Userspace bridge)                  │
-├─────────────────────────────────────────────────────────────┤
-│                    NoiseFS FUSE Daemon                       │
-│         (go-fuse pathfs.FileSystem implementation)           │
-├─────────────────────────────────────────────────────────────┤
-│                     NoiseFS Core API                         │
-│          (Block management, anonymization)                   │
-├─────────────────────────────────────────────────────────────┤
-│                    IPFS Storage Backend                      │
-│               (Distributed storage layer)                    │
-└─────────────────────────────────────────────────────────────┘
-```
+1. **User Applications**: Standard programs using regular file operations
+2. **Kernel VFS Layer**: Linux/macOS virtual filesystem switch that routes operations
+3. **FUSE Kernel Module**: Bridges kernel space and userspace filesystem implementations
+4. **NoiseFS FUSE Daemon**: Our implementation that translates filesystem calls to NoiseFS operations
+5. **NoiseFS Core API**: Handles block management and anonymization
+6. **IPFS Storage Backend**: Provides the distributed storage layer
+
+This layered approach allows any application to transparently access NoiseFS-stored files without modification.
 
 ### Core Components
 
 The FUSE implementation consists of several key components:
 
-```go
-type NoiseFS struct {
-    pathfs.FileSystem              // go-fuse base implementation
-    client     *noisefs.Client     // NoiseFS client for operations
-    ipfsClient *ipfs.Client        // IPFS client for storage
-    mountPath  string              // Mount point path
-    readOnly   bool                // Read-only mount flag
-    index      *FileIndex          // Persistent file metadata
-}
-```
+- **FileSystem Base**: Implements the go-fuse pathfs.FileSystem interface
+- **NoiseFS Client**: Handles core operations like block management and anonymization
+- **IPFS Client**: Manages storage backend communication
+- **Mount Configuration**: Tracks mount point and read-only status
+- **File Index**: Maintains persistent metadata about stored files
 
 ## File Index System
 
 ### Index Structure
 
-NoiseFS maintains a persistent index of files and their descriptors:
+NoiseFS maintains a persistent index of files and their descriptors. The index tracks:
 
-```go
-type FileIndex struct {
-    Version  int                      // Index format version
-    Files    map[string]*IndexEntry   // Filename -> metadata mapping
-    filePath string                   // Path to index file
-    mutex    sync.RWMutex            // Thread-safe access
-}
+**Index Components**
+- Version number for format compatibility
+- Mapping of filenames to their metadata entries
+- Path to the index file on disk
+- Thread-safe access control
 
-type IndexEntry struct {
-    Filename      string    // Full path relative to mount
-    Directory     string    // Parent directory path
-    DescriptorCID string    // IPFS CID of file descriptor
-    FileSize      int64     // Size in bytes
-    CreatedAt     time.Time // Creation timestamp
-    ModifiedAt    time.Time // Last modification time
-}
-```
+**Per-File Metadata**
+- Full path relative to mount point
+- Parent directory location
+- IPFS CID of the file's descriptor
+- File size in bytes
+- Creation and modification timestamps
 
 ### Index Persistence
 
-The index is stored as JSON and loaded/saved automatically:
+The index is stored as JSON and loaded/saved automatically. The persistence mechanism:
 
-```go
-func (idx *FileIndex) SaveIndex() error {
-    idx.mutex.RLock()
-    defer idx.mutex.RUnlock()
-    
-    data, err := json.MarshalIndent(idx, "", "  ")
-    if err != nil {
-        return err
-    }
-    
-    return os.WriteFile(idx.filePath, data, 0600)
-}
-```
+- Uses read locks to allow concurrent access during saves
+- Formats JSON with indentation for human readability
+- Saves with restricted permissions (0600) for security
+- Handles errors gracefully to prevent data loss
+- Automatically saves on changes and unmount
 
 ## Filesystem Operations
 
@@ -111,93 +80,61 @@ All user files are stored under the `files/` directory.
 
 #### File Operations
 
-```go
-// Open - Open existing file for reading
-func (fs *NoiseFS) Open(name string, flags uint32, context *fuse.Context) (nodefs.File, fuse.Status)
-
-// Create - Create new file
-func (fs *NoiseFS) Create(name string, flags uint32, mode uint32, context *fuse.Context) (nodefs.File, fuse.Status)
-
-// Unlink - Delete file
-func (fs *NoiseFS) Unlink(name string, context *fuse.Context) fuse.Status
-
-// Rename - Rename/move file
-func (fs *NoiseFS) Rename(oldName string, newName string, context *fuse.Context) fuse.Status
-```
+- **Open**: Opens existing files for reading with specified flags
+- **Create**: Creates new files with given permissions and flags
+- **Unlink**: Deletes files and removes them from the index
+- **Rename**: Moves or renames files within the filesystem
 
 #### Directory Operations
 
-```go
-// OpenDir - List directory contents
-func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry, fuse.Status)
-
-// Mkdir - Create directory
-func (fs *NoiseFS) Mkdir(name string, mode uint32, context *fuse.Context) fuse.Status
-
-// Rmdir - Remove empty directory
-func (fs *NoiseFS) Rmdir(name string, context *fuse.Context) fuse.Status
-```
+- **OpenDir**: Lists directory contents and returns entries
+- **Mkdir**: Creates new directories with specified permissions
+- **Rmdir**: Removes empty directories from the filesystem
 
 #### Metadata Operations
 
-```go
-// GetAttr - Get file/directory attributes
-func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status)
-
-// GetXAttr - Get extended attributes
-func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context) ([]byte, fuse.Status)
-```
+- **GetAttr**: Retrieves file/directory attributes like size, permissions, timestamps
+- **GetXAttr**: Accesses extended attributes for NoiseFS-specific metadata
 
 ### File Handles
 
-Individual files are managed through NoiseFile handles:
+Individual files are managed through NoiseFile handles that maintain:
 
-```go
-type NoiseFile struct {
-    nodefs.File
-    client        *noisefs.Client
-    ipfsClient    *ipfs.Client
-    descriptorCID string
-    filename      string
-    readOnly      bool
-    content       []byte        // Cached file content
-    isDirty       bool          // Modified flag
-    index         *FileIndex    // Reference to global index
-}
-```
+- Base file interface implementation
+- References to NoiseFS and IPFS clients
+- The file's descriptor CID for content retrieval
+- Filename and read-only status
+- Cached content for performance
+- Dirty flag to track modifications
+- Reference to the global file index
 
 ## Mount Options
 
 ### Basic Mount Options
 
-```go
-type MountOptions struct {
-    MountPath      string   // Where to mount the filesystem
-    VolumeName     string   // Display name for the volume
-    ReadOnly       bool     // Mount as read-only
-    AllowOther     bool     // Allow other users to access
-    Debug          bool     // Enable debug logging
-    Security       *security.SecurityManager
-    IndexPassword  string   // Password for encrypted index
-}
-```
+Mount options control filesystem behavior:
+
+- **MountPath**: Directory where the filesystem will be mounted
+- **VolumeName**: Display name shown in file managers
+- **ReadOnly**: Prevents any write operations when enabled
+- **AllowOther**: Allows users other than the mounter to access files
+- **Debug**: Enables verbose logging for troubleshooting
+- **Security**: Optional security manager for access control
+- **IndexPassword**: Password for encrypting the file index
 
 ### Mounting Process
 
-```go
-// Basic mount
-err := Mount(client, ipfsClient, MountOptions{
-    MountPath:  "/mnt/noisefs",
-    VolumeName: "NoiseFS",
-})
+NoiseFS can be mounted with various configurations:
 
-// Mount with encrypted index
-err := Mount(client, ipfsClient, MountOptions{
-    MountPath:     "/mnt/noisefs",
-    VolumeName:    "NoiseFS-Secure",
-    IndexPassword: "my-secret-password",
-})
-```
+**Basic Mount**
+- Specify mount path and volume name
+- Uses default settings for simplicity
+- Index stored unencrypted
+
+**Secure Mount**
+- Includes index password for encryption
+- Protects file metadata when unmounted
+- Requires password to access file list
 
 ## Extended Attributes
 
@@ -222,16 +159,12 @@ Available attributes:
 
 ### Encrypted Index
 
-The file index can be encrypted for additional security:
+The file index can be encrypted for additional security. The encrypted index includes:
 
-```go
-type EncryptedFileIndex struct {
-    *FileIndex
-    encryptionKey []byte
-    salt          []byte
-    locked        bool
-}
-```
+- Standard file index functionality
+- Derived encryption key from password
+- Random salt for key derivation
+- Lock status tracking
 
 Features:
 - Password-based encryption using AES-256

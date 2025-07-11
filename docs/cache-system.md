@@ -8,135 +8,84 @@ The NoiseFS Cache System implements an efficient in-memory LRU (Least Recently U
 
 ### Core Architecture
 
-The cache system consists of a simple but effective LRU cache with popularity tracking:
+The cache system consists of a simple but effective LRU cache with popularity tracking. The memory cache maintains:
 
-```go
-type MemoryCache struct {
-    mu          sync.RWMutex
-    capacity    int
-    blocks      map[string]*cacheEntry
-    lru         *list.List
-    popularityMap map[string]int
-    stats       Stats
-}
-```
+- **Block Storage**: A map of content IDs to cached blocks
+- **LRU List**: Tracks access order for eviction decisions
+- **Popularity Map**: Counts how often each block is accessed
+- **Statistics**: Tracks hits, misses, and evictions
+- **Concurrency Control**: Read-write mutex for thread-safe access
 
 ### Cache Interface
 
-All cache implementations follow a common interface:
+All cache implementations provide these core capabilities:
 
-```go
-type Cache interface {
-    // Core operations
-    Store(cid string, block *blocks.Block) error
-    Get(cid string) (*blocks.Block, error)
-    Has(cid string) bool
-    Remove(cid string) error
-    
-    // Randomizer support
-    GetRandomizers(count int) ([]*BlockInfo, error)
-    IncrementPopularity(cid string) error
-    
-    // Management
-    Size() int
-    Clear()
-    GetStats() *Stats
-}
-```
+**Basic Operations**
+- Store blocks with their content IDs
+- Retrieve blocks by ID with automatic LRU updates
+- Check block existence without retrieval
+- Remove specific blocks from cache
+
+**Randomizer Support**
+- Get popular blocks suitable as randomizers
+- Track and increment block popularity scores
+- Return blocks sorted by usage frequency
+
+**Management Functions**
+- Query current cache size
+- Clear all cached entries
+- Access performance statistics
 
 ## Memory Cache Implementation
 
 ### LRU Eviction Strategy
 
-The cache uses a standard LRU eviction policy:
+The cache uses a standard LRU eviction policy that ensures the most recently accessed blocks remain in memory:
 
-```go
-func (c *MemoryCache) Store(cid string, block *blocks.Block) error {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    
-    // Check if block already exists
-    if entry, exists := c.blocks[cid]; exists {
-        // Move to front of LRU
-        c.lru.MoveToFront(entry.element)
-        return nil
-    }
-    
-    // Evict if at capacity
-    if len(c.blocks) >= c.capacity && c.capacity > 0 {
-        c.evictOldest()
-    }
-    
-    // Add new entry
-    element := c.lru.PushFront(cid)
-    c.blocks[cid] = &cacheEntry{
-        cid:     cid,
-        block:   block,
-        element: element,
-    }
-    
-    return nil
-}
-```
+1. **Access Tracking**: When a block is accessed, it moves to the front of the LRU list
+2. **Duplicate Handling**: If a block already exists, its position is updated rather than creating a duplicate
+3. **Capacity Management**: When the cache reaches capacity, the least recently used block is evicted
+4. **Atomic Operations**: All modifications are protected by locks to ensure thread safety
+
+The eviction process is automatic and transparent to users, maintaining optimal cache performance without manual intervention.
 
 ### Popularity Tracking
 
-The cache tracks block popularity for randomizer selection:
+The cache tracks block popularity for intelligent randomizer selection:
 
-```go
-func (c *MemoryCache) IncrementPopularity(cid string) error {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    
-    if _, exists := c.blocks[cid]; !exists {
-        return ErrNotFound
-    }
-    
-    c.popularityMap[cid]++
-    return nil
-}
-```
+- **Usage Counting**: Each block access increments its popularity counter
+- **Persistent Scores**: Popularity persists until the block is evicted
+- **Thread-Safe Updates**: Concurrent popularity updates are handled safely
+- **Error Handling**: Non-existent blocks return appropriate errors
+
+This popularity data enables the system to prefer frequently-used blocks as randomizers, improving overall network efficiency through better cache utilization.
 
 ### Randomizer Selection
 
-Popular blocks are preferred as randomizers:
+The cache provides intelligent randomizer selection based on popularity:
 
-```go
-func (c *MemoryCache) GetRandomizers(count int) ([]*BlockInfo, error) {
-    c.mu.RLock()
-    defer c.mu.RUnlock()
-    
-    // Create slice of BlockInfo sorted by popularity
-    blockInfos := make([]*BlockInfo, 0, len(c.blocks))
-    for cid, entry := range c.blocks {
-        popularity := c.popularityMap[cid]
-        blockInfos = append(blockInfos, &BlockInfo{
-            CID:        cid,
-            Block:      entry.block,
-            Size:       entry.block.Size(),
-            Popularity: popularity,
-        })
-    }
-    
-    // Sort by popularity
-    // Return top N blocks
-    
-    return blockInfos[:count], nil
-}
-```
+**Selection Process**
+1. Collects all cached blocks with their metadata
+2. Sorts blocks by popularity score (highest first)
+3. Returns the requested number of top blocks
+4. Includes block size and CID for each selection
+
+**Benefits of Popular Randomizers**
+- Higher cache hit rates across the network
+- Reduced bandwidth usage
+- Faster file reconstruction
+- Better storage efficiency through block reuse
 
 ## Cache Statistics
 
 The cache tracks basic performance metrics:
 
-```go
-type Stats struct {
-    Hits      int64  // Successful cache lookups
-    Misses    int64  // Failed cache lookups
-    Evictions int64  // Blocks evicted due to capacity
-    Size      int    // Current number of cached blocks
-}
-```
+- **Hits**: Count of successful cache lookups (block found in cache)
+- **Misses**: Count of failed lookups requiring storage retrieval
+- **Evictions**: Number of blocks removed due to capacity limits
+- **Size**: Current number of blocks in cache
+
+These statistics help monitor cache effectiveness and tune capacity settings for optimal performance.
 
 ## Integration with Storage System
 
@@ -169,12 +118,12 @@ The cache integrates with the storage manager:
 
 ## Configuration
 
-Cache capacity is configurable based on available memory:
+Cache capacity is configurable based on available memory. For example:
+- 1000 blocks = ~128MB (for 128KB blocks)
+- 5000 blocks = ~640MB
+- 10000 blocks = ~1.28GB
 
-```go
-// Example: 1000 block cache (approximately 128MB for 128KB blocks)
-cache := NewMemoryCache(1000)
-```
+The capacity should be set based on available system memory and expected workload.
 
 ## Limitations and Trade-offs
 
@@ -220,16 +169,12 @@ The following improvements are planned but not yet implemented:
 
 ## Testing
 
-The cache includes comprehensive tests:
-
-```go
-// Unit tests cover:
+The cache includes comprehensive tests covering:
 - Basic operations (get/put/remove)
 - LRU eviction behavior
 - Popularity tracking
 - Concurrent access
 - Edge cases (empty cache, full cache)
-```
 
 ## Best Practices
 

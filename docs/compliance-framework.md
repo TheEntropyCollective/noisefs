@@ -8,96 +8,69 @@ The NoiseFS Compliance Framework provides a comprehensive legal and regulatory i
 
 ### Multi-Layer Compliance System
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Legal Framework Layer                      │
-│        (Terms of Service, Privacy Policy, Policies)          │
-├─────────────────────────────────────────────────────────────┤
-│                  DMCA Compliance Engine                      │
-│       (Automated takedown processing, safe harbor)           │
-├─────────────────────────────────────────────────────────────┤
-│                   Audit Trail System                         │
-│        (Cryptographic logs, transparency reports)            │
-├─────────────────────────────────────────────────────────────┤
-│                International Compliance                      │
-│           (GDPR, CCPA, regional requirements)                │
-├─────────────────────────────────────────────────────────────┤
-│                 Technical Measures Layer                     │
-│        (Content filtering, access controls)                  │
-└─────────────────────────────────────────────────────────────┘
-```
+The compliance framework consists of five integrated layers:
+
+1. **Legal Framework Layer**
+   - Terms of Service defining user obligations
+   - Privacy Policy outlining data handling
+   - Acceptable Use Policies
+
+2. **DMCA Compliance Engine**
+   - Automated takedown request processing
+   - Safe harbor provision implementation
+   - Counter-notice handling
+
+3. **Audit Trail System**
+   - Cryptographic logging of all compliance actions
+   - Transparency report generation
+   - Immutable record keeping
+
+4. **International Compliance**
+   - GDPR data protection requirements
+   - CCPA privacy rights management
+   - Regional regulatory adaptations
+
+5. **Technical Measures Layer**
+   - Content filtering mechanisms
+   - Access control enforcement
+   - Automated policy application
 
 ## DMCA Compliance Architecture
 
 ### Automated DMCA Processing
 
-NoiseFS implements DMCA safe harbor provisions through automated systems:
+NoiseFS implements DMCA safe harbor provisions through automated systems.
 
-```go
-type DMCAProcessor struct {
-    database       *DMCADatabase
-    notifier       *NotificationService
-    auditLog       *AuditTrail
-    legalReview    *LegalReviewSystem
-    precedents     *PrecedentDatabase
-}
+**DMCA Processor Components**
+- Database for storing and tracking requests
+- Notification service for party communications
+- Audit trail for compliance records
+- Legal review system for complex cases
+- Precedent database for consistent decisions
 
-type DMCARequest struct {
-    ID              string
-    Timestamp       time.Time
-    ComplainantInfo ComplainantDetails
-    ClaimedContent  ContentIdentification
-    Justification   LegalJustification
-    Status          DMCAStatus
-    Resolution      *Resolution
-}
+**DMCA Request Information**
+- Unique identifier and timestamp
+- Complainant contact details
+- Content identification data
+- Legal justification provided
+- Current processing status
+- Final resolution details
 
-func (p *DMCAProcessor) ProcessTakedownRequest(
-    request *DMCARequest,
-) (*ProcessingResult, error) {
-    // Validate request completeness
-    if err := p.validateRequest(request); err != nil {
-        return &ProcessingResult{
-            Status: StatusInvalid,
-            Reason: err.Error(),
-        }, nil
-    }
-    
-    // Check legal precedents
-    precedent := p.precedents.FindSimilar(request)
-    if precedent != nil {
-        return p.applyPrecedent(request, precedent)
-    }
-    
-    // Perform legal review
-    review := p.legalReview.Analyze(request)
-    
-    // Technical feasibility check
-    feasibility := p.checkTechnicalFeasibility(request)
-    
-    // Make determination
-    decision := p.makeDecision(review, feasibility)
-    
-    // Execute decision
-    result := p.executeDecision(request, decision)
-    
-    // Record in audit trail
-    p.auditLog.Record(request, decision, result)
-    
-    // Notify relevant parties
-    p.notifier.NotifyParties(request, result)
-    
-    return result, nil
-}
-```
+**Processing Workflow**
+1. **Validation**: Ensures request contains all required information
+2. **Precedent Check**: Looks for similar previous cases
+3. **Legal Analysis**: Reviews the legal merit of claims
+4. **Technical Feasibility**: Determines if action is technically possible
+5. **Decision Making**: Applies policy to determine outcome
+6. **Execution**: Implements the decided action
+7. **Audit Recording**: Creates immutable compliance record
+8. **Notification**: Informs all relevant parties of outcome
+
+This automated approach ensures consistent, timely, and legally compliant handling of all DMCA requests while maintaining detailed records for safe harbor protection.
 
 ### Safe Harbor Implementation
 
-```go
-type SafeHarborCompliance struct {
-    userAgreements  *UserAgreementManager
-    agentRegistry   *DMCAAgentRegistry
-    expeditious     *ExpeditiousRemoval
+The safe harbor compliance system manages:\n\n**Core Components**\n- User agreement management and enforcement\n- DMCA agent registration and maintenance\n- Expeditious removal process implementation
     repeatInfringer *RepeatInfringerPolicy
 }
 

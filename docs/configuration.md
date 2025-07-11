@@ -4,90 +4,26 @@
 
 NoiseFS uses a JSON configuration file to control its behavior. The default location is `~/.noisefs/config.json`, but you can specify a custom location with the `--config` flag.
 
-## Configuration File Structure
+## Configuration Structure
 
-```json
-{
-  "ipfs": {
-    "api_endpoint": "http://localhost:5001",
-    "timeout": 300,
-    "max_connections": 100
-  },
-  "cache": {
-    "enabled": true,
-    "max_size": 1000,
-    "memory_limit": 268435456,
-    "eviction_policy": "lru",
-    "ttl": 3600
-  },
-  "storage": {
-    "default_backend": "ipfs",
-    "distribution": {
-      "strategy": "single",
-      "replication": {
-        "min_replicas": 1,
-        "max_replicas": 3
-      }
-    }
-  },
-  "privacy": {
-    "default_level": "medium",
-    "relay_pool": {
-      "enabled": false,
-      "max_relays": 10,
-      "min_relays": 3
-    },
-    "cover_traffic": {
-      "enabled": false,
-      "ratio": 0.5
-    }
-  },
-  "blocks": {
-    "size": 131072,
-    "compression": false,
-    "encryption": false
-  },
-  "fuse": {
-    "allow_other": false,
-    "default_permissions": true,
-    "max_read": 131072,
-    "debug": false
-  },
-  "logging": {
-    "level": "info",
-    "file": "",
-    "format": "json",
-    "max_size": 10,
-    "max_backups": 3
-  },
-  "security": {
-    "secure_delete": true,
-    "memory_lock": false,
-    "audit_log": false
-  },
-  "performance": {
-    "parallel_uploads": 3,
-    "parallel_downloads": 5,
-    "prefetch": true,
-    "write_buffer_size": 4194304
-  },
-  "webui": {
-    "enabled": false,
-    "address": "localhost:8080",
-    "tls": {
-      "enabled": true,
-      "cert_file": "",
-      "key_file": ""
-    }
-  }
-}
-```
+NoiseFS configuration is organized into logical sections, each controlling a specific aspect of the system. Here's what each section does:
+
+- **ipfs**: Connection settings for the IPFS storage backend
+- **cache**: Local block caching behavior and limits
+- **storage**: Backend selection and distribution strategies
+- **privacy**: Anonymity features and privacy levels
+- **blocks**: Block processing parameters
+- **fuse**: Filesystem mounting options
+- **logging**: Log output configuration
+- **security**: Security features and protections
+- **performance**: Concurrency and optimization settings
+- **webui**: Web interface configuration
 
 ## Configuration Sections
 
 ### IPFS Configuration (`ipfs`)
 
-Controls IPFS backend settings.
+Controls how NoiseFS connects to IPFS:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -95,18 +31,14 @@ Controls IPFS backend settings.
 | `timeout` | int | `300` | Request timeout in seconds |
 | `max_connections` | int | `100` | Maximum concurrent connections |
 
-Example:
-```json
-"ipfs": {
-  "api_endpoint": "http://192.168.1.100:5001",
-  "timeout": 600,
-  "max_connections": 200
-}
-```
+**Common Configurations:**
+- Local IPFS: `"http://localhost:5001"`
+- Remote IPFS: `"http://192.168.1.100:5001"`
+- Docker IPFS: `"http://ipfs:5001"`
 
 ### Cache Configuration (`cache`)
 
-Controls local block caching behavior.
+Controls local block caching for performance:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -116,82 +48,94 @@ Controls local block caching behavior.
 | `eviction_policy` | string | `"lru"` | Eviction policy: "lru", "lfu", "fifo" |
 | `ttl` | int | `3600` | Time-to-live in seconds |
 
-Example:
-```json
-"cache": {
-  "enabled": true,
-  "max_size": 5000,
-  "memory_limit": 1073741824,  // 1GB
-  "eviction_policy": "lru",
-  "ttl": 7200
-}
-```
+**Memory Limit Examples:**
+- 256MB: `268435456`
+- 512MB: `536870912`
+- 1GB: `1073741824`
+- 2GB: `2147483648`
 
 ### Storage Configuration (`storage`)
 
-Controls storage backend behavior.
+Controls storage backend behavior and distribution:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `default_backend` | string | `"ipfs"` | Default storage backend |
-| `distribution.strategy` | string | `"single"` | Distribution strategy: "single", "replicate", "smart" |
-| `distribution.replication.min_replicas` | int | `1` | Minimum number of replicas |
-| `distribution.replication.max_replicas` | int | `3` | Maximum number of replicas |
+| `default_backend` | string | `"ipfs"` | Primary storage backend |
+| `distribution.strategy` | string | `"single"` | Distribution strategy |
+| `distribution.replication.min_replicas` | int | `1` | Minimum replicas |
+| `distribution.replication.max_replicas` | int | `3` | Maximum replicas |
+
+**Distribution Strategies:**
+- `"single"`: Use one backend (simplest)
+- `"replicate"`: Store copies on multiple backends
+- `"smart"`: Automatically choose based on availability
 
 ### Privacy Configuration (`privacy`)
 
-Controls privacy features.
+Controls privacy and anonymity features:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `default_level` | string | `"medium"` | Default privacy level: "low", "medium", "high" |
-| `relay_pool.enabled` | bool | `false` | Enable relay pool for anonymous routing |
-| `relay_pool.max_relays` | int | `10` | Maximum number of relays in pool |
-| `relay_pool.min_relays` | int | `3` | Minimum number of relays |
-| `cover_traffic.enabled` | bool | `false` | Enable cover traffic generation |
-| `cover_traffic.ratio` | float | `0.5` | Ratio of cover to real traffic |
+| `default_level` | string | `"medium"` | Default privacy level |
+| `relay_pool.enabled` | bool | `false` | Enable relay routing |
+| `relay_pool.max_relays` | int | `10` | Maximum relay nodes |
+| `relay_pool.min_relays` | int | `3` | Minimum relay nodes |
+| `cover_traffic.enabled` | bool | `false` | Enable cover traffic |
+| `cover_traffic.ratio` | float | `0.5` | Cover to real traffic ratio |
 
-Privacy levels:
-- **low**: Basic anonymization, best performance
-- **medium**: Balanced privacy and performance
-- **high**: Maximum privacy with relay routing and cover traffic
+**Privacy Levels:**
+- `"low"`: Basic anonymization, best performance
+- `"medium"`: Balanced privacy and performance (default)
+- `"high"`: Maximum privacy with relay routing and cover traffic
 
 ### Block Configuration (`blocks`)
 
-Controls block splitting and processing.
+Controls block processing parameters:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `size` | int | `131072` | Block size in bytes (128KB) |
 | `compression` | bool | `false` | Enable block compression |
-| `encryption` | bool | `false` | Enable additional encryption layer |
+| `encryption` | bool | `false` | Additional encryption layer |
+
+**Block Size Options:**
+- 64KB: `65536` (smaller files)
+- 128KB: `131072` (default, recommended)
+- 256KB: `262144` (larger files)
+- 1MB: `1048576` (very large files)
 
 ### FUSE Configuration (`fuse`)
 
-Controls FUSE filesystem mounting.
+Controls filesystem mounting behavior:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `allow_other` | bool | `false` | Allow other users to access mount |
+| `allow_other` | bool | `false` | Allow other users to access |
 | `default_permissions` | bool | `true` | Enable permission checking |
-| `max_read` | int | `131072` | Maximum read size in bytes |
+| `max_read` | int | `131072` | Maximum read size |
 | `debug` | bool | `false` | Enable FUSE debug output |
 
 ### Logging Configuration (`logging`)
 
-Controls logging behavior.
+Controls log output and verbosity:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `level` | string | `"info"` | Log level: "debug", "info", "warn", "error" |
+| `level` | string | `"info"` | Log level |
 | `file` | string | `""` | Log file path (empty = stdout) |
-| `format` | string | `"json"` | Log format: "json", "text" |
-| `max_size` | int | `10` | Maximum log file size in MB |
-| `max_backups` | int | `3` | Number of backup files to keep |
+| `format` | string | `"json"` | Output format |
+| `max_size` | int | `10` | Max log file size in MB |
+| `max_backups` | int | `3` | Number of old logs to keep |
+
+**Log Levels:**
+- `"debug"`: Very detailed output
+- `"info"`: Normal operation logs
+- `"warn"`: Warnings only
+- `"error"`: Errors only
 
 ### Security Configuration (`security`)
 
-Controls security features.
+Controls security features:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -201,31 +145,36 @@ Controls security features.
 
 ### Performance Configuration (`performance`)
 
-Controls performance optimizations.
+Controls concurrency and optimization:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `parallel_uploads` | int | `3` | Concurrent upload operations |
 | `parallel_downloads` | int | `5` | Concurrent download operations |
 | `prefetch` | bool | `true` | Enable predictive prefetching |
-| `write_buffer_size` | int | `4194304` | Write buffer size in bytes (4MB) |
+| `write_buffer_size` | int | `4194304` | Write buffer size (4MB) |
 
 ### Web UI Configuration (`webui`)
 
-Controls web interface settings.
+Controls the web interface:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | bool | `false` | Enable web UI server |
+| `enabled` | bool | `false` | Enable web interface |
 | `address` | string | `"localhost:8080"` | Listen address |
-| `tls.enabled` | bool | `true` | Enable HTTPS |
-| `tls.cert_file` | string | `""` | TLS certificate file path |
-| `tls.key_file` | string | `""` | TLS key file path |
+| `tls.enabled` | bool | `true` | Use HTTPS |
+| `tls.cert_file` | string | `""` | TLS certificate path |
+| `tls.key_file` | string | `""` | TLS key path |
 
 ## Environment Variables
 
-All configuration options can be overridden using environment variables with the prefix `NOISEFS_`:
+All configuration options can be overridden using environment variables. The format is:
 
+```
+NOISEFS_<SECTION>_<FIELD>
+```
+
+Examples:
 ```bash
 # Override IPFS endpoint
 export NOISEFS_IPFS_API_ENDPOINT="http://remote-ipfs:5001"
@@ -240,81 +189,80 @@ export NOISEFS_LOGGING_LEVEL="debug"
 export NOISEFS_PRIVACY_DEFAULT_LEVEL="high"
 ```
 
-Environment variable format: `NOISEFS_<SECTION>_<FIELD>` (uppercase, underscores for nesting)
+For nested fields, use underscores:
+```bash
+# Enable relay pool
+export NOISEFS_PRIVACY_RELAY_POOL_ENABLED="true"
+
+# Set replication strategy
+export NOISEFS_STORAGE_DISTRIBUTION_STRATEGY="replicate"
+```
 
 ## Configuration Profiles
 
-### Development Profile
+### Minimal Configuration
 
-Optimized for development and testing:
-
+For basic usage with defaults:
 ```json
 {
   "ipfs": {
     "api_endpoint": "http://localhost:5001"
-  },
+  }
+}
+```
+
+### Development Configuration
+
+Optimized for testing and development:
+```json
+{
   "cache": {
-    "enabled": true,
     "max_size": 100
-  },
-  "privacy": {
-    "default_level": "low"
   },
   "logging": {
     "level": "debug",
     "format": "text"
+  },
+  "privacy": {
+    "default_level": "low"
   }
 }
 ```
 
-### Production Profile
+### Production Configuration
 
-Optimized for production use:
-
+For production deployments:
 ```json
 {
-  "ipfs": {
-    "api_endpoint": "http://localhost:5001",
-    "timeout": 600,
-    "max_connections": 500
-  },
   "cache": {
-    "enabled": true,
     "max_size": 10000,
     "memory_limit": 2147483648
   },
-  "privacy": {
-    "default_level": "medium",
-    "relay_pool": {
-      "enabled": true,
-      "max_relays": 20
-    }
-  },
   "logging": {
     "level": "warn",
-    "file": "/var/log/noisefs/noisefs.log",
-    "format": "json"
+    "file": "/var/log/noisefs/noisefs.log"
   },
   "security": {
-    "secure_delete": true,
     "memory_lock": true,
     "audit_log": true
+  },
+  "performance": {
+    "parallel_uploads": 10,
+    "parallel_downloads": 20
   }
 }
 ```
 
-### High Security Profile
+### High Security Configuration
 
-Maximum security and privacy:
-
+Maximum privacy and security:
 ```json
 {
   "privacy": {
     "default_level": "high",
     "relay_pool": {
       "enabled": true,
-      "min_relays": 5,
-      "max_relays": 20
+      "min_relays": 5
     },
     "cover_traffic": {
       "enabled": true,
@@ -356,54 +304,44 @@ noisefs-config validate
 noisefs-config reset
 ```
 
-### Manual Editing
+### Configuration Precedence
 
-You can edit the configuration file directly:
-
-```bash
-# Edit with your preferred editor
-vim ~/.noisefs/config.json
-
-# Validate after editing
-noisefs-config validate
-```
+Configuration values are applied in this order (later overrides earlier):
+1. Built-in defaults
+2. Configuration file
+3. Environment variables
+4. Command-line flags
 
 ## Best Practices
 
-1. **Start with defaults** - The default configuration works well for most users
-2. **Adjust cache size** based on available memory
-3. **Use appropriate privacy levels** for your threat model
-4. **Enable logging** in production for troubleshooting
-5. **Regular backups** of your configuration file
-6. **Test changes** in development before production
+1. **Start Simple**: Use minimal configuration and add options as needed
+2. **Monitor Performance**: Adjust cache and parallelism based on usage
+3. **Security vs Performance**: Higher privacy levels impact performance
+4. **Resource Limits**: Set appropriate limits for your hardware
+5. **Regular Backups**: Keep backups of your configuration file
 
-## Troubleshooting
+## Troubleshooting Configuration
 
-### Configuration Not Loading
+### Common Issues
 
-```bash
-# Check configuration location
-noisefs config show --config-path
+**Configuration Not Loading**
+- Check file permissions: `ls -la ~/.noisefs/config.json`
+- Validate JSON syntax: `noisefs-config validate`
+- Check for typos in field names
 
-# Validate configuration syntax
-noisefs-config validate
+**Environment Variables Not Working**
+- Ensure variables are exported: `export NOISEFS_...`
+- Check capitalization (must be uppercase)
+- Verify underscore placement for nested fields
 
-# Check permissions
-ls -la ~/.noisefs/config.json
-```
-
-### Environment Variables Not Working
-
-```bash
-# Check variable is exported
-echo $NOISEFS_CACHE_MAX_SIZE
-
-# Run with debug to see configuration sources
-noisefs --debug status
-```
+**Performance Issues**
+- Increase cache size if you have memory
+- Adjust parallel operations based on network
+- Consider lowering privacy level
 
 ## See Also
 
-- [CLI Usage Guide](cli-usage.md) - Using the command-line interface
-- [Installation Guide](installation.md) - Installation and setup
-- [Privacy Infrastructure](privacy-infrastructure.md) - Privacy configuration details
+- [CLI Usage Guide](cli-usage.md) - Command-line options
+- [Installation Guide](installation.md) - Initial setup
+- [Privacy Infrastructure](privacy-infrastructure.md) - Privacy level details
+- [Troubleshooting Guide](troubleshooting.md) - Common problems
