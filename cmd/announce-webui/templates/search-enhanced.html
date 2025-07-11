@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Search - NoiseFS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/search-enhanced.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">NoiseFS Announcements</h1>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/">Recent</a></li>
+                <li><a href="/topics">Topics</a></li>
+                <li><a href="/search" class="active">Search</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <section class="search-section">
+            <h2>Advanced Search</h2>
+            
+            <!-- Search Form -->
+            <form id="searchForm" class="search-form">
+                <!-- Keywords -->
+                <div class="form-group">
+                    <label for="keywords">Keywords</label>
+                    <input type="text" id="keywords" name="keywords" 
+                           placeholder="Search announcements...">
+                </div>
+                
+                <!-- Tags with autocomplete -->
+                <div class="form-group">
+                    <label for="tags">Tags</label>
+                    <div class="tag-input-container">
+                        <div id="selectedTags" class="selected-tags"></div>
+                        <input type="text" id="tagInput" 
+                               placeholder="Type to search tags..."
+                               autocomplete="off">
+                        <div id="tagSuggestions" class="tag-suggestions"></div>
+                    </div>
+                </div>
+                
+                <!-- Topics -->
+                <div class="form-group">
+                    <label for="topics">Topics</label>
+                    <select id="topics" name="topics" multiple>
+                        <option value="">Loading topics...</option>
+                    </select>
+                    <label class="checkbox">
+                        <input type="checkbox" id="includeSubtopics" checked>
+                        Include subtopics
+                    </label>
+                </div>
+                
+                <!-- Filters Row -->
+                <div class="filters-row">
+                    <div class="form-group">
+                        <label for="categories">Categories</label>
+                        <select id="categories" name="categories" multiple>
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                            <option value="document">Document</option>
+                            <option value="data">Data</option>
+                            <option value="software">Software</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sizeClasses">Size Classes</label>
+                        <select id="sizeClasses" name="sizeClasses" multiple>
+                            <option value="tiny">Tiny (&lt; 1MB)</option>
+                            <option value="small">Small (&lt; 10MB)</option>
+                            <option value="medium">Medium (&lt; 100MB)</option>
+                            <option value="large">Large (&lt; 1GB)</option>
+                            <option value="huge">Huge (&gt;= 1GB)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Date Range -->
+                <div class="form-group">
+                    <label>Date Range</label>
+                    <div class="date-range">
+                        <input type="date" id="dateFrom" name="dateFrom">
+                        <span>to</span>
+                        <input type="date" id="dateTo" name="dateTo">
+                    </div>
+                </div>
+                
+                <!-- Sort Options -->
+                <div class="form-group">
+                    <label>Sort By</label>
+                    <div class="sort-options">
+                        <select id="sortBy" name="sortBy">
+                            <option value="relevance">Relevance</option>
+                            <option value="time">Time</option>
+                            <option value="size">Size</option>
+                        </select>
+                        <select id="sortOrder" name="sortOrder">
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Search Actions -->
+                <div class="search-actions">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                    <button type="button" id="clearBtn" class="btn btn-secondary">Clear</button>
+                    <button type="button" id="saveSearchBtn" class="btn btn-outline">Save Search</button>
+                </div>
+            </form>
+            
+            <!-- Search Stats -->
+            <div id="searchStats" class="search-stats" style="display: none;">
+                <span id="resultCount">0 results</span>
+                <span id="searchTime">in 0.00s</span>
+                <span id="tagRecoveryStats"></span>
+            </div>
+            
+            <!-- Search Results -->
+            <div id="searchResults" class="search-results">
+                <!-- Results will be inserted here -->
+            </div>
+            
+            <!-- Pagination -->
+            <div id="pagination" class="pagination" style="display: none;">
+                <!-- Pagination controls will be inserted here -->
+            </div>
+        </section>
+        
+        <!-- Saved Searches Sidebar -->
+        <aside class="saved-searches">
+            <h3>Saved Searches</h3>
+            <div id="savedSearchList" class="saved-search-list">
+                <!-- Saved searches will be listed here -->
+            </div>
+        </aside>
+    </main>
+    
+    <!-- Result Template -->
+    <template id="resultTemplate">
+        <div class="search-result">
+            <div class="result-header">
+                <span class="category-badge"></span>
+                <span class="size-badge"></span>
+                <time class="timestamp"></time>
+            </div>
+            <div class="result-body">
+                <div class="descriptor">
+                    <code class="descriptor-cid"></code>
+                    <button class="copy-btn" title="Copy descriptor">📋</button>
+                </div>
+                <div class="topic">
+                    <span class="topic-path"></span>
+                </div>
+                <div class="tags"></div>
+                <div class="highlights"></div>
+            </div>
+            <div class="result-actions">
+                <button class="btn btn-sm btn-primary">Download</button>
+                <button class="btn btn-sm btn-secondary similar-btn">Find Similar</button>
+            </div>
+        </div>
+    </template>
+    
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/search-enhanced.js"></script>
+</body>
+</html>

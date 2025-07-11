@@ -196,6 +196,7 @@ func main() {
 
 	// Page routes
 	router.HandleFunc("/", server.handleIndex).Methods("GET")
+	router.HandleFunc("/dashboard", server.handleDashboard).Methods("GET")
 	router.HandleFunc("/topics", server.handleTopicsPage).Methods("GET")
 	router.HandleFunc("/search", server.handleSearchPage).Methods("GET")
 
@@ -249,6 +250,18 @@ func (s *Server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	if err := templates.ExecuteTemplate(w, "search.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	data := struct {
+		Title string
+	}{
+		Title: "Dashboard - NoiseFS",
+	}
+	
+	if err := templates.ExecuteTemplate(w, "dashboard.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
