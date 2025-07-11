@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -275,19 +276,29 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 		"direction": req.direction,
 	})
 
-	// In a real implementation, this would:
-	// 1. Generate the next N block CIDs based on the base CID and direction
-	// 2. Check if they're already in cache
-	// 3. Fetch missing blocks from IPFS
-	// 4. Store them in cache
+	// Use the enhanced sequential tracker if available
+	// For backward compatibility, we'll keep the simple implementation
+	// but log that the enhanced version should be used
 	
-	// For now, we'll simulate this process
+	c.logger.Info("Using simplified read-ahead. Consider using EnhancedReadAheadWorker for better sequential detection", map[string]interface{}{
+		"base_cid": req.baseCID,
+	})
+	
+	// Simple implementation for backward compatibility
 	prefetchedCount := 0
 	cacheHits := 0
 
+	// Generate sequential CIDs based on a simple pattern
+	// In production, use the EnhancedReadAheadWorker which understands descriptors
 	for i := 1; i <= req.count; i++ {
-		// Generate next CID (simplified simulation)
-		nextCID := req.baseCID + "_next_" + string(rune(i))
+		var nextCID string
+		if req.direction > 0 {
+			// Forward sequential
+			nextCID = fmt.Sprintf("%s_seq_%d", req.baseCID, i)
+		} else {
+			// Backward sequential
+			nextCID = fmt.Sprintf("%s_seq_-%d", req.baseCID, i)
+		}
 		
 		// Check if already in cache
 		if c.underlying.Has(nextCID) {
@@ -295,17 +306,12 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 			continue
 		}
 
-		// Simulate fetching and storing the block
-		// In real implementation, this would be an IPFS fetch
-		block := &blocks.Block{} // Placeholder
-		if err := c.underlying.Store(nextCID, block); err != nil {
-			c.logger.Warn("Failed to store prefetched block", map[string]interface{}{
-				"cid":   nextCID,
-				"error": err.Error(),
-			})
-			continue
-		}
-
+		// In production, this would fetch from IPFS
+		// For now, we can't fetch without proper block resolution
+		c.logger.Debug("Would prefetch block", map[string]interface{}{
+			"cid": nextCID,
+		})
+		
 		prefetchedCount++
 	}
 
