@@ -37,6 +37,9 @@ type AdaptiveAccessPattern struct {
 	CID                string              `json:"cid"`
 	AccessTimes        []time.Time         `json:"access_times"`
 	AccessIntervals    []time.Duration     `json:"access_intervals"`
+	AccessCount        int64               `json:"access_count"`
+	FirstAccess        time.Time           `json:"first_access"`
+	LastAccess         time.Time           `json:"last_access"`
 	DailyPattern       [24]int             `json:"daily_pattern"`
 	WeeklyPattern      [7]int              `json:"weekly_pattern"`
 	TrendDirection     float64             `json:"trend_direction"`
@@ -120,9 +123,10 @@ type CacheExchangeProtocol struct {
 
 // AdaptiveAccessPredictor predicts access patterns using ML
 type AdaptiveAccessPredictor struct {
-	model          *LinearRegressionModel
-	featureExtractor *FeatureExtractor
-	predictionCache  map[string]float64
+	engine          *AccessPredictor
+	predictionCache map[string]float64
+	cacheHitRate    float64
+	lastUpdate      time.Time
 	mutex           sync.RWMutex
 }
 
@@ -207,7 +211,9 @@ func NewAdaptiveCache(config *AdaptiveCacheConfig) *AdaptiveCache {
 	
 	// Initialize ML predictor
 	cache.predictor = &AdaptiveAccessPredictor{
+		engine:          NewAccessPredictor(),
 		predictionCache: make(map[string]float64),
+		lastUpdate:      time.Now(),
 	}
 	
 	// Initialize eviction policy with basic implementation
@@ -410,12 +416,26 @@ func (ac *AdaptiveCache) updateAccessPattern(cid string) {
 	
 	now := time.Now()
 	pattern.AccessTimes = append(pattern.AccessTimes, now)
+	pattern.AccessCount++
+	pattern.LastAccess = now
 	
 	// Calculate interval if we have previous access
 	if len(pattern.AccessTimes) > 1 {
 		lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-2]
 		interval := now.Sub(lastAccess)
 		pattern.AccessIntervals = append(pattern.AccessIntervals, interval)
+		
+		// Add training example for ML
+		if ac.predictor != nil && ac.predictor.engine != nil {
+			if item, exists := ac.items[cid]; exists {
+				metadata := map[string]interface{}{
+					"is_randomizer": item.IsRandomizer,
+					"block_type":    item.BlockType,
+				}
+				// This block was accessed, so it's a positive example
+				ac.predictor.engine.AddTrainingExample(pattern, true, metadata)
+			}
+		}
 	}
 	
 	// Update daily and weekly patterns
@@ -433,12 +453,16 @@ func (ac *AdaptiveCache) updateAccessPattern(cid string) {
 
 // initializeAccessPattern creates a new access pattern for a CID
 func (ac *AdaptiveCache) initializeAccessPattern(cid string) {
+	now := time.Now()
 	pattern := &AdaptiveAccessPattern{
 		CID:         cid,
 		AccessTimes: make([]time.Time, 0),
 		AccessIntervals: make([]time.Duration, 0),
 		DailyPattern: [24]int{},
 		WeeklyPattern: [7]int{},
+		FirstAccess: now,
+		LastAccess:  now,
+		AccessCount: 0,
 	}
 	ac.accessHistory[cid] = pattern
 }
@@ -487,6 +511,11 @@ func (ac *AdaptiveCache) predictionLoop() {
 	
 	for range ticker.C {
 		ac.updatePredictions()
+		
+		// Trigger ML model training periodically
+		if ac.predictor != nil && ac.predictor.engine != nil {
+			go ac.predictor.engine.Train()
+		}
 	}
 }
 
@@ -494,16 +523,38 @@ func (ac *AdaptiveCache) predictionLoop() {
 func (ac *AdaptiveCache) updatePredictions() {
 	ac.mutex.RLock()
 	defer ac.mutex.RUnlock()
-	
+
+	if ac.predictor == nil || ac.predictor.engine == nil {
+		return
+	}
+
 	for cid, item := range ac.items {
 		pattern := ac.accessHistory[cid]
 		if pattern != nil {
-			// TODO: Implement ML prediction
-			prediction := 0.5 // Default prediction
+			// Update access pattern data
+			pattern.AccessCount = item.AccessCount
+			pattern.LastAccess = item.LastAccessed
+			if len(pattern.AccessTimes) == 0 && !item.CreatedAt.IsZero() {
+				pattern.FirstAccess = item.CreatedAt
+			}
+			
+			// Get metadata for prediction
+			metadata := map[string]interface{}{
+				"is_randomizer": item.IsRandomizer,
+				"block_type":    item.BlockType,
+			}
+			
+			// Get ML prediction
+			_ = metadata // Mark as used
+			prediction := ac.predictor.engine.PredictNextAccess(pattern)
 			
 			item.mutex.Lock()
 			item.PredictedValue = prediction
 			item.mutex.Unlock()
+			
+			// Update last prediction time
+			pattern.LastPrediction = time.Now()
+			pattern.PredictionAccuracy = prediction
 		}
 	}
 }
@@ -673,32 +724,55 @@ func (ac *AdaptiveCache) GetCacheUtilization() map[string]interface{} {
 
 // Preload attempts to preload predicted blocks based on access patterns
 func (ac *AdaptiveCache) Preload(ctx context.Context, blockFetcher func(string) ([]byte, error)) error {
-	// TODO: Implement ML-based predictions
-	// For now, return empty slice  
-	var predictions []string
+	// Get predictions from ML model
+	predictions := ac.getPredictedBlocks(10) // Get top 10 predictions
 	
-	for _, cid := range predictions {
+	if len(predictions) == 0 {
+		return nil // No predictions available
+	}
+
+	fmt.Printf("Preloading %d predicted blocks based on ML analysis...\n", len(predictions))
+	
+	// Track preload performance
+	preloaded := 0
+	errors := 0
+
+	for _, prediction := range predictions {
 		// Check if already cached
-		if _, exists := ac.items[cid]; exists {
+		if _, exists := ac.items[prediction.CID]; exists {
 			continue
 		}
 		
-		// Check if we have space
-		if float64(ac.currentSize)/float64(ac.maxSize) > 0.9 {
-			break // Cache too full for preloading
+		// Check if we have space (use 80% threshold for preloading)
+		if float64(ac.currentSize)/float64(ac.maxSize) > 0.8 {
+			fmt.Printf("Cache utilization at %.1f%%, stopping preload\n", 
+				float64(ac.currentSize)/float64(ac.maxSize)*100)
+			break
 		}
 		
-		// Fetch and cache the block
-		go func(cid string) {
-			data, err := blockFetcher(cid)
+		// Only preload high-confidence predictions
+		if prediction.Score < 0.7 {
+			continue
+		}
+		
+		// Fetch and cache the block asynchronously
+		go func(pred *PredictionResult) {
+			data, err := blockFetcher(pred.CID)
 			if err == nil {
 				metadata := map[string]interface{}{
 					"preloaded": true,
+					"prediction_score": pred.Score,
 				}
-				ac.Put(cid, data, metadata)
+				ac.Put(pred.CID, data, metadata)
+				preloaded++
+			} else {
+				errors++
 			}
-		}(cid)
+		}(prediction)
 	}
+	
+	// Update prediction accuracy tracking
+	go ac.updatePredictionAccuracy()
 	
 	return nil
 }
@@ -843,6 +917,83 @@ func (ac *AdaptiveCache) privacyMaintenanceLoop() {
 			ac.mutex.Lock()
 			ac.updatePopularityScoresPrivate()
 			ac.mutex.Unlock()
+		}
+	}
+}
+
+// getPredictedBlocks returns top predicted blocks for preloading
+func (ac *AdaptiveCache) getPredictedBlocks(count int) []*PredictionResult {
+	ac.mutex.RLock()
+	defer ac.mutex.RUnlock()
+	
+	if ac.predictor == nil || ac.predictor.engine == nil {
+		return nil
+	}
+	
+	// Get predictions from ML engine
+	predictions := ac.predictor.engine.GetTopPredictions(count)
+	
+	// Filter out already cached blocks
+	filtered := make([]*PredictionResult, 0, len(predictions))
+	for _, pred := range predictions {
+		if _, exists := ac.items[pred.CID]; !exists {
+			filtered = append(filtered, pred)
+		}
+	}
+	
+	return filtered
+}
+
+// updatePredictionAccuracy tracks how well predictions performed
+func (ac *AdaptiveCache) updatePredictionAccuracy() {
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+	
+	if ac.predictor == nil || ac.predictor.engine == nil {
+		return
+	}
+	
+	// Track prediction hits
+	predictionHits := 0
+	totalPredictions := 0
+	
+	// Check recent predictions
+	for _, pattern := range ac.accessHistory {
+		if pattern.LastPrediction.IsZero() {
+			continue
+		}
+		
+		totalPredictions++
+		
+		// Check if the block was accessed within prediction window
+		if len(pattern.AccessTimes) > 0 {
+			lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-1]
+			if lastAccess.After(pattern.LastPrediction) && 
+			   lastAccess.Before(pattern.LastPrediction.Add(ac.config.PredictionWindow)) {
+				predictionHits++
+			}
+		}
+	}
+	
+	// Update statistics
+	ac.stats.mutex.Lock()
+	ac.stats.PredictionHits += int64(predictionHits)
+	ac.stats.PredictionTotal += int64(totalPredictions)
+	if ac.stats.PredictionTotal > 0 {
+		ac.stats.PredictionAccuracy = float64(ac.stats.PredictionHits) / float64(ac.stats.PredictionTotal)
+	}
+	ac.stats.mutex.Unlock()
+	
+	// Train ML model with new data
+	for cid, pattern := range ac.accessHistory {
+		if item, exists := ac.items[cid]; exists {
+			// Add training example
+			wasAccessed := item.AccessCount > 0
+			metadata := map[string]interface{}{
+				"is_randomizer": item.IsRandomizer,
+				"block_type":    item.BlockType,
+			}
+			ac.predictor.engine.AddTrainingExample(pattern, wasAccessed, metadata)
 		}
 	}
 }
