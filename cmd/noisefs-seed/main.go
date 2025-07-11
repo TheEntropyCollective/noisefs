@@ -38,7 +38,7 @@ func main() {
 	fmt.Println()
 
 	// Create seeder configuration based on profile
-	config := createSeedConfig(*profile, *outputDir, *ipfsAPI, *parallel, *videoQuality)
+	config := createSeedConfig(*profile, *outputDir, *ipfsAPI, *parallel, *videoQuality, *verbose)
 	
 	if *dryRun {
 		fmt.Println("🔍 DRY RUN MODE - Preview Only")
@@ -87,12 +87,13 @@ func main() {
 	generateReport(config, duration)
 }
 
-func createSeedConfig(profile, outputDir, ipfsAPI string, parallel int, videoQuality string) *bootstrap.SeedConfig {
+func createSeedConfig(profile, outputDir, ipfsAPI string, parallel int, videoQuality string, verbose bool) *bootstrap.SeedConfig {
 	config := &bootstrap.SeedConfig{
 		OutputDir:    outputDir,
 		IPFSEndpoint: ipfsAPI,
 		Parallel:     parallel,
 		VideoQuality: videoQuality,
+		Verbose:      verbose,
 	}
 
 	switch profile {
@@ -101,16 +102,19 @@ func createSeedConfig(profile, outputDir, ipfsAPI string, parallel int, videoQua
 		config.MaxSize = 500 * 1024 * 1024 // 500MB
 		config.IncludeVideo = false
 		config.BlocksPerSize = 100
+		config.GenesisBlockCount = 250 // More genesis blocks for minimal
 	case "maximum":
 		config.Profile = bootstrap.ProfileMaximum
 		config.MaxSize = 10 * 1024 * 1024 * 1024 // 10GB
 		config.IncludeVideo = true
 		config.BlocksPerSize = 1000
+		config.GenesisBlockCount = 100
 	default: // standard
 		config.Profile = bootstrap.ProfileStandard
 		config.MaxSize = 2 * 1024 * 1024 * 1024 // 2GB
 		config.IncludeVideo = true
 		config.BlocksPerSize = 500
+		config.GenesisBlockCount = 200 // Ensure we meet minimums
 	}
 
 	return config

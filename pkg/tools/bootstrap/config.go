@@ -33,6 +33,9 @@ type SeedConfig struct {
 	MinPublicDomainRatio float64
 	GenesisBlockCount    int
 	PopularityThreshold  float64
+	
+	// Logging
+	Verbose      bool
 }
 
 // ContentSource represents a source of public domain content

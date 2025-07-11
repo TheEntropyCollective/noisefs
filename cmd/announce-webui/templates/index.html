@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">NoiseFS Announcements</h1>
+            <ul class="nav-links">
+                <li><a href="/" class="active">Recent</a></li>
+                <li><a href="/topics">Topics</a></li>
+                <li><a href="/search">Search</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="stat-label">Total Announcements:</span>
+                <span class="stat-value" id="totalAnnouncements">-</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Active Subscriptions:</span>
+                <span class="stat-value" id="activeSubscriptions">-</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Connected:</span>
+                <span class="stat-value" id="connectionStatus">
+                    <span class="status-indicator offline"></span>
+                    Offline
+                </span>
+            </div>
+        </div>
+
+        <section class="announcements-section">
+            <h2>Recent Announcements</h2>
+            <div class="filters">
+                <select id="categoryFilter" class="filter-select">
+                    <option value="">All Categories</option>
+                    <option value="video">Video</option>
+                    <option value="audio">Audio</option>
+                    <option value="document">Document</option>
+                    <option value="image">Image</option>
+                    <option value="archive">Archive</option>
+                    <option value="other">Other</option>
+                </select>
+                <select id="sizeFilter" class="filter-select">
+                    <option value="">All Sizes</option>
+                    <option value="tiny">Tiny (<10MB)</option>
+                    <option value="small">Small (10-100MB)</option>
+                    <option value="medium">Medium (100MB-1GB)</option>
+                    <option value="large">Large (1-10GB)</option>
+                    <option value="huge">Huge (>10GB)</option>
+                </select>
+                <button id="refreshBtn" class="btn btn-secondary">Refresh</button>
+            </div>
+            
+            <div id="announcementsList" class="announcements-list">
+                <div class="loading">Loading announcements...</div>
+            </div>
+        </section>
+    </main>
+
+    <template id="announcementTemplate">
+        <div class="announcement-card">
+            <div class="announcement-header">
+                <span class="category-badge"></span>
+                <span class="size-badge"></span>
+                <time class="timestamp"></time>
+            </div>
+            <div class="announcement-body">
+                <div class="descriptor">
+                    <label>Descriptor:</label>
+                    <code class="descriptor-cid"></code>
+                    <button class="copy-btn" title="Copy descriptor">📋</button>
+                </div>
+                <div class="topic">
+                    <label>Topic:</label>
+                    <span class="topic-path"></span>
+                </div>
+                <div class="tags">
+                    <label>Tags:</label>
+                    <div class="tag-list"></div>
+                </div>
+                <div class="expiry">
+                    <label>Expires:</label>
+                    <span class="expiry-time"></span>
+                </div>
+            </div>
+            <div class="announcement-actions">
+                <button class="btn btn-primary download-btn">
+                    Download with NoiseFS
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

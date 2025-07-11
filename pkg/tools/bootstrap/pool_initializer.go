@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -198,11 +200,36 @@ func (p *PoolInitializer) ValidatePool() (*PoolValidation, error) {
 	
 	for localPath := range p.cidMapping {
 		var size int
-		fmt.Sscanf(localPath, "%*[^_]_%d.block", &size)
-		blocksBySize[size]++
+		// Extract size from filename using string manipulation instead of scanf
+		// Handle both hash_SIZE.block and genesis_SIZE_INDEX.block patterns
 		
-		// All our generated blocks are from public domain content
-		publicDomainCount++
+		parts := strings.Split(localPath, "_")
+		if len(parts) >= 2 && strings.HasSuffix(localPath, ".block") {
+			// For regular blocks: hash_SIZE.block
+			if len(parts) == 2 {
+				sizeStr := strings.TrimSuffix(parts[1], ".block")
+				if parsedSize, err := strconv.Atoi(sizeStr); err == nil && parsedSize > 0 {
+					size = parsedSize
+					blocksBySize[size]++
+					publicDomainCount++
+					continue
+				}
+			}
+			// For genesis blocks: genesis_SIZE_INDEX.block
+			if len(parts) == 3 && parts[0] == "genesis" {
+				if parsedSize, err := strconv.Atoi(parts[1]); err == nil && parsedSize > 0 {
+					size = parsedSize
+					blocksBySize[size]++
+					publicDomainCount++
+					continue
+				}
+			}
+		}
+		
+		// Log for debugging
+		if p.config.Verbose {
+			fmt.Printf("Warning: Could not parse size from block filename: %s\n", localPath)
+		}
 	}
 	
 	validation.TotalBlocks = len(p.cidMapping)
