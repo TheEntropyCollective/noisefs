@@ -13,6 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
 func main() {
@@ -22,6 +23,8 @@ func main() {
 		upload     = flag.String("upload", "", "File to upload to NoiseFS")
 		download   = flag.String("download", "", "Descriptor CID to download from NoiseFS")
 		output     = flag.String("output", "", "Output file path for download")
+		stats      = flag.Bool("stats", false, "Show NoiseFS statistics")
+		quiet      = flag.Bool("quiet", false, "Minimal output (only show errors and results)")
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
 	)
@@ -87,14 +90,16 @@ func main() {
 			"file":       *upload,
 			"block_size": cfg.Performance.BlockSize,
 		})
-		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, logger); err != nil {
+		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, *quiet, logger); err != nil {
 			logger.Error("Upload failed", map[string]interface{}{
 				"file":  *upload,
 				"error": err.Error(),
 			})
 			os.Exit(1)
 		}
-		showMetrics(client, logger)
+		if !*quiet {
+			showMetrics(client, logger)
+		}
 	} else if *download != "" {
 		if *output == "" {
 			logger.Error("Output file path required for download", nil)
@@ -104,7 +109,7 @@ func main() {
 			"descriptor_cid": *download,
 			"output_file":    *output,
 		})
-		if err := downloadFile(ipfsClient, client, *download, *output, logger); err != nil {
+		if err := downloadFile(ipfsClient, client, *download, *output, *quiet, logger); err != nil {
 			logger.Error("Download failed", map[string]interface{}{
 				"descriptor_cid": *download,
 				"output_file":    *output,
@@ -112,7 +117,12 @@ func main() {
 			})
 			os.Exit(1)
 		}
-		showMetrics(client, logger)
+		if !*quiet {
+			showMetrics(client, logger)
+		}
+	} else if *stats {
+		// Show statistics
+		showSystemStats(ipfsClient, client, blockCache, logger)
 	} else {
 		flag.Usage()
 	}
@@ -131,7 +141,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, logger *logging.Logger) error {
+func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, quiet bool, logger *logging.Logger) error {
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -155,9 +165,19 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	logger.Info("Splitting file into blocks", map[string]interface{}{
 		"block_size": blockSize,
 	})
+	
+	var splitProgress *util.ProgressBar
+	if !quiet {
+		splitProgress = util.NewProgressBar(fileInfo.Size(), "Splitting file", os.Stdout)
+	}
+	
 	fileBlocks, err := splitter.Split(file)
 	if err != nil {
 		return fmt.Errorf("failed to split file: %w", err)
+	}
+	
+	if splitProgress != nil {
+		splitProgress.Finish()
 	}
 	
 	logger.Info("File split into blocks", map[string]interface{}{
@@ -177,7 +197,6 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	randomizer2Blocks := make([]*blocks.Block, len(fileBlocks))
 	randomizer2CIDs := make([]string, len(fileBlocks))
 	
-	fmt.Println("Selecting randomizer blocks (3-tuple format)...")
 	for i := range fileBlocks {
 		randBlock1, cid1, randBlock2, cid2, err := client.SelectTwoRandomizers(fileBlocks[i].Size())
 		if err != nil {
@@ -200,7 +219,11 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	}
 	
 	// Store anonymized blocks in IPFS with caching
-	fmt.Println("Storing anonymized blocks in IPFS...")
+	var uploadProgress *util.ProgressBar
+	if !quiet {
+		uploadProgress = util.NewProgressBar(int64(len(anonymizedBlocks)), "Uploading blocks", os.Stdout)
+	}
+	
 	dataCIDs := make([]string, len(anonymizedBlocks))
 	for i, block := range anonymizedBlocks {
 		cid, err := client.StoreBlockWithCache(block)
@@ -208,6 +231,13 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 			return fmt.Errorf("failed to store data block %d: %w", i, err)
 		}
 		dataCIDs[i] = cid
+		if uploadProgress != nil {
+			uploadProgress.Add(1)
+		}
+	}
+	
+	if uploadProgress != nil {
+		uploadProgress.Finish()
 	}
 	
 	// Add block triples to descriptor (3-tuple format)
@@ -236,9 +266,13 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		"block_count":    len(fileBlocks),
 	})
 	
-	// Display results for user (keep some console output for UX)
-	fmt.Println("\nUpload complete!")
-	fmt.Printf("Descriptor CID: %s\n", descriptorCID)
+	// Display results for user
+	if quiet {
+		fmt.Println(descriptorCID)
+	} else {
+		fmt.Println("\nUpload complete!")
+		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
+	}
 	
 	// Record upload metrics
 	totalStoredBytes := int64(0)
@@ -252,7 +286,7 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	return nil
 }
 
-func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, logger *logging.Logger) error {
+func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, logger *logging.Logger) error {
 	// Create descriptor store
 	store, err := descriptors.NewStore(ipfsClient)
 	if err != nil {
@@ -260,14 +294,18 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 	}
 	
 	// Load descriptor from IPFS
-	fmt.Printf("Loading descriptor from CID: %s\n", descriptorCID)
+	if !quiet {
+		fmt.Printf("Loading descriptor from CID: %s\n", descriptorCID)
+	}
 	descriptor, err := store.Load(descriptorCID)
 	if err != nil {
 		return fmt.Errorf("failed to load descriptor: %w", err)
 	}
 	
-	fmt.Printf("Downloading file: %s (%d bytes)\n", descriptor.Filename, descriptor.FileSize)
-	fmt.Printf("Blocks to retrieve: %d\n", len(descriptor.Blocks))
+	if !quiet {
+		fmt.Printf("Downloading file: %s (%d bytes)\n", descriptor.Filename, descriptor.FileSize)
+		fmt.Printf("Blocks to retrieve: %d\n", len(descriptor.Blocks))
+	}
 	
 	// Retrieve all data blocks
 	dataCIDs := make([]string, len(descriptor.Blocks))
@@ -283,30 +321,72 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 	}
 	
 	// Retrieve anonymized data blocks
-	fmt.Println("Retrieving anonymized data blocks...")
-	dataBlocks, err := ipfsClient.RetrieveBlocks(dataCIDs)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve data blocks: %w", err)
+	var downloadProgress *util.ProgressBar
+	if !quiet {
+		downloadProgress = util.NewProgressBar(int64(len(dataCIDs)), "Downloading blocks", os.Stdout)
+	}
+	
+	dataBlocks := make([]*blocks.Block, len(dataCIDs))
+	for i, cid := range dataCIDs {
+		block, err := ipfsClient.RetrieveBlock(cid)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve data block %d: %w", i, err)
+		}
+		dataBlocks[i] = block
+		if downloadProgress != nil {
+			downloadProgress.Add(1)
+		}
+	}
+	if downloadProgress != nil {
+		downloadProgress.Finish()
 	}
 	
 	// Retrieve first randomizer blocks
-	fmt.Println("Retrieving randomizer blocks...")
-	randomizer1Blocks, err := ipfsClient.RetrieveBlocks(randomizer1CIDs)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve randomizer1 blocks: %w", err)
+	var randomizerProgress *util.ProgressBar
+	if !quiet {
+		randomizerProgress = util.NewProgressBar(int64(len(randomizer1CIDs)), "Retrieving randomizers", os.Stdout)
+	}
+	
+	randomizer1Blocks := make([]*blocks.Block, len(randomizer1CIDs))
+	for i, cid := range randomizer1CIDs {
+		block, err := ipfsClient.RetrieveBlock(cid)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
+		}
+		randomizer1Blocks[i] = block
+		if randomizerProgress != nil {
+			randomizerProgress.Add(1)
+		}
+	}
+	if randomizerProgress != nil {
+		randomizerProgress.Finish()
 	}
 	
 	// Retrieve second randomizer blocks if using 3-tuple format
 	var randomizer2Blocks []*blocks.Block
 	if descriptor.IsThreeTuple() {
-		randomizer2Blocks, err = ipfsClient.RetrieveBlocks(randomizer2CIDs)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve randomizer2 blocks: %w", err)
+		var randomizer2Progress *util.ProgressBar
+		if !quiet {
+			randomizer2Progress = util.NewProgressBar(int64(len(randomizer2CIDs)), "Retrieving randomizers 2", os.Stdout)
+		}
+		
+		randomizer2Blocks = make([]*blocks.Block, len(randomizer2CIDs))
+		for i, cid := range randomizer2CIDs {
+			block, err := ipfsClient.RetrieveBlock(cid)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
+			}
+			randomizer2Blocks[i] = block
+			if randomizer2Progress != nil {
+				randomizer2Progress.Add(1)
+			}
+		}
+		if randomizer2Progress != nil {
+			randomizer2Progress.Finish()
 		}
 	}
 	
 	// XOR blocks to reconstruct original data
-	fmt.Println("Reconstructing original blocks...")
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
 		var origBlock *blocks.Block
@@ -339,7 +419,9 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 		return fmt.Errorf("failed to assemble file: %w", err)
 	}
 	
-	fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
+	if !quiet {
+		fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
+	}
 	
 	// Record download
 	client.RecordDownload()
@@ -379,5 +461,88 @@ func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 	if metrics.BytesUploadedOriginal > 0 {
 		fmt.Printf("Data: %d bytes original → %d bytes stored\n", 
 			metrics.BytesUploadedOriginal, metrics.BytesStoredIPFS)
+	}
+}
+
+// showSystemStats displays comprehensive system statistics
+func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache cache.Cache, logger *logging.Logger) {
+	fmt.Println("=== NoiseFS System Statistics ===\n")
+	
+	// IPFS Connection Status
+	fmt.Println("--- IPFS Connection ---")
+	// Try a simple operation to check if IPFS is connected
+	testBlock, _ := blocks.NewBlock([]byte("test"))
+	if _, err := ipfsClient.StoreBlock(testBlock); err == nil {
+		fmt.Println("IPFS Status: Connected")
+		if peers := ipfsClient.GetConnectedPeers(); len(peers) > 0 {
+			fmt.Printf("Connected Peers: %d\n", len(peers))
+		}
+	} else {
+		fmt.Printf("IPFS Status: Connection Error (%v)\n", err)
+	}
+	
+	// Cache Statistics
+	fmt.Println("\n--- Cache Statistics ---")
+	cacheStats := blockCache.GetStats()
+	fmt.Printf("Cache Size: %d blocks\n", cacheStats.Size)
+	fmt.Printf("Cache Hits: %d\n", cacheStats.Hits)
+	fmt.Printf("Cache Misses: %d\n", cacheStats.Misses)
+	fmt.Printf("Cache Evictions: %d\n", cacheStats.Evictions)
+	if total := cacheStats.Hits + cacheStats.Misses; total > 0 {
+		hitRate := float64(cacheStats.Hits) / float64(total) * 100
+		fmt.Printf("Cache Hit Rate: %.1f%%\n", hitRate)
+	}
+	
+	// NoiseFS Metrics
+	metrics := client.GetMetrics()
+	
+	fmt.Println("\n--- Block Management ---")
+	fmt.Printf("Blocks Reused: %d\n", metrics.BlocksReused)
+	fmt.Printf("Blocks Generated: %d\n", metrics.BlocksGenerated)
+	if total := metrics.BlocksReused + metrics.BlocksGenerated; total > 0 {
+		reuseRate := float64(metrics.BlocksReused) / float64(total) * 100
+		fmt.Printf("Block Reuse Rate: %.1f%%\n", reuseRate)
+	}
+	
+	fmt.Println("\n--- Storage Efficiency ---")
+	if metrics.BytesUploadedOriginal > 0 {
+		fmt.Printf("Original Data: %s\n", formatBytes(metrics.BytesUploadedOriginal))
+		fmt.Printf("Stored Data: %s\n", formatBytes(metrics.BytesStoredIPFS))
+		overhead := float64(metrics.BytesStoredIPFS)/float64(metrics.BytesUploadedOriginal)*100 - 100
+		fmt.Printf("Storage Overhead: %.1f%%\n", overhead)
+	} else {
+		fmt.Println("No data uploaded yet")
+	}
+	
+	fmt.Println("\n--- Operation History ---")
+	fmt.Printf("Total Uploads: %d\n", metrics.TotalUploads)
+	fmt.Printf("Total Downloads: %d\n", metrics.TotalDownloads)
+	
+	// Log the stats for debugging
+	logger.Info("System statistics displayed", map[string]interface{}{
+		"cache_size":      cacheStats.Size,
+		"cache_hit_rate":  float64(cacheStats.Hits) / float64(cacheStats.Hits+cacheStats.Misses) * 100,
+		"block_reuse_rate": metrics.BlockReuseRate,
+		"total_operations": metrics.TotalUploads + metrics.TotalDownloads,
+	})
+}
+
+// formatBytes converts bytes to human-readable format
+func formatBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+	
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/GB)
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/MB)
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/KB)
+	default:
+		return fmt.Sprintf("%d bytes", bytes)
 	}
 }
