@@ -11,12 +11,12 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/big"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,7 +29,9 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/pubsub"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	noisefsConfig "github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -508,8 +510,8 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Upload file
-	descriptorCID, err := w.noisefsClient.Upload(file, header.Filename)
+	// Upload file using proper NoiseFS process
+	descriptorCID, fileSize, err := w.uploadFileToNoiseFS(file, header.Filename)
 	if err != nil {
 		sendError(wr, err, http.StatusInternalServerError)
 		return
@@ -558,7 +560,7 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 		Success:       true,
 		DescriptorCID: descriptorCID,
 		Filename:      header.Filename,
-		Size:          header.Size,
+		Size:          fileSize,
 		Tags:          tags,
 	}
 
@@ -567,15 +569,15 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 
 func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	cid := vars["cid"]
+	descriptorCID := vars["cid"]
 
-	if err := w.validator.ValidateCID(cid); err != nil {
+	if err := w.validator.ValidateCID(descriptorCID); err != nil {
 		sendError(wr, err, http.StatusBadRequest)
 		return
 	}
 
-	// Download file data
-	data, err := w.noisefsClient.Download(cid)
+	// Download file from NoiseFS
+	data, filename, err := w.downloadFileFromNoiseFS(descriptorCID)
 	if err != nil {
 		sendError(wr, err, http.StatusNotFound)
 		return
@@ -583,7 +585,7 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 
 	// Set headers
 	wr.Header().Set("Content-Type", "application/octet-stream")
-	wr.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"file_%s\"", cid[:8]))
+	wr.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
 
 	// Write data
@@ -1333,4 +1335,138 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return tls.X509KeyPair(certPEM, keyPEM)
+}
+
+// uploadFileToNoiseFS handles the complete NoiseFS upload process
+func (w *UnifiedWebUI) uploadFileToNoiseFS(file io.Reader, filename string) (string, int64, error) {
+	// Read file data
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to read file: %w", err)
+	}
+	
+	fileSize := int64(len(data))
+	blockSize := blocks.DefaultBlockSize
+	
+	// Create splitter
+	splitter, err := blocks.NewSplitter(blockSize)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create splitter: %w", err)
+	}
+	
+	// Split file into blocks
+	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to split file: %w", err)
+	}
+	
+	// Create descriptor
+	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
+	
+	// Process each block with XOR
+	for _, fileBlock := range fileBlocks {
+		// Select two randomizer blocks (3-tuple XOR)
+		randBlock1, cid1, randBlock2, cid2, err := w.noisefsClient.SelectTwoRandomizers(fileBlock.Size())
+		if err != nil {
+			return "", 0, fmt.Errorf("failed to select randomizers: %w", err)
+		}
+		
+		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
+		xorBlock, err := fileBlock.XOR3(randBlock1, randBlock2)
+		if err != nil {
+			return "", 0, fmt.Errorf("failed to XOR blocks: %w", err)
+		}
+		
+		// Store anonymized block
+		dataCID, err := w.noisefsClient.StoreBlockWithCache(xorBlock)
+		if err != nil {
+			return "", 0, fmt.Errorf("failed to store data block: %w", err)
+		}
+		
+		// Add block triple to descriptor
+		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
+			return "", 0, fmt.Errorf("failed to add block triple: %w", err)
+		}
+	}
+	
+	// Store descriptor in IPFS
+	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	descriptorCID, err := descriptorStore.Save(descriptor)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to save descriptor: %w", err)
+	}
+	
+	// Record metrics
+	w.noisefsClient.RecordUpload(fileSize, fileSize*3) // *3 for data + 2 randomizer blocks
+	
+	return descriptorCID, fileSize, nil
+}
+
+// downloadFileFromNoiseFS handles the complete NoiseFS download process
+func (w *UnifiedWebUI) downloadFileFromNoiseFS(descriptorCID string) ([]byte, string, error) {
+	// Create descriptor store
+	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	// Load descriptor
+	descriptor, err := descriptorStore.Load(descriptorCID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load descriptor: %w", err)
+	}
+	
+	// Retrieve and reconstruct blocks
+	var originalBlocks []*blocks.Block
+	
+	for _, blockInfo := range descriptor.Blocks {
+		// Retrieve anonymized data block
+		dataBlock, err := w.ipfsClient.RetrieveBlock(blockInfo.DataCID)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to retrieve data block: %w", err)
+		}
+		
+		// Retrieve randomizer blocks
+		randBlock1, err := w.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID1)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
+		}
+		
+		var origBlock *blocks.Block
+		if descriptor.IsThreeTuple() && blockInfo.RandomizerCID2 != "" {
+			// 3-tuple XOR
+			randBlock2, err := w.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID2)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
+			}
+			origBlock, err = dataBlock.XOR3(randBlock1, randBlock2)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
+			}
+		} else {
+			// 2-tuple XOR (legacy)
+			origBlock, err = dataBlock.XOR(randBlock1)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
+			}
+		}
+		
+		originalBlocks = append(originalBlocks, origBlock)
+	}
+	
+	// Assemble file
+	assembler := blocks.NewAssembler()
+	var buf strings.Builder
+	if err := assembler.AssembleToWriter(originalBlocks, &buf); err != nil {
+		return nil, "", fmt.Errorf("failed to assemble file: %w", err)
+	}
+	
+	// Record download
+	w.noisefsClient.RecordDownload()
+	
+	return []byte(buf.String()), descriptor.Filename, nil
 }
