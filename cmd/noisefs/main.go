@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -18,6 +20,11 @@ import (
 )
 
 func main() {
+	// Show legal disclaimer on first run or if not accepted recently
+	if !checkLegalDisclaimerAccepted() {
+		showLegalDisclaimer()
+	}
+
 	var (
 		configFile = flag.String("config", "", "Configuration file path")
 		ipfsAPI    = flag.String("api", "", "IPFS API endpoint (overrides config)")
@@ -890,4 +897,73 @@ func handleSubcommand(cmd string, args []string) {
 		}
 		os.Exit(1)
 	}
+}
+
+// checkLegalDisclaimerAccepted checks if the user has accepted the legal disclaimer
+func checkLegalDisclaimerAccepted() bool {
+	// Get config directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	configDir := filepath.Join(homeDir, ".noisefs")
+	
+	disclaimerFile := filepath.Join(configDir, ".noisefs_legal_accepted")
+	info, err := os.Stat(disclaimerFile)
+	if err != nil {
+		return false
+	}
+	
+	// Check if disclaimer was accepted within the last 30 days
+	return time.Since(info.ModTime()) < 30*24*time.Hour
+}
+
+// showLegalDisclaimer displays the legal disclaimer and asks for acceptance
+func showLegalDisclaimer() {
+	fmt.Println("\n" + strings.Repeat("=", 80))
+	fmt.Println("                          ⚠️  LEGAL NOTICE & TERMS OF USE")
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println()
+	fmt.Println("IMPORTANT: This software is provided for LEGITIMATE PURPOSES ONLY.")
+	fmt.Println()
+	fmt.Println("By using NoiseFS, you acknowledge and agree that:")
+	fmt.Println()
+	fmt.Println("  • You will NOT use this software to share copyrighted material without authorization")
+	fmt.Println("  • You will NOT use this software for any illegal activities")
+	fmt.Println("  • You are solely responsible for all content you upload, share, or download")
+	fmt.Println("  • You understand that all actions may be logged and you may be held accountable")
+	fmt.Println("  • The developers are NOT responsible for how you use this software")
+	fmt.Println()
+	fmt.Println("Legitimate use cases include:")
+	fmt.Println("  • Open source software distribution")
+	fmt.Println("  • Academic and research data sharing")
+	fmt.Println("  • Public domain content distribution")
+	fmt.Println("  • Personal backup and file synchronization")
+	fmt.Println("  • Creative Commons licensed content")
+	fmt.Println()
+	fmt.Println("For detailed information, see: docs/LEGITIMATE_USE_CASES.md")
+	fmt.Println()
+	fmt.Println(strings.Repeat("-", 80))
+	fmt.Printf("\nDo you understand and accept these terms? (yes/no): ")
+	
+	var response string
+	fmt.Scanln(&response)
+	
+	if strings.ToLower(response) != "yes" {
+		fmt.Println("\nYou must accept the terms to use NoiseFS. Exiting.")
+		os.Exit(1)
+	}
+	
+	// Save acceptance
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		configDir := filepath.Join(homeDir, ".noisefs")
+		os.MkdirAll(configDir, 0700)
+		disclaimerFile := filepath.Join(configDir, ".noisefs_legal_accepted")
+		os.WriteFile(disclaimerFile, []byte(time.Now().Format(time.RFC3339)), 0600)
+	}
+	
+	fmt.Println("\nThank you for accepting the terms. Remember to use NoiseFS responsibly.")
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println()
 }

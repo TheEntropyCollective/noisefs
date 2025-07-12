@@ -1,5 +1,9 @@
 # NoiseFS Documentation
 
+## ⚠️ Legal Notice
+
+**IMPORTANT**: NoiseFS is a privacy-preserving file storage tool designed for LEGITIMATE USE ONLY. Users are solely responsible for ensuring their use complies with all applicable laws. The developers explicitly prohibit and disclaim liability for any illegal use. See [LEGITIMATE_USE_CASES.md](docs/LEGITIMATE_USE_CASES.md) for approved uses.
+
 ## What is NoiseFS?
 
 NoiseFS is a revolutionary privacy-preserving distributed file storage system that makes your files mathematically impossible to identify or censor. Think of it as "Tor for file storage" - providing strong anonymity and plausible deniability for both users and storage providers.
@@ -55,11 +59,37 @@ Imagine if every file you stored was broken into puzzle pieces, mixed with piece
    - Each chunk can be part of many different files
    - No way to link chunks back to original content
 
+## Legitimate Use Cases
+
+NoiseFS is designed for legal content sharing and distribution:
+
+### 📂 **Open Source Software**
+- Distribute Linux ISOs and software packages
+- Mirror package repositories
+- Share development builds and releases
+
+### 🔬 **Research & Academia**  
+- Share scientific datasets
+- Distribute research papers and preprints
+- Collaborate on large data projects
+
+### 📚 **Public Domain Content**
+- Host Project Gutenberg texts
+- Share Creative Commons media
+- Distribute open educational resources
+
+### 🏢 **Corporate Use**
+- Internal file distribution
+- Secure backup systems  
+- Cross-office data synchronization
+
+See [LEGITIMATE_USE_CASES.md](docs/LEGITIMATE_USE_CASES.md) for detailed examples and best practices.
+
 ## Who Benefits from NoiseFS?
 
 ### 👤 **Privacy-Conscious Users**
 - Journalists protecting sources
-- Activists in oppressive regimes
+- Activists in oppressive regimes  
 - Researchers handling sensitive data
 - Anyone valuing digital privacy
 

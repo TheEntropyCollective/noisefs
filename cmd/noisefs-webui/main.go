@@ -350,6 +350,7 @@ func main() {
 
 	// Page routes
 	router.HandleFunc("/", webui.handleIndex).Methods("GET")
+	router.HandleFunc("/disclaimer", webui.handleDisclaimer).Methods("GET")
 	router.HandleFunc("/upload", webui.handleUploadPage).Methods("GET")
 	router.HandleFunc("/download", webui.handleDownloadPage).Methods("GET")
 	router.HandleFunc("/browse", webui.handleBrowsePage).Methods("GET")
@@ -376,6 +377,13 @@ func main() {
 	api.HandleFunc("/metrics", webui.handleMetrics).Methods("GET")
 	api.HandleFunc("/ws", webui.handleWebSocket)
 
+	// Add disclaimer notice
+	fmt.Printf("\n========================================\n")
+	fmt.Printf("⚠️  LEGAL NOTICE: This software is for legitimate use only.\n")
+	fmt.Printf("   By using NoiseFS, you agree to comply with all applicable laws.\n")
+	fmt.Printf("   See /disclaimer for full terms of use.\n")
+	fmt.Printf("========================================\n\n")
+	
 	// Start server
 	fmt.Printf("NoiseFS Unified Web UI running at http://localhost%s\n", *addr)
 	
@@ -415,6 +423,10 @@ func main() {
 
 func (w *UnifiedWebUI) handleIndex(wr http.ResponseWriter, r *http.Request) {
 	http.ServeFile(wr, r, "cmd/noisefs-webui/templates/index.html")
+}
+
+func (w *UnifiedWebUI) handleDisclaimer(wr http.ResponseWriter, r *http.Request) {
+	http.ServeFile(wr, r, "cmd/noisefs-webui/templates/disclaimer.html")
 }
 
 func (w *UnifiedWebUI) handleUploadPage(wr http.ResponseWriter, r *http.Request) {
