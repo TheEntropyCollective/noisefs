@@ -29,6 +29,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	noisefsConfig "github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -592,40 +593,114 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a progress tracker
-	progressUpdates := make(chan string, 10)
-	go func() {
-		for update := range progressUpdates {
-			log.Printf("Download progress: %s", update)
+	// First, try to load as a NoiseFS descriptor
+	_, err := w.loadDescriptor(descriptorCID)
+	if err == nil {
+		// It's a valid NoiseFS descriptor, proceed with normal download
+		// Create a progress tracker
+		progressUpdates := make(chan string, 10)
+		go func() {
+			for update := range progressUpdates {
+				log.Printf("Download progress: %s", update)
+			}
+		}()
+		
+		// Download file using the client's proper implementation with progress
+		data, filename, err := w.noisefsClient.DownloadWithMetadataAndProgress(descriptorCID, func(stage string, current, total int) {
+			percent := 0
+			if total > 0 {
+				percent = (current * 100) / total
+			}
+			select {
+			case progressUpdates <- fmt.Sprintf("%s: %d%%", stage, percent):
+			default:
+			}
+		})
+		close(progressUpdates)
+		
+		if err != nil {
+			sendError(wr, err, http.StatusNotFound)
+			return
 		}
-	}()
-	
-	// Download file using the client's proper implementation with progress
-	data, filename, err := w.noisefsClient.DownloadWithMetadataAndProgress(descriptorCID, func(stage string, current, total int) {
-		percent := 0
-		if total > 0 {
-			percent = (current * 100) / total
-		}
-		select {
-		case progressUpdates <- fmt.Sprintf("%s: %d%%", stage, percent):
-		default:
-		}
-	})
-	close(progressUpdates)
-	
-	if err != nil {
-		sendError(wr, err, http.StatusNotFound)
-		return
-	}
 
-	// Set headers
-	wr.Header().Set("Content-Type", "application/octet-stream")
-	wr.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
-	wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		// Set headers
+		wr.Header().Set("Content-Type", "application/octet-stream")
+		wr.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
 
-	// Write data
-	if _, err := wr.Write(data); err != nil {
-		log.Printf("Download error: %v", err)
+		// Write data
+		if _, err := wr.Write(data); err != nil {
+			log.Printf("Download error: %v", err)
+		}
+	} else {
+		// Not a NoiseFS descriptor, try direct IPFS download
+		log.Printf("Not a NoiseFS descriptor, attempting direct IPFS download: %v", err)
+		
+		// Download directly from IPFS
+		reader, err := w.ipfsClient.Cat(descriptorCID)
+		if err != nil {
+			sendError(wr, fmt.Errorf("failed to download file: %w", err), http.StatusNotFound)
+			return
+		}
+		defer reader.Close()
+
+		// Read data from reader
+		data, err := ioutil.ReadAll(reader)
+		if err != nil {
+			sendError(wr, fmt.Errorf("failed to read file: %w", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Generate filename based on CID and detected content type
+		filename := fmt.Sprintf("file_%s", descriptorCID[:8])
+		contentType := "application/octet-stream"
+		
+		// Try to detect content type from data
+		if len(data) > 512 {
+			detectedType := http.DetectContentType(data[:512])
+			log.Printf("Download - Detected content type: %s for CID: %s", detectedType, descriptorCID)
+			if detectedType != "application/octet-stream" {
+				contentType = detectedType
+			}
+			
+			// Also check for magic bytes for common formats
+			if len(data) >= 12 {
+				// Check for QuickTime/MOV format
+				if string(data[4:12]) == "ftypqt  " || string(data[4:8]) == "ftyp" {
+					contentType = "video/quicktime"
+					filename += ".mov"
+				} else if string(data[4:11]) == "ftypmp4" {
+					contentType = "video/mp4"
+					filename += ".mp4"
+				}
+			} else {
+				// Fall back to content type based extensions
+				switch contentType {
+				case "video/mp4":
+					filename += ".mp4"
+				case "video/quicktime":
+					filename += ".mov"
+				case "image/jpeg":
+					filename += ".jpg"
+				case "image/png":
+					filename += ".png"
+				case "application/pdf":
+					filename += ".pdf"
+				case "text/plain":
+					filename += ".txt"
+				}
+			}
+		}
+
+		// Set headers
+		wr.Header().Set("Content-Type", contentType)
+		wr.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+		wr.Header().Set("Content-Length", strconv.Itoa(len(data)))
+
+		// Write data
+		if _, err := wr.Write(data); err != nil {
+			log.Printf("Download error: %v", err)
+		}
 	}
 }
 
@@ -686,28 +761,108 @@ func (w *UnifiedWebUI) handleStream(wr http.ResponseWriter, r *http.Request) {
 
 func (w *UnifiedWebUI) handleInfo(wr http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	cid := vars["cid"]
+	descriptorCID := vars["cid"]
 
-	if err := w.validator.ValidateCID(cid); err != nil {
+	if err := w.validator.ValidateCID(descriptorCID); err != nil {
 		sendError(wr, err, http.StatusBadRequest)
 		return
 	}
 
-	// Try to download to get size (simplified approach)
-	data, err := w.noisefsClient.Download(cid)
-	if err != nil {
-		sendError(wr, err, http.StatusNotFound)
-		return
-	}
+	// First, try to load as a NoiseFS descriptor
+	descriptor, err := w.loadDescriptor(descriptorCID)
+	if err == nil {
+		// It's a valid NoiseFS descriptor
+		// Determine content type from filename
+		contentType := "application/octet-stream"
+		if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".txt") {
+			contentType = "text/plain"
+		} else if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".pdf") {
+			contentType = "application/pdf"
+		} else if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".jpg") || strings.HasSuffix(strings.ToLower(descriptor.Filename), ".jpeg") {
+			contentType = "image/jpeg"
+		} else if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".png") {
+			contentType = "image/png"
+		} else if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".mp4") {
+			contentType = "video/mp4"
+		} else if strings.HasSuffix(strings.ToLower(descriptor.Filename), ".mp3") {
+			contentType = "audio/mpeg"
+		}
 
-	info := DownloadInfo{
-		Filename:      fmt.Sprintf("file_%s", cid[:8]),
-		Size:          int64(len(data)),
-		ContentType:   "application/octet-stream",
-		DescriptorCID: cid,
-	}
+		info := DownloadInfo{
+			Filename:      descriptor.Filename,
+			Size:          descriptor.FileSize,
+			ContentType:   contentType,
+			DescriptorCID: descriptorCID,
+		}
 
-	sendJSON(wr, APIResponse{Success: true, Data: info})
+		sendJSON(wr, APIResponse{Success: true, Data: info})
+	} else {
+		// Not a NoiseFS descriptor, get info about the raw IPFS file
+		log.Printf("Not a NoiseFS descriptor, getting IPFS file info: %v", err)
+		
+		// Generate filename based on CID
+		filename := fmt.Sprintf("file_%s", descriptorCID[:8])
+		contentType := "application/octet-stream"
+		fileSize := int64(0)
+		
+		// Try to get file size and detect content type by downloading first 512 bytes
+		reader, err := w.ipfsClient.Cat(descriptorCID)
+		if err == nil {
+			defer reader.Close()
+			
+			// Read first 512 bytes for content type detection
+			header := make([]byte, 512)
+			n, err := reader.Read(header)
+			if err == nil && n > 0 {
+				detectedType := http.DetectContentType(header[:n])
+				log.Printf("Detected content type: %s for CID: %s", detectedType, descriptorCID)
+				if detectedType != "application/octet-stream" {
+					contentType = detectedType
+				}
+				
+				// Also check for magic bytes for common formats
+				if n >= 12 {
+					// Check for QuickTime/MOV format
+					if string(header[4:12]) == "ftypqt  " || string(header[4:8]) == "ftyp" {
+						contentType = "video/quicktime"
+						filename += ".mov"
+					} else if string(header[4:11]) == "ftypmp4" {
+						contentType = "video/mp4" 
+						filename += ".mp4"
+					}
+				} else {
+					// Fall back to content type based extensions
+					switch contentType {
+					case "video/mp4":
+						filename += ".mp4"
+					case "video/quicktime":
+						filename += ".mov"
+					case "image/jpeg":
+						filename += ".jpg"
+					case "image/png":
+						filename += ".png"
+					case "application/pdf":
+						filename += ".pdf"
+					case "text/plain":
+						filename += ".txt"
+					}
+				}
+			}
+			
+			// Try to estimate file size (this is not exact for streaming)
+			// For now, we'll set it to -1 to indicate unknown
+			fileSize = -1
+		}
+
+		info := DownloadInfo{
+			Filename:      filename,
+			Size:          fileSize,
+			ContentType:   contentType,
+			DescriptorCID: descriptorCID,
+		}
+
+		sendJSON(wr, APIResponse{Success: true, Data: info})
+	}
 }
 
 func (w *UnifiedWebUI) handleAnnounce(wr http.ResponseWriter, r *http.Request) {
@@ -1370,5 +1525,22 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return tls.X509KeyPair(certPEM, keyPEM)
+}
+
+// loadDescriptor loads a descriptor without downloading the file
+func (w *UnifiedWebUI) loadDescriptor(descriptorCID string) (*descriptors.Descriptor, error) {
+	// Create descriptor store
+	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	// Load descriptor
+	descriptor, err := descriptorStore.Load(descriptorCID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load descriptor: %w", err)
+	}
+	
+	return descriptor, nil
 }
 
