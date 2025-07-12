@@ -1277,57 +1277,9 @@ func addTopicRecursive(h *announce.TopicHierarchy, name string, node TopicNode, 
 }
 
 func loadDefaultHierarchy(h *announce.TopicHierarchy) {
-	// Root categories
-	h.AddTopic("content", map[string]string{"description": "All content"})
-	h.AddTopic("software", map[string]string{"description": "Software and tools"})
-	h.AddTopic("research", map[string]string{"description": "Research and datasets"})
-	h.AddTopic("education", map[string]string{"description": "Educational resources"})
-	
-	// Content subcategories
-	h.AddTopic("content/books", map[string]string{"description": "Books and literature"})
-	h.AddTopic("content/books/fiction", nil)
-	h.AddTopic("content/books/technical", nil)
-	h.AddTopic("content/books/public-domain", nil)
-	
-	h.AddTopic("content/documents", map[string]string{"description": "Documents and papers"})
-	h.AddTopic("content/documents/research", nil)
-	h.AddTopic("content/documents/government", nil)
-	h.AddTopic("content/documents/whitepapers", nil)
-	
-	h.AddTopic("content/media", map[string]string{"description": "Media files"})
-	h.AddTopic("content/media/documentaries", nil)
-	h.AddTopic("content/media/educational", nil)
-	h.AddTopic("content/media/public-domain", nil)
-	h.AddTopic("content/media/creative-commons", nil)
-	
-	// Software subcategories
-	h.AddTopic("software/opensource", map[string]string{"description": "Open source projects"})
-	h.AddTopic("software/opensource/golang", nil)
-	h.AddTopic("software/opensource/python", nil)
-	h.AddTopic("software/opensource/javascript", nil)
-	h.AddTopic("software/tools", map[string]string{"description": "Software tools"})
-	h.AddTopic("software/tools/development", nil)
-	h.AddTopic("software/tools/security", nil)
-	h.AddTopic("software/linux", map[string]string{"description": "Linux distributions"})
-	h.AddTopic("software/linux/debian", nil)
-	h.AddTopic("software/linux/fedora", nil)
-	h.AddTopic("software/linux/arch", nil)
-	
-	// Research subcategories
-	h.AddTopic("research/datasets", map[string]string{"description": "Research datasets"})
-	h.AddTopic("research/datasets/climate", nil)
-	h.AddTopic("research/datasets/genomics", nil)
-	h.AddTopic("research/datasets/astronomy", nil)
-	h.AddTopic("research/papers", map[string]string{"description": "Academic papers"})
-	h.AddTopic("research/papers/preprints", nil)
-	h.AddTopic("research/papers/peer-reviewed", nil)
-	
-	// Education subcategories
-	h.AddTopic("education/courses", map[string]string{"description": "Online courses"})
-	h.AddTopic("education/courses/computer-science", nil)
-	h.AddTopic("education/courses/mathematics", nil)
-	h.AddTopic("education/tutorials", map[string]string{"description": "Tutorials and guides"})
-	h.AddTopic("education/textbooks", map[string]string{"description": "Open textbooks"})
+	// This function is now empty - all topics should be defined in topics.json
+	// If you need to add topics programmatically, do it here
+	log.Println("No topics.json found, starting with empty topic hierarchy")
 }
 
 func extractHighlightedTags(highlights map[string][]string) []string {

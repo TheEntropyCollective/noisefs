@@ -1,79 +1,212 @@
 {
   "topics": {
-    "content": {
-      "description": "All content",
-      "children": {
-        "books": {
-          "description": "Books and literature",
-          "children": {
-            "fiction": {},
-            "technical": {},
-            "public-domain": {}
-          }
-        },
-        "documents": {
-          "description": "Documents and papers",
-          "children": {
-            "research": {},
-            "government": {},
-            "whitepapers": {}
-          }
-        },
-        "media": {
-          "description": "Media files",
-          "children": {
-            "documentaries": {},
-            "educational": {},
-            "public-domain": {},
-            "creative-commons": {}
-          }
-        }
-      }
-    },
     "software": {
-      "description": "Software and tools",
+      "description": "Software and applications",
       "children": {
         "opensource": {
-          "description": "Open source projects",
+          "description": "Open source software projects",
           "children": {
-            "golang": {},
-            "python": {},
-            "javascript": {}
+            "operating-systems": {
+              "description": "Operating systems and distributions",
+              "children": {
+                "linux": {
+                  "description": "Linux distributions",
+                  "children": {
+                    "debian-based": { "description": "Debian and derivatives (Ubuntu, Mint, etc.)" },
+                    "redhat-based": { "description": "Red Hat and derivatives (Fedora, CentOS, etc.)" },
+                    "arch-based": { "description": "Arch Linux and derivatives" },
+                    "gentoo": { "description": "Gentoo Linux" },
+                    "alpine": { "description": "Alpine Linux" }
+                  }
+                },
+                "bsd": {
+                  "description": "BSD variants",
+                  "children": {
+                    "freebsd": { "description": "FreeBSD" },
+                    "openbsd": { "description": "OpenBSD" },
+                    "netbsd": { "description": "NetBSD" }
+                  }
+                }
+              }
+            },
+            "development-tools": {
+              "description": "Development tools and IDEs",
+              "children": {
+                "compilers": { "description": "Compilers and interpreters" },
+                "editors": { "description": "Text editors and IDEs" },
+                "version-control": { "description": "Version control systems" },
+                "build-tools": { "description": "Build and automation tools" }
+              }
+            },
+            "libraries": {
+              "description": "Software libraries and frameworks",
+              "children": {
+                "javascript": { "description": "JavaScript/Node.js libraries" },
+                "python": { "description": "Python packages and libraries" },
+                "golang": { "description": "Go packages and modules" },
+                "rust": { "description": "Rust crates" },
+                "c-cpp": { "description": "C/C++ libraries" },
+                "java": { "description": "Java libraries and frameworks" }
+              }
+            },
+            "applications": {
+              "description": "End-user applications",
+              "children": {
+                "productivity": { "description": "Office and productivity software" },
+                "multimedia": { "description": "Audio, video, and graphics software" },
+                "networking": { "description": "Network tools and utilities" },
+                "security": { "description": "Security and privacy tools" }
+              }
+            }
           }
         },
-        "tools": {
-          "description": "Software tools",
+        "firmware": {
+          "description": "Firmware and embedded software",
           "children": {
-            "development": {},
-            "security": {}
+            "router": { "description": "Router firmware (DD-WRT, OpenWRT, etc.)" },
+            "iot": { "description": "IoT device firmware" },
+            "bios": { "description": "BIOS and UEFI" }
           }
         },
-        "linux": {
-          "description": "Linux distributions",
+        "containers": {
+          "description": "Container images and tools",
           "children": {
-            "debian": {},
-            "fedora": {},
-            "arch": {}
+            "docker": { "description": "Docker images" },
+            "kubernetes": { "description": "Kubernetes manifests and charts" },
+            "podman": { "description": "Podman images" }
           }
         }
       }
     },
-    "research": {
-      "description": "Research and datasets",
+    "data": {
+      "description": "Datasets and databases",
       "children": {
-        "datasets": {
-          "description": "Research datasets",
+        "scientific": {
+          "description": "Scientific research data",
           "children": {
-            "climate": {},
-            "genomics": {},
-            "astronomy": {}
+            "astronomy": { "description": "Astronomical observations and catalogs" },
+            "biology": { 
+              "description": "Biological data",
+              "children": {
+                "genomics": { "description": "Genomic sequences and annotations" },
+                "proteomics": { "description": "Protein structures and data" },
+                "ecology": { "description": "Ecological and biodiversity data" }
+              }
+            },
+            "climate": { "description": "Climate and weather data" },
+            "physics": { "description": "Physics experimental data" },
+            "chemistry": { "description": "Chemical structures and properties" }
           }
         },
-        "papers": {
-          "description": "Academic papers",
+        "machine-learning": {
+          "description": "ML datasets and models",
           "children": {
-            "preprints": {},
-            "peer-reviewed": {}
+            "datasets": { "description": "Training and test datasets" },
+            "models": { "description": "Pre-trained models" },
+            "benchmarks": { "description": "Benchmark datasets" }
+          }
+        },
+        "geographic": {
+          "description": "Geographic and mapping data",
+          "children": {
+            "maps": { "description": "Map data and tiles" },
+            "satellite": { "description": "Satellite imagery" },
+            "census": { "description": "Census and demographic data" }
+          }
+        },
+        "financial": {
+          "description": "Financial and economic data",
+          "children": {
+            "market": { "description": "Market data and historical prices" },
+            "economic": { "description": "Economic indicators and statistics" }
+          }
+        }
+      }
+    },
+    "media": {
+      "description": "Media content",
+      "children": {
+        "audio": {
+          "description": "Audio content",
+          "children": {
+            "music": {
+              "description": "Music files",
+              "children": {
+                "classical": { "description": "Classical music" },
+                "creative-commons": { "description": "CC-licensed music" },
+                "public-domain": { "description": "Public domain recordings" }
+              }
+            },
+            "podcasts": { "description": "Podcast episodes" },
+            "audiobooks": { "description": "Audiobook recordings" },
+            "sound-effects": { "description": "Sound effects and samples" }
+          }
+        },
+        "video": {
+          "description": "Video content",
+          "children": {
+            "documentaries": { "description": "Documentary films" },
+            "educational": { "description": "Educational videos" },
+            "conferences": { "description": "Conference talks and presentations" },
+            "creative-commons": { "description": "CC-licensed videos" }
+          }
+        },
+        "images": {
+          "description": "Images and graphics",
+          "children": {
+            "photography": { "description": "Photographs" },
+            "artwork": { "description": "Digital artwork and illustrations" },
+            "textures": { "description": "Textures and patterns" },
+            "icons": { "description": "Icons and UI elements" }
+          }
+        },
+        "3d": {
+          "description": "3D models and assets",
+          "children": {
+            "models": { "description": "3D models" },
+            "textures": { "description": "3D textures and materials" },
+            "animations": { "description": "3D animations" }
+          }
+        }
+      }
+    },
+    "documents": {
+      "description": "Documents and publications",
+      "children": {
+        "books": {
+          "description": "Books and e-books",
+          "children": {
+            "fiction": { "description": "Fiction literature" },
+            "non-fiction": { "description": "Non-fiction books" },
+            "technical": { "description": "Technical and programming books" },
+            "textbooks": { "description": "Educational textbooks" },
+            "public-domain": { "description": "Public domain classics" }
+          }
+        },
+        "research": {
+          "description": "Research publications",
+          "children": {
+            "papers": { "description": "Academic papers" },
+            "preprints": { "description": "Preprint archives" },
+            "theses": { "description": "Dissertations and theses" },
+            "reports": { "description": "Technical reports" }
+          }
+        },
+        "reference": {
+          "description": "Reference materials",
+          "children": {
+            "encyclopedias": { "description": "Encyclopedias and wikis" },
+            "dictionaries": { "description": "Dictionaries and glossaries" },
+            "manuals": { "description": "User manuals and guides" },
+            "standards": { "description": "Technical standards and RFCs" }
+          }
+        },
+        "government": {
+          "description": "Government publications",
+          "children": {
+            "laws": { "description": "Laws and legislation" },
+            "reports": { "description": "Government reports" },
+            "data": { "description": "Government datasets" }
           }
         }
       }
@@ -84,15 +217,54 @@
         "courses": {
           "description": "Online courses",
           "children": {
-            "computer-science": {},
-            "mathematics": {}
+            "computer-science": { "description": "Computer science courses" },
+            "mathematics": { "description": "Mathematics courses" },
+            "sciences": { "description": "Natural sciences courses" },
+            "humanities": { "description": "Humanities courses" },
+            "languages": { "description": "Language learning resources" }
           }
         },
         "tutorials": {
-          "description": "Tutorials and guides"
+          "description": "Tutorials and how-tos",
+          "children": {
+            "programming": { "description": "Programming tutorials" },
+            "design": { "description": "Design tutorials" },
+            "crafts": { "description": "DIY and craft tutorials" }
+          }
         },
-        "textbooks": {
-          "description": "Open textbooks"
+        "lectures": {
+          "description": "Recorded lectures",
+          "children": {
+            "university": { "description": "University lectures" },
+            "conferences": { "description": "Conference presentations" }
+          }
+        }
+      }
+    },
+    "archives": {
+      "description": "Historical archives",
+      "children": {
+        "web": {
+          "description": "Web archives",
+          "children": {
+            "websites": { "description": "Archived websites" },
+            "forums": { "description": "Forum archives" }
+          }
+        },
+        "cultural": {
+          "description": "Cultural heritage",
+          "children": {
+            "museums": { "description": "Museum collections" },
+            "libraries": { "description": "Digital library collections" }
+          }
+        },
+        "historical": {
+          "description": "Historical documents",
+          "children": {
+            "manuscripts": { "description": "Historical manuscripts" },
+            "newspapers": { "description": "Historical newspapers" },
+            "photographs": { "description": "Historical photographs" }
+          }
         }
       }
     }
