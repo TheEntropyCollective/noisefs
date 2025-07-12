@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search - NoiseFS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        nav {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        nav a:hover, nav a.active {
+            color: #58a6ff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+            flex: 1;
+        }
+        
+        h1 {
+            margin-bottom: 2rem;
+            color: #58a6ff;
+        }
+        
+        .search-box {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .search-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .search-input-group {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 0.75rem;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background: #2ea043;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #238636;
+        }
+        
+        .search-options {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .option-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .option-label {
+            font-weight: 500;
+            color: #8b949e;
+            font-size: 0.875rem;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        input[type="checkbox"] {
+            width: 1rem;
+            height: 1rem;
+        }
+        
+        .results {
+            display: grid;
+            gap: 1rem;
+        }
+        
+        .result-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: all 0.2s;
+        }
+        
+        .result-card:hover {
+            border-color: #58a6ff;
+        }
+        
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+        
+        .result-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #58a6ff;
+            margin-bottom: 0.5rem;
+        }
+        
+        .result-meta {
+            color: #8b949e;
+            font-size: 0.875rem;
+        }
+        
+        .result-tags {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        
+        .tag {
+            background: #30363d;
+            color: #c9d1d9;
+            padding: 0.25rem 0.75rem;
+            border-radius: 16px;
+            font-size: 0.875rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #8b949e;
+        }
+        
+        .error {
+            background: #f8514922;
+            border: 1px solid #f85149;
+            color: #f85149;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 3rem;
+            color: #8b949e;
+        }
+        
+        .btn-download {
+            background: #1f6feb;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        
+        .btn-download:hover {
+            background: #58a6ff;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/upload">Upload</a></li>
+            <li><a href="/download">Download</a></li>
+            <li><a href="/browse">Browse</a></li>
+            <li><a href="/topics">Topics</a></li>
+            <li><a href="/dashboard">Dashboard</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <h1>Search Announcements</h1>
+        
+        <div class="search-box">
+            <form class="search-form" onsubmit="performSearch(event)">
+                <div class="search-input-group">
+                    <input type="text" id="query" placeholder="Search for content by keywords, tags, or description..." autofocus>
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+                
+                <div class="search-options">
+                    <div class="option-group">
+                        <span class="option-label">Search in:</span>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="search-tags" checked>
+                            <label for="search-tags">Tags</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="search-topics" checked>
+                            <label for="search-topics">Topics</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="search-filename" checked>
+                            <label for="search-filename">Filenames</label>
+                        </div>
+                    </div>
+                    
+                    <div class="option-group">
+                        <span class="option-label">Categories:</span>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="cat-software" checked>
+                            <label for="cat-software">Software</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="cat-media" checked>
+                            <label for="cat-media">Media</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="cat-documents" checked>
+                            <label for="cat-documents">Documents</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="cat-other" checked>
+                            <label for="cat-other">Other</label>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">Searching...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="results" class="results"></div>
+        <div id="no-results" class="no-results" style="display: none;">
+            <p>No results found. Try different keywords or broaden your search criteria.</p>
+        </div>
+    </div>
+    
+    <script>
+        async function performSearch(event) {
+            event.preventDefault();
+            
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+            
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const results = document.getElementById('results');
+            const noResults = document.getElementById('no-results');
+            
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            results.innerHTML = '';
+            noResults.style.display = 'none';
+            
+            // Build search request
+            const searchRequest = {
+                query: query,
+                searchTags: document.getElementById('search-tags').checked,
+                searchTopics: document.getElementById('search-topics').checked,
+                searchFilename: document.getElementById('search-filename').checked,
+                categories: []
+            };
+            
+            if (document.getElementById('cat-software').checked) searchRequest.categories.push('software');
+            if (document.getElementById('cat-media').checked) searchRequest.categories.push('media');
+            if (document.getElementById('cat-documents').checked) searchRequest.categories.push('documents');
+            if (document.getElementById('cat-other').checked) searchRequest.categories.push('other');
+            
+            try {
+                const response = await fetch('/api/announcements/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(searchRequest)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.data || []);
+                } else {
+                    showError(data.error || 'Search failed');
+                }
+            } catch (err) {
+                showError('Failed to connect to server: ' + err.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayResults(announcements) {
+            const results = document.getElementById('results');
+            const noResults = document.getElementById('no-results');
+            
+            if (announcements.length === 0) {
+                noResults.style.display = 'block';
+                return;
+            }
+            
+            results.innerHTML = announcements.map(ann => `
+                <div class="result-card">
+                    <div class="result-header">
+                        <div>
+                            <div class="result-title">${ann.filename || 'Unnamed File'}</div>
+                            <div class="result-meta">
+                                ${ann.topic ? `Topic: ${ann.topic} • ` : ''}
+                                Size: ${formatFileSize(ann.size)} • 
+                                ${formatTimeAgo(ann.timestamp)}
+                            </div>
+                        </div>
+                        <a href="/download?cid=${ann.descriptor}" class="btn-download">Download</a>
+                    </div>
+                    ${ann.tags && ann.tags.length > 0 ? `
+                        <div class="result-tags">
+                            ${ann.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function formatFileSize(bytes) {
+            if (!bytes) return 'Unknown';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let size = bytes;
+            let unitIndex = 0;
+            
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            
+            return `${size.toFixed(1)} ${units[unitIndex]}`;
+        }
+        
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return 'Unknown time';
+            
+            const date = new Date(timestamp);
+            const now = new Date();
+            const seconds = Math.floor((now - date) / 1000);
+            
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+            if (seconds < 2592000) return `${Math.floor(seconds / 86400)} days ago`;
+            
+            return date.toLocaleDateString();
+        }
+        
+        // Auto-search if query parameter is present
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryParam = urlParams.get('q');
+        if (queryParam) {
+            document.getElementById('query').value = queryParam;
+            performSearch(new Event('submit'));
+        }
+    </script>
+</body>
+</html>

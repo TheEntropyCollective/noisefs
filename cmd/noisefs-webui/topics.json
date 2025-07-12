@@ -1,0 +1,100 @@
+{
+  "topics": {
+    "content": {
+      "description": "All content",
+      "children": {
+        "books": {
+          "description": "Books and literature",
+          "children": {
+            "fiction": {},
+            "technical": {},
+            "public-domain": {}
+          }
+        },
+        "documents": {
+          "description": "Documents and papers",
+          "children": {
+            "research": {},
+            "government": {},
+            "whitepapers": {}
+          }
+        },
+        "media": {
+          "description": "Media files",
+          "children": {
+            "documentaries": {},
+            "educational": {},
+            "public-domain": {},
+            "creative-commons": {}
+          }
+        }
+      }
+    },
+    "software": {
+      "description": "Software and tools",
+      "children": {
+        "opensource": {
+          "description": "Open source projects",
+          "children": {
+            "golang": {},
+            "python": {},
+            "javascript": {}
+          }
+        },
+        "tools": {
+          "description": "Software tools",
+          "children": {
+            "development": {},
+            "security": {}
+          }
+        },
+        "linux": {
+          "description": "Linux distributions",
+          "children": {
+            "debian": {},
+            "fedora": {},
+            "arch": {}
+          }
+        }
+      }
+    },
+    "research": {
+      "description": "Research and datasets",
+      "children": {
+        "datasets": {
+          "description": "Research datasets",
+          "children": {
+            "climate": {},
+            "genomics": {},
+            "astronomy": {}
+          }
+        },
+        "papers": {
+          "description": "Academic papers",
+          "children": {
+            "preprints": {},
+            "peer-reviewed": {}
+          }
+        }
+      }
+    },
+    "education": {
+      "description": "Educational resources",
+      "children": {
+        "courses": {
+          "description": "Online courses",
+          "children": {
+            "computer-science": {},
+            "mathematics": {}
+          }
+        },
+        "tutorials": {
+          "description": "Tutorials and guides"
+        },
+        "textbooks": {
+          "description": "Open textbooks"
+        }
+      }
+    }
+  }
+}

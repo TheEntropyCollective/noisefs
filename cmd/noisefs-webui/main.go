@@ -11,10 +11,12 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -245,7 +247,12 @@ func main() {
 
 	// Create topic hierarchy
 	hierarchy := announce.NewTopicHierarchy()
-	loadDefaultHierarchy(hierarchy)
+	
+	// Try to load topics from file first
+	if err := loadTopicsFromFile(hierarchy, "cmd/noisefs-webui/topics.json"); err != nil {
+		log.Printf("Loading topics from file failed, using defaults: %v", err)
+		loadDefaultHierarchy(hierarchy)
+	}
 
 	// Create search engine with store adapter
 	searchEngine := announce.NewSearchEngine(&storeAdapter{store: announcementStore}, hierarchy)
@@ -1219,10 +1226,62 @@ func (w *UnifiedWebUI) saveSubscription(topic string, active bool) {
 	config.SaveSubscriptions(configDir+"/subscriptions.json", w.subscriptions)
 }
 
+// TopicConfig represents the structure of topics.json
+type TopicConfig struct {
+	Topics map[string]TopicNode `json:"topics"`
+}
+
+type TopicNode struct {
+	Description string                `json:"description,omitempty"`
+	Children    map[string]TopicNode  `json:"children,omitempty"`
+}
+
+// loadTopicsFromFile loads topic hierarchy from a JSON file
+func loadTopicsFromFile(h *announce.TopicHierarchy, filename string) error {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	
+	var config TopicConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+	
+	// Recursively add topics
+	for name, node := range config.Topics {
+		addTopicRecursive(h, name, node, "")
+	}
+	
+	return nil
+}
+
+func addTopicRecursive(h *announce.TopicHierarchy, name string, node TopicNode, parentPath string) {
+	// Build full path
+	fullPath := name
+	if parentPath != "" {
+		fullPath = parentPath + "/" + name
+	}
+	
+	// Add topic with metadata
+	metadata := make(map[string]string)
+	if node.Description != "" {
+		metadata["description"] = node.Description
+	}
+	h.AddTopic(fullPath, metadata)
+	
+	// Add children recursively
+	for childName, childNode := range node.Children {
+		addTopicRecursive(h, childName, childNode, fullPath)
+	}
+}
+
 func loadDefaultHierarchy(h *announce.TopicHierarchy) {
 	// Root categories
 	h.AddTopic("content", map[string]string{"description": "All content"})
 	h.AddTopic("software", map[string]string{"description": "Software and tools"})
+	h.AddTopic("research", map[string]string{"description": "Research and datasets"})
+	h.AddTopic("education", map[string]string{"description": "Educational resources"})
 	
 	// Content subcategories
 	h.AddTopic("content/books", map[string]string{"description": "Books and literature"})
@@ -1233,16 +1292,42 @@ func loadDefaultHierarchy(h *announce.TopicHierarchy) {
 	h.AddTopic("content/documents", map[string]string{"description": "Documents and papers"})
 	h.AddTopic("content/documents/research", nil)
 	h.AddTopic("content/documents/government", nil)
+	h.AddTopic("content/documents/whitepapers", nil)
 	
 	h.AddTopic("content/media", map[string]string{"description": "Media files"})
 	h.AddTopic("content/media/documentaries", nil)
 	h.AddTopic("content/media/educational", nil)
 	h.AddTopic("content/media/public-domain", nil)
+	h.AddTopic("content/media/creative-commons", nil)
 	
 	// Software subcategories
 	h.AddTopic("software/opensource", map[string]string{"description": "Open source projects"})
+	h.AddTopic("software/opensource/golang", nil)
+	h.AddTopic("software/opensource/python", nil)
+	h.AddTopic("software/opensource/javascript", nil)
 	h.AddTopic("software/tools", map[string]string{"description": "Software tools"})
+	h.AddTopic("software/tools/development", nil)
+	h.AddTopic("software/tools/security", nil)
 	h.AddTopic("software/linux", map[string]string{"description": "Linux distributions"})
+	h.AddTopic("software/linux/debian", nil)
+	h.AddTopic("software/linux/fedora", nil)
+	h.AddTopic("software/linux/arch", nil)
+	
+	// Research subcategories
+	h.AddTopic("research/datasets", map[string]string{"description": "Research datasets"})
+	h.AddTopic("research/datasets/climate", nil)
+	h.AddTopic("research/datasets/genomics", nil)
+	h.AddTopic("research/datasets/astronomy", nil)
+	h.AddTopic("research/papers", map[string]string{"description": "Academic papers"})
+	h.AddTopic("research/papers/preprints", nil)
+	h.AddTopic("research/papers/peer-reviewed", nil)
+	
+	// Education subcategories
+	h.AddTopic("education/courses", map[string]string{"description": "Online courses"})
+	h.AddTopic("education/courses/computer-science", nil)
+	h.AddTopic("education/courses/mathematics", nil)
+	h.AddTopic("education/tutorials", map[string]string{"description": "Tutorials and guides"})
+	h.AddTopic("education/textbooks", map[string]string{"description": "Open textbooks"})
 }
 
 func extractHighlightedTags(highlights map[string][]string) []string {

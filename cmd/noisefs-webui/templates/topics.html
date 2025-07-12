@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Topics - NoiseFS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        nav {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            gap: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        nav a:hover, nav a.active {
+            color: #58a6ff;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+            flex: 1;
+        }
+        
+        h1 {
+            margin-bottom: 2rem;
+            color: #58a6ff;
+        }
+        
+        .topic-tree {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .topic-level {
+            margin-left: 1.5rem;
+        }
+        
+        .topic-item {
+            margin: 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .topic-item.parent {
+            font-weight: 600;
+            color: #58a6ff;
+            cursor: pointer;
+        }
+        
+        .topic-item.parent:hover {
+            color: #79c0ff;
+        }
+        
+        .topic-name {
+            flex: 1;
+        }
+        
+        .subscription-toggle {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn {
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-weight: 500;
+        }
+        
+        .btn-subscribe {
+            background: #2ea043;
+            color: white;
+        }
+        
+        .btn-subscribe:hover {
+            background: #238636;
+        }
+        
+        .btn-unsubscribe {
+            background: #f85149;
+            color: white;
+        }
+        
+        .btn-unsubscribe:hover {
+            background: #da3633;
+        }
+        
+        .subscribed-indicator {
+            color: #2ea043;
+            font-size: 0.875rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #8b949e;
+        }
+        
+        .error {
+            background: #f8514922;
+            border: 1px solid #f85149;
+            color: #f85149;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+        
+        .stats {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1rem;
+            flex: 1;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .stat-label {
+            color: #8b949e;
+            font-size: 0.875rem;
+        }
+        
+        .expand-icon {
+            color: #8b949e;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .collapsed .topic-level {
+            display: none;
+        }
+        
+        .info-box {
+            background: #1f6feb22;
+            border: 1px solid #58a6ff;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/upload">Upload</a></li>
+            <li><a href="/download">Download</a></li>
+            <li><a href="/browse">Browse</a></li>
+            <li><a href="/topics" class="active">Topics</a></li>
+            <li><a href="/dashboard">Dashboard</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <h1>Topic Hierarchy</h1>
+        
+        <div class="info-box">
+            <p>Subscribe to topics to receive real-time notifications when new content is announced. Topics are organized hierarchically - subscribing to a parent topic includes all subtopics.</p>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="total-topics">0</div>
+                <div class="stat-label">Total Topics</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="subscribed-topics">0</div>
+                <div class="stat-label">Subscribed Topics</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="active-announcements">0</div>
+                <div class="stat-label">Active Announcements</div>
+            </div>
+        </div>
+        
+        <div id="loading" class="loading">Loading topics...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="topic-tree" class="topic-tree" style="display: none;"></div>
+    </div>
+    
+    <script>
+        let topics = {};
+        let subscriptions = new Set();
+        let topicStats = {};
+        
+        async function loadTopics() {
+            try {
+                const response = await fetch('/api/topics');
+                const data = await response.json();
+                
+                if (data.success) {
+                    topics = data.data.topics || {};
+                    topicStats = data.data.stats || {};
+                    await loadSubscriptions();
+                } else {
+                    showError(data.error || 'Failed to load topics');
+                }
+            } catch (error) {
+                showError('Failed to connect to server: ' + error.message);
+            }
+        }
+        
+        async function loadSubscriptions() {
+            try {
+                const response = await fetch('/api/subscriptions');
+                const data = await response.json();
+                
+                if (data.success) {
+                    subscriptions = new Set(data.data || []);
+                    renderTopics();
+                }
+            } catch (error) {
+                console.error('Failed to load subscriptions:', error);
+                renderTopics();
+            }
+        }
+        
+        function renderTopics() {
+            const tree = document.getElementById('topic-tree');
+            const loading = document.getElementById('loading');
+            
+            tree.innerHTML = renderTopicLevel(topics, '');
+            updateStats();
+            
+            loading.style.display = 'none';
+            tree.style.display = 'block';
+        }
+        
+        function renderTopicLevel(level, prefix) {
+            let html = '';
+            
+            for (const [key, value] of Object.entries(level)) {
+                const fullTopic = prefix ? `${prefix}/${key}` : key;
+                const hasChildren = Object.keys(value).length > 0;
+                const isSubscribed = subscriptions.has(fullTopic);
+                const announcementCount = topicStats[fullTopic] || 0;
+                
+                html += `<div class="topic-item ${hasChildren ? 'parent' : ''}" data-topic="${fullTopic}">`;
+                
+                if (hasChildren) {
+                    html += `<span class="expand-icon" onclick="toggleTopic(this)">▼</span>`;
+                } else {
+                    html += `<span style="width: 1rem; display: inline-block;"></span>`;
+                }
+                
+                html += `<span class="topic-name">${key}`;
+                if (announcementCount > 0) {
+                    html += ` <span style="color: #8b949e; font-size: 0.875rem;">(${announcementCount})</span>`;
+                }
+                html += `</span>`;
+                
+                html += `<div class="subscription-toggle">`;
+                if (isSubscribed) {
+                    html += `<span class="subscribed-indicator">✓ Subscribed</span>`;
+                    html += `<button class="btn btn-unsubscribe" onclick="unsubscribe('${fullTopic}')">Unsubscribe</button>`;
+                } else {
+                    html += `<button class="btn btn-subscribe" onclick="subscribe('${fullTopic}')">Subscribe</button>`;
+                }
+                html += `</div></div>`;
+                
+                if (hasChildren) {
+                    html += `<div class="topic-level">${renderTopicLevel(value, fullTopic)}</div>`;
+                }
+            }
+            
+            return html;
+        }
+        
+        function toggleTopic(icon) {
+            const parent = icon.parentElement.parentElement;
+            const level = parent.querySelector('.topic-level');
+            
+            if (level) {
+                if (parent.classList.contains('collapsed')) {
+                    parent.classList.remove('collapsed');
+                    icon.textContent = '▼';
+                } else {
+                    parent.classList.add('collapsed');
+                    icon.textContent = '▶';
+                }
+            }
+        }
+        
+        async function subscribe(topic) {
+            try {
+                const response = await fetch(`/api/topics/${encodeURIComponent(topic)}/subscribe`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    subscriptions.add(topic);
+                    renderTopics();
+                } else {
+                    showError(data.error || 'Failed to subscribe');
+                }
+            } catch (error) {
+                showError('Failed to subscribe: ' + error.message);
+            }
+        }
+        
+        async function unsubscribe(topic) {
+            try {
+                const response = await fetch(`/api/topics/${encodeURIComponent(topic)}/unsubscribe`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    subscriptions.delete(topic);
+                    renderTopics();
+                } else {
+                    showError(data.error || 'Failed to unsubscribe');
+                }
+            } catch (error) {
+                showError('Failed to unsubscribe: ' + error.message);
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('total-topics').textContent = countTopics(topics);
+            document.getElementById('subscribed-topics').textContent = subscriptions.size;
+            
+            let totalAnnouncements = 0;
+            for (const count of Object.values(topicStats)) {
+                totalAnnouncements += count;
+            }
+            document.getElementById('active-announcements').textContent = totalAnnouncements;
+        }
+        
+        function countTopics(level) {
+            let count = 0;
+            for (const [key, value] of Object.entries(level)) {
+                count++;
+                count += countTopics(value);
+            }
+            return count;
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Load topics on page load
+        loadTopics();
+        
+        // Refresh periodically
+        setInterval(loadTopics, 30000);
+    </script>
+</body>
+</html>
