@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strings"
 	"time"
 	
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
@@ -586,39 +588,162 @@ func (c *Client) GetConnectedPeers() []peer.ID {
 
 // Upload uploads a file and returns descriptor CID
 // This is a simplified implementation for testing
+// Upload uploads a file to NoiseFS with full protocol implementation
 func (c *Client) Upload(reader io.Reader, filename string) (string, error) {
-	// Read all data
+	return c.UploadWithBlockSize(reader, filename, blocks.DefaultBlockSize)
+}
+
+// UploadWithBlockSize uploads a file with a specific block size
+func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSize int) (string, error) {
+	// Read all data to get size
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return "", fmt.Errorf("failed to read data: %w", err)
 	}
 	
-	// Create blocks
-	block, err := blocks.NewBlock(data)
+	fileSize := int64(len(data))
+	
+	// Create splitter
+	splitter, err := blocks.NewSplitter(blockSize)
 	if err != nil {
-		return "", fmt.Errorf("failed to create block: %w", err)
+		return "", fmt.Errorf("failed to create splitter: %w", err)
 	}
 	
-	// Store block
-	cid, err := c.StoreBlockWithCache(block)
+	// Split file into blocks
+	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
 	if err != nil {
-		return "", fmt.Errorf("failed to store block: %w", err)
+		return "", fmt.Errorf("failed to split file: %w", err)
 	}
 	
-	// For simplicity, return the block CID as descriptor CID
-	// In a real implementation, this would create a proper descriptor
-	return cid, nil
+	// Create descriptor
+	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
+	
+	// Process each block with XOR
+	for _, fileBlock := range fileBlocks {
+		// Select two randomizer blocks (3-tuple XOR)
+		randBlock1, cid1, randBlock2, cid2, err := c.SelectTwoRandomizers(fileBlock.Size())
+		if err != nil {
+			return "", fmt.Errorf("failed to select randomizers: %w", err)
+		}
+		
+		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
+		xorBlock, err := fileBlock.XOR3(randBlock1, randBlock2)
+		if err != nil {
+			return "", fmt.Errorf("failed to XOR blocks: %w", err)
+		}
+		
+		// Store anonymized block
+		dataCID, err := c.StoreBlockWithCache(xorBlock)
+		if err != nil {
+			return "", fmt.Errorf("failed to store data block: %w", err)
+		}
+		
+		// Add block triple to descriptor
+		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
+			return "", fmt.Errorf("failed to add block triple: %w", err)
+		}
+	}
+	
+	// Store descriptor in IPFS
+	// Try to get concrete IPFS client for descriptor store
+	var ipfsClientConcrete *ipfs.Client
+	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
+		ipfsClientConcrete = client
+	} else {
+		return "", fmt.Errorf("IPFS client does not support descriptor operations")
+	}
+	
+	descriptorStore, err := descriptors.NewStore(ipfsClientConcrete)
+	if err != nil {
+		return "", fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	descriptorCID, err := descriptorStore.Save(descriptor)
+	if err != nil {
+		return "", fmt.Errorf("failed to save descriptor: %w", err)
+	}
+	
+	// Record metrics
+	c.RecordUpload(fileSize, fileSize*3) // *3 for data + 2 randomizer blocks
+	
+	return descriptorCID, nil
 }
 
 // Download downloads a file by descriptor CID and returns data
-// This is a simplified implementation for testing
 func (c *Client) Download(descriptorCID string) ([]byte, error) {
-	// Retrieve block
-	block, err := c.RetrieveBlockWithCache(descriptorCID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve block: %w", err)
+	data, _, err := c.DownloadWithMetadata(descriptorCID)
+	return data, err
+}
+
+// DownloadWithMetadata downloads a file and returns both data and metadata
+func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, error) {
+	// Try to get concrete IPFS client for descriptor store
+	var ipfsClientConcrete *ipfs.Client
+	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
+		ipfsClientConcrete = client
+	} else {
+		return nil, "", fmt.Errorf("IPFS client does not support descriptor operations")
 	}
 	
-	// Return block data
-	return block.Data, nil
+	// Create descriptor store
+	descriptorStore, err := descriptors.NewStore(ipfsClientConcrete)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	// Load descriptor
+	descriptor, err := descriptorStore.Load(descriptorCID)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load descriptor: %w", err)
+	}
+	
+	// Retrieve and reconstruct blocks
+	var originalBlocks []*blocks.Block
+	
+	for _, blockInfo := range descriptor.Blocks {
+		// Retrieve anonymized data block
+		dataBlock, err := c.ipfsClient.RetrieveBlock(blockInfo.DataCID)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to retrieve data block: %w", err)
+		}
+		
+		// Retrieve randomizer blocks
+		randBlock1, err := c.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID1)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
+		}
+		
+		var origBlock *blocks.Block
+		if descriptor.IsThreeTuple() && blockInfo.RandomizerCID2 != "" {
+			// 3-tuple XOR
+			randBlock2, err := c.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID2)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
+			}
+			origBlock, err = dataBlock.XOR3(randBlock1, randBlock2)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
+			}
+		} else {
+			// 2-tuple XOR (legacy)
+			origBlock, err = dataBlock.XOR(randBlock1)
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
+			}
+		}
+		
+		originalBlocks = append(originalBlocks, origBlock)
+	}
+	
+	// Assemble file
+	assembler := blocks.NewAssembler()
+	var buf strings.Builder
+	if err := assembler.AssembleToWriter(originalBlocks, &buf); err != nil {
+		return nil, "", fmt.Errorf("failed to assemble file: %w", err)
+	}
+	
+	// Record download
+	c.RecordDownload()
+	
+	return []byte(buf.String()), descriptor.Filename, nil
 }

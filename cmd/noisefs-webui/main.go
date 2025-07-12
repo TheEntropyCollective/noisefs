@@ -11,7 +11,6 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -29,9 +28,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/pubsub"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	noisefsConfig "github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -510,8 +507,8 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Upload file using proper NoiseFS process
-	descriptorCID, fileSize, err := w.uploadFileToNoiseFS(file, header.Filename)
+	// Upload file using the client's proper implementation
+	descriptorCID, err := w.noisefsClient.Upload(file, header.Filename)
 	if err != nil {
 		sendError(wr, err, http.StatusInternalServerError)
 		return
@@ -560,7 +557,7 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 		Success:       true,
 		DescriptorCID: descriptorCID,
 		Filename:      header.Filename,
-		Size:          fileSize,
+		Size:          header.Size,
 		Tags:          tags,
 	}
 
@@ -576,8 +573,8 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download file from NoiseFS
-	data, filename, err := w.downloadFileFromNoiseFS(descriptorCID)
+	// Download file using the client's proper implementation
+	data, filename, err := w.noisefsClient.DownloadWithMetadata(descriptorCID)
 	if err != nil {
 		sendError(wr, err, http.StatusNotFound)
 		return
@@ -1337,136 +1334,3 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	return tls.X509KeyPair(certPEM, keyPEM)
 }
 
-// uploadFileToNoiseFS handles the complete NoiseFS upload process
-func (w *UnifiedWebUI) uploadFileToNoiseFS(file io.Reader, filename string) (string, int64, error) {
-	// Read file data
-	data, err := ioutil.ReadAll(file)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to read file: %w", err)
-	}
-	
-	fileSize := int64(len(data))
-	blockSize := blocks.DefaultBlockSize
-	
-	// Create splitter
-	splitter, err := blocks.NewSplitter(blockSize)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create splitter: %w", err)
-	}
-	
-	// Split file into blocks
-	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to split file: %w", err)
-	}
-	
-	// Create descriptor
-	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
-	
-	// Process each block with XOR
-	for _, fileBlock := range fileBlocks {
-		// Select two randomizer blocks (3-tuple XOR)
-		randBlock1, cid1, randBlock2, cid2, err := w.noisefsClient.SelectTwoRandomizers(fileBlock.Size())
-		if err != nil {
-			return "", 0, fmt.Errorf("failed to select randomizers: %w", err)
-		}
-		
-		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
-		xorBlock, err := fileBlock.XOR3(randBlock1, randBlock2)
-		if err != nil {
-			return "", 0, fmt.Errorf("failed to XOR blocks: %w", err)
-		}
-		
-		// Store anonymized block
-		dataCID, err := w.noisefsClient.StoreBlockWithCache(xorBlock)
-		if err != nil {
-			return "", 0, fmt.Errorf("failed to store data block: %w", err)
-		}
-		
-		// Add block triple to descriptor
-		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
-			return "", 0, fmt.Errorf("failed to add block triple: %w", err)
-		}
-	}
-	
-	// Store descriptor in IPFS
-	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to create descriptor store: %w", err)
-	}
-	
-	descriptorCID, err := descriptorStore.Save(descriptor)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to save descriptor: %w", err)
-	}
-	
-	// Record metrics
-	w.noisefsClient.RecordUpload(fileSize, fileSize*3) // *3 for data + 2 randomizer blocks
-	
-	return descriptorCID, fileSize, nil
-}
-
-// downloadFileFromNoiseFS handles the complete NoiseFS download process
-func (w *UnifiedWebUI) downloadFileFromNoiseFS(descriptorCID string) ([]byte, string, error) {
-	// Create descriptor store
-	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create descriptor store: %w", err)
-	}
-	
-	// Load descriptor
-	descriptor, err := descriptorStore.Load(descriptorCID)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to load descriptor: %w", err)
-	}
-	
-	// Retrieve and reconstruct blocks
-	var originalBlocks []*blocks.Block
-	
-	for _, blockInfo := range descriptor.Blocks {
-		// Retrieve anonymized data block
-		dataBlock, err := w.ipfsClient.RetrieveBlock(blockInfo.DataCID)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to retrieve data block: %w", err)
-		}
-		
-		// Retrieve randomizer blocks
-		randBlock1, err := w.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID1)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
-		}
-		
-		var origBlock *blocks.Block
-		if descriptor.IsThreeTuple() && blockInfo.RandomizerCID2 != "" {
-			// 3-tuple XOR
-			randBlock2, err := w.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID2)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
-			}
-			origBlock, err = dataBlock.XOR3(randBlock1, randBlock2)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
-			}
-		} else {
-			// 2-tuple XOR (legacy)
-			origBlock, err = dataBlock.XOR(randBlock1)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
-			}
-		}
-		
-		originalBlocks = append(originalBlocks, origBlock)
-	}
-	
-	// Assemble file
-	assembler := blocks.NewAssembler()
-	var buf strings.Builder
-	if err := assembler.AssembleToWriter(originalBlocks, &buf); err != nil {
-		return nil, "", fmt.Errorf("failed to assemble file: %w", err)
-	}
-	
-	// Record download
-	w.noisefsClient.RecordDownload()
-	
-	return []byte(buf.String()), descriptor.Filename, nil
-}
