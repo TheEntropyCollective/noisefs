@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse Announcements - NoiseFS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .nav {
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .nav a:hover {
+            background: #30363d;
+        }
+        
+        .nav a.active {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .filters {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .filter-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 1rem;
+            align-items: end;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .filter-label {
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+        
+        .filter-select, .filter-input {
+            padding: 0.5rem 1rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 1rem;
+        }
+        
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            background: #1f6feb;
+            color: white;
+            border: none;
+        }
+        
+        .btn:hover {
+            background: #1a5dcf;
+        }
+        
+        .announcements-grid {
+            display: grid;
+            gap: 1rem;
+        }
+        
+        .announcement-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: border-color 0.2s;
+        }
+        
+        .announcement-card:hover {
+            border-color: #58a6ff;
+        }
+        
+        .announcement-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+        
+        .announcement-title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            color: #f0f6fc;
+            word-break: break-all;
+        }
+        
+        .announcement-time {
+            font-size: 0.875rem;
+            color: #8b949e;
+            white-space: nowrap;
+        }
+        
+        .announcement-meta {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+        
+        .meta-icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+        
+        .announcement-tags {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            background: #30363d;
+            color: #58a6ff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+        }
+        
+        .announcement-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .action-btn {
+            color: #58a6ff;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        
+        .action-btn:hover {
+            text-decoration: underline;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #8b949e;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 3px solid #30363d;
+            border-radius: 50%;
+            border-top-color: #58a6ff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .category-video { background: #1f6feb22; color: #58a6ff; }
+        .category-audio { background: #2ea04322; color: #3fb950; }
+        .category-document { background: #f8514922; color: #f85149; }
+        .category-software { background: #8b949e22; color: #8b949e; }
+        .category-data { background: #f0883e22; color: #f0883e; }
+        .category-other { background: #30363d; color: #c9d1d9; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">NoiseFS</div>
+        <nav class="nav">
+            <a href="/">Home</a>
+            <a href="/upload">Upload</a>
+            <a href="/download">Download</a>
+            <a href="/browse" class="active">Browse</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/topics">Topics</a>
+        </nav>
+    </header>
+    
+    <main class="container">
+        <h1>Browse Announcements</h1>
+        
+        <div class="filters">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label class="filter-label">Topic</label>
+                    <select class="filter-select" id="topicFilter">
+                        <option value="">All Topics</option>
+                        <option value="content">content</option>
+                        <option value="content/books">content/books</option>
+                        <option value="content/documents">content/documents</option>
+                        <option value="content/media">content/media</option>
+                        <option value="software">software</option>
+                        <option value="software/opensource">software/opensource</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label class="filter-label">Category</label>
+                    <select class="filter-select" id="categoryFilter">
+                        <option value="">All Categories</option>
+                        <option value="video">Video</option>
+                        <option value="audio">Audio</option>
+                        <option value="document">Document</option>
+                        <option value="software">Software</option>
+                        <option value="data">Data</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label class="filter-label">Size</label>
+                    <select class="filter-select" id="sizeFilter">
+                        <option value="">All Sizes</option>
+                        <option value="tiny">< 1MB</option>
+                        <option value="small">1-10MB</option>
+                        <option value="medium">10-100MB</option>
+                        <option value="large">100MB-1GB</option>
+                        <option value="huge">> 1GB</option>
+                    </select>
+                </div>
+                
+                <button class="btn" id="applyFilters">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path fill-rule="evenodd" d="M1.5 1.5A.5.5 0 00.5 2v12a.5.5 0 00.5.5h14a.5.5 0 100-1H1.5v-13a.5.5 0 00-.5-.5zM2 3h12v1H2V3zm0 3h12v1H2V6zm0 3h12v1H2V9z" clip-rule="evenodd"/>
+                    </svg>
+                    Apply
+                </button>
+            </div>
+        </div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Loading announcements...</p>
+        </div>
+        
+        <div class="announcements-grid" id="announcementsGrid"></div>
+        
+        <div class="no-results" id="noResults" style="display: none;">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+            </svg>
+            <h2>No announcements found</h2>
+            <p>Try adjusting your filters or check back later</p>
+        </div>
+    </main>
+    
+    <script>
+        let ws = null;
+        
+        // Load announcements on page load
+        loadAnnouncements();
+        
+        // Connect WebSocket for real-time updates
+        connectWebSocket();
+        
+        // Apply filters
+        document.getElementById('applyFilters').addEventListener('click', loadAnnouncements);
+        
+        async function loadAnnouncements() {
+            const loading = document.getElementById('loading');
+            const grid = document.getElementById('announcementsGrid');
+            const noResults = document.getElementById('noResults');
+            
+            loading.style.display = 'block';
+            grid.innerHTML = '';
+            noResults.style.display = 'none';
+            
+            const topic = document.getElementById('topicFilter').value;
+            const params = new URLSearchParams();
+            if (topic) params.append('topic', topic);
+            
+            try {
+                const response = await fetch(`/api/announcements?${params}`);
+                const data = await response.json();
+                
+                if (data.success && data.data.length > 0) {
+                    const filteredData = filterAnnouncements(data.data);
+                    if (filteredData.length > 0) {
+                        displayAnnouncements(filteredData);
+                    } else {
+                        noResults.style.display = 'block';
+                    }
+                } else {
+                    noResults.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Failed to load announcements:', error);
+                noResults.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function filterAnnouncements(announcements) {
+            const category = document.getElementById('categoryFilter').value;
+            const size = document.getElementById('sizeFilter').value;
+            
+            return announcements.filter(ann => {
+                if (category && ann.category !== category) return false;
+                if (size && ann.sizeClass !== size) return false;
+                return true;
+            });
+        }
+        
+        function displayAnnouncements(announcements) {
+            const grid = document.getElementById('announcementsGrid');
+            
+            announcements.forEach(ann => {
+                const card = createAnnouncementCard(ann);
+                grid.appendChild(card);
+            });
+        }
+        
+        function createAnnouncementCard(ann) {
+            const card = document.createElement('div');
+            card.className = 'announcement-card';
+            
+            const timeAgo = formatTimeAgo(new Date(ann.timestamp));
+            const categoryClass = `category-${ann.category}`;
+            
+            card.innerHTML = `
+                <div class="announcement-header">
+                    <div class="announcement-title">${ann.descriptor}</div>
+                    <div class="announcement-time">${timeAgo}</div>
+                </div>
+                
+                <div class="announcement-meta">
+                    <span class="category-badge ${categoryClass}">${ann.category}</span>
+                    ${ann.topic ? `
+                        <div class="meta-item">
+                            <svg class="meta-icon" viewBox="0 0 16 16" fill="currentColor">
+                                <path fill-rule="evenodd" d="M2.5 3.5v-1h11v1h-11zM2 2h12v1.5H2V2zm0 3v8c0 .55.45 1 1 1h10c.55 0 1-.45 1-1V5H2zm3 2h6v1H5V7zm0 2h6v1H5V9z"/>
+                            </svg>
+                            ${ann.topic}
+                        </div>
+                    ` : ''}
+                    <div class="meta-item">
+                        <svg class="meta-icon" viewBox="0 0 16 16" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.72 3.22a.75.75 0 011.06 1.06L2.06 8l3.72 3.72a.75.75 0 11-1.06 1.06L.47 8.53a.75.75 0 010-1.06l4.25-4.25zm6.56 0a.75.75 0 10-1.06 1.06L13.94 8l-3.72 3.72a.75.75 0 101.06 1.06l4.25-4.25a.75.75 0 000-1.06l-4.25-4.25z"/>
+                        </svg>
+                        ${ann.sizeClass}
+                    </div>
+                    <div class="meta-item">
+                        <svg class="meta-icon" viewBox="0 0 16 16" fill="currentColor">
+                            <path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-10.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0114.25 15H1.75A1.75 1.75 0 010 13.25V2.75zm9 2a.75.75 0 01-.75.75h-3.5a.75.75 0 010-1.5h3.5A.75.75 0 019 4.75zM6.25 8a.75.75 0 00-.75.75v2.5a.75.75 0 001.5 0v-2.5A.75.75 0 006.25 8zm4.25.75a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"/>
+                        </svg>
+                        TTL: ${formatTTL(ann.ttl)}
+                    </div>
+                </div>
+                
+                ${ann.tags && ann.tags.length > 0 ? `
+                    <div class="announcement-tags">
+                        ${ann.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                    </div>
+                ` : ''}
+                
+                <div class="announcement-actions">
+                    <a href="/download?cid=${ann.descriptor}" class="action-btn">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path fill-rule="evenodd" d="M2.75 14A1.75 1.75 0 014.5 12.25h7a1.75 1.75 0 110 3.5h-7A1.75 1.75 0 012.75 14zm1.75-.25a.25.25 0 00-.25.25c0 .138.112.25.25.25h7a.25.25 0 100-.5h-7zM1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0113.25 12H2.75A1.75 1.75 0 011 10.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25H2.75z"/>
+                        </svg>
+                        Download
+                    </a>
+                    <button class="action-btn" onclick="copyToClipboard('${ann.descriptor}')">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path fill-rule="evenodd" d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/>
+                            <path fill-rule="evenodd" d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/>
+                        </svg>
+                        Copy CID
+                    </button>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                if (message.type === 'announcement') {
+                    // Add new announcement to top of grid
+                    const grid = document.getElementById('announcementsGrid');
+                    const card = createAnnouncementCard(message.data);
+                    grid.insertBefore(card, grid.firstChild);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                // Reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+        }
+        
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return Math.floor(seconds / 60) + ' minutes ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours ago';
+            if (seconds < 604800) return Math.floor(seconds / 86400) + ' days ago';
+            return date.toLocaleDateString();
+        }
+        
+        function formatTTL(seconds) {
+            if (seconds < 3600) return Math.floor(seconds / 60) + ' min';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + ' hours';
+            return Math.floor(seconds / 86400) + ' days';
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Could show a toast notification here
+                console.log('Copied to clipboard:', text);
+            });
+        }
+    </script>
+</body>
+</html>

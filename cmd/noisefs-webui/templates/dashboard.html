@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - NoiseFS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .nav {
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .nav a:hover {
+            background: #30363d;
+        }
+        
+        .nav a.active {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            color: #f0f6fc;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        
+        .metric-label {
+            color: #8b949e;
+        }
+        
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .chart-container {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            height: 400px;
+        }
+        
+        .activity-feed {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+        
+        .activity-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid #30363d;
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+        
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .activity-type {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .type-upload { background: #1f6feb22; color: #58a6ff; }
+        .type-download { background: #2ea04322; color: #3fb950; }
+        .type-announce { background: #f0883e22; color: #f0883e; }
+        
+        .activity-time {
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+        
+        .activity-content {
+            color: #c9d1d9;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-green { background: #3fb950; }
+        .status-yellow { background: #f0883e; }
+        .status-red { background: #f85149; }
+        
+        .refresh-btn {
+            background: #30363d;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            color: #c9d1d9;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .refresh-btn:hover {
+            background: #484f58;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">NoiseFS</div>
+        <nav class="nav">
+            <a href="/">Home</a>
+            <a href="/upload">Upload</a>
+            <a href="/download">Download</a>
+            <a href="/browse">Browse</a>
+            <a href="/dashboard" class="active">Dashboard</a>
+            <a href="/topics">Topics</a>
+        </nav>
+    </header>
+    
+    <main class="container">
+        <div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>NoiseFS Dashboard</h1>
+            <button class="refresh-btn" onclick="refreshData()">Refresh</button>
+        </div>
+        
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2 class="card-title">System Overview</h2>
+                <div class="metric">
+                    <span class="metric-label">Total Announcements</span>
+                    <span class="metric-value" id="totalAnnouncements">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Topics</span>
+                    <span class="metric-value" id="activeTopics">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Cache Hit Rate</span>
+                    <span class="metric-value" id="cacheHitRate">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Network Peers</span>
+                    <span class="metric-value" id="networkPeers">-</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">Recent Activity</h2>
+                <div class="metric">
+                    <span class="metric-label">Uploads (24h)</span>
+                    <span class="metric-value" id="recentUploads">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Downloads (24h)</span>
+                    <span class="metric-value" id="recentDownloads">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">New Announcements</span>
+                    <span class="metric-value" id="newAnnouncements">-</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Active Subscriptions</span>
+                    <span class="metric-value" id="activeSubscriptions">-</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="card-title">Content Distribution</h2>
+                <canvas id="categoryChart" width="300" height="200"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h2 class="card-title">Activity Timeline</h2>
+            <canvas id="activityChart"></canvas>
+        </div>
+        
+        <div class="activity-feed">
+            <h2 class="card-title">Live Activity Feed</h2>
+            <div id="activityFeed">
+                <div class="activity-item">
+                    <div class="activity-header">
+                        <span class="activity-type type-announce">Announcement</span>
+                        <span class="activity-time">Waiting for data...</span>
+                    </div>
+                    <div class="activity-content">Connecting to WebSocket...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        let ws = null;
+        let activityChart = null;
+        let categoryChart = null;
+        
+        // Initialize charts
+        function initCharts() {
+            // Activity timeline chart
+            const activityCtx = document.getElementById('activityChart').getContext('2d');
+            activityChart = new Chart(activityCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Uploads',
+                        data: [],
+                        borderColor: '#58a6ff',
+                        backgroundColor: '#58a6ff22',
+                        tension: 0.1
+                    }, {
+                        label: 'Downloads',
+                        data: [],
+                        borderColor: '#3fb950',
+                        backgroundColor: '#3fb95022',
+                        tension: 0.1
+                    }, {
+                        label: 'Announcements',
+                        data: [],
+                        borderColor: '#f0883e',
+                        backgroundColor: '#f0883e22',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#c9d1d9'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: '#30363d'
+                            },
+                            ticks: {
+                                color: '#8b949e'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#30363d'
+                            },
+                            ticks: {
+                                color: '#8b949e'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Category distribution chart
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            categoryChart = new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Video', 'Audio', 'Document', 'Software', 'Data', 'Other'],
+                    datasets: [{
+                        data: [0, 0, 0, 0, 0, 0],
+                        backgroundColor: [
+                            '#1f6feb',
+                            '#3fb950',
+                            '#f85149',
+                            '#8b949e',
+                            '#f0883e',
+                            '#d29922'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#c9d1d9',
+                                padding: 10
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update dashboard data
+        async function updateDashboard() {
+            try {
+                // Fetch stats
+                const statsResponse = await fetch('/api/stats');
+                const stats = await statsResponse.json();
+                
+                if (stats.success) {
+                    document.getElementById('totalAnnouncements').textContent = stats.data.totalAnnouncements || '0';
+                    document.getElementById('activeTopics').textContent = Object.keys(stats.data.byTopic || {}).length || '0';
+                    document.getElementById('recentUploads').textContent = stats.data.recentCount || '0';
+                    document.getElementById('activeSubscriptions').textContent = stats.data.activeSubs || '0';
+                    
+                    // Update category chart
+                    const categories = stats.data.byCategory || {};
+                    categoryChart.data.datasets[0].data = [
+                        categories.video || 0,
+                        categories.audio || 0,
+                        categories.document || 0,
+                        categories.software || 0,
+                        categories.data || 0,
+                        categories.other || 0
+                    ];
+                    categoryChart.update();
+                }
+                
+                // Fetch metrics
+                const metricsResponse = await fetch('/api/metrics');
+                const metrics = await metricsResponse.json();
+                
+                if (metrics.success && metrics.data) {
+                    // Update metrics display
+                    const m = metrics.data.metrics || {};
+                    document.getElementById('cacheHitRate').textContent = 
+                        m.cacheHits && m.cacheRequests ? 
+                        Math.round(m.cacheHits / m.cacheRequests * 100) + '%' : '-';
+                    document.getElementById('recentDownloads').textContent = m.downloadsTotal || '0';
+                }
+                
+                // Update dummy data for demo
+                document.getElementById('networkPeers').textContent = '5';
+                document.getElementById('newAnnouncements').textContent = stats.data?.recentCount || '0';
+                
+            } catch (error) {
+                console.error('Failed to update dashboard:', error);
+            }
+        }
+        
+        // Connect WebSocket for live updates
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                if (message.type === 'announcement') {
+                    addActivityItem('announce', 'New announcement: ' + message.data.descriptor);
+                    updateDashboard();
+                } else if (message.type === 'stats') {
+                    // Update stats in real-time
+                    document.getElementById('totalAnnouncements').textContent = message.data.total || '0';
+                    document.getElementById('activeSubscriptions').textContent = message.data.activeSubs || '0';
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addActivityItem('error', 'WebSocket connection error');
+            };
+            
+            ws.onclose = () => {
+                // Reconnect after 5 seconds
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            ws.onopen = () => {
+                addActivityItem('info', 'Connected to real-time updates');
+            };
+        }
+        
+        // Add activity item to feed
+        function addActivityItem(type, content) {
+            const feed = document.getElementById('activityFeed');
+            const item = document.createElement('div');
+            item.className = 'activity-item';
+            
+            const time = new Date().toLocaleTimeString();
+            
+            item.innerHTML = `
+                <div class="activity-header">
+                    <span class="activity-type type-${type}">${type}</span>
+                    <span class="activity-time">${time}</span>
+                </div>
+                <div class="activity-content">${content}</div>
+            `;
+            
+            // Add to top of feed
+            feed.insertBefore(item, feed.firstChild);
+            
+            // Keep only last 10 items
+            while (feed.children.length > 10) {
+                feed.removeChild(feed.lastChild);
+            }
+        }
+        
+        // Refresh data
+        function refreshData() {
+            updateDashboard();
+            addActivityItem('info', 'Dashboard refreshed');
+        }
+        
+        // Initialize on load
+        initCharts();
+        updateDashboard();
+        connectWebSocket();
+        
+        // Update every 30 seconds
+        setInterval(updateDashboard, 30000);
+    </script>
+</body>
+</html>

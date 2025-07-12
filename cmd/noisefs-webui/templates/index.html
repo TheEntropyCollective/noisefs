@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoiseFS - Unified Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .nav {
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .nav a:hover {
+            background: #30363d;
+        }
+        
+        .nav a.active {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .hero {
+            padding: 4rem 2rem;
+            text-align: center;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #58a6ff 0%, #1f6feb 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .hero p {
+            font-size: 1.25rem;
+            color: #8b949e;
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .feature-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-2px);
+            border-color: #58a6ff;
+        }
+        
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 1rem;
+            fill: #58a6ff;
+        }
+        
+        .feature-title {
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #f0f6fc;
+        }
+        
+        .feature-description {
+            color: #8b949e;
+            margin-bottom: 1rem;
+        }
+        
+        .feature-link {
+            color: #58a6ff;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .feature-link:hover {
+            text-decoration: underline;
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        
+        .btn-primary {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #1a5dcf;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: #58a6ff;
+            border-color: #30363d;
+        }
+        
+        .btn-secondary:hover {
+            background: #30363d;
+            border-color: #58a6ff;
+        }
+        
+        .stats {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem auto;
+            max-width: 800px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .stat-label {
+            color: #8b949e;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">NoiseFS</div>
+        <nav class="nav">
+            <a href="/" class="active">Home</a>
+            <a href="/upload">Upload</a>
+            <a href="/download">Download</a>
+            <a href="/browse">Browse</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/topics">Topics</a>
+        </nav>
+    </header>
+    
+    <main>
+        <section class="hero">
+            <h1>NoiseFS Unified Interface</h1>
+            <p>A privacy-preserving distributed file system with content discovery. Upload, share, and discover files with complete anonymity.</p>
+            
+            <div class="quick-actions">
+                <a href="/upload" class="btn btn-primary">
+                    <svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 2a1 1 0 00-1 1v6H3a1 1 0 100 2h6v6a1 1 0 102 0v-6h6a1 1 0 100-2h-6V3a1 1 0 00-1-1z"/>
+                    </svg>
+                    Upload File
+                </a>
+                <a href="/browse" class="btn btn-secondary">
+                    <svg class="icon" width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"/>
+                    </svg>
+                    Browse Announcements
+                </a>
+            </div>
+        </section>
+        
+        <section class="stats" id="stats">
+            <div>
+                <div class="stat-value" id="totalAnnouncements">-</div>
+                <div class="stat-label">Total Announcements</div>
+            </div>
+            <div>
+                <div class="stat-value" id="activeTopics">-</div>
+                <div class="stat-label">Active Topics</div>
+            </div>
+            <div>
+                <div class="stat-value" id="recentUploads">-</div>
+                <div class="stat-label">Recent Uploads</div>
+            </div>
+            <div>
+                <div class="stat-value" id="networkPeers">-</div>
+                <div class="stat-label">Network Peers</div>
+            </div>
+        </section>
+        
+        <section class="features">
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+                <h3 class="feature-title">Anonymous Upload</h3>
+                <p class="feature-description">Upload files with complete privacy using NoiseFS's 3-tuple XOR anonymization.</p>
+                <a href="/upload" class="feature-link">Start Uploading →</a>
+            </div>
+            
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                <h3 class="feature-title">Secure Download</h3>
+                <p class="feature-description">Download files using descriptor CIDs with automatic integrity verification.</p>
+                <a href="/download" class="feature-link">Download Files →</a>
+            </div>
+            
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <h3 class="feature-title">Content Discovery</h3>
+                <p class="feature-description">Browse and search announcements across topics with privacy-preserving filters.</p>
+                <a href="/browse" class="feature-link">Explore Content →</a>
+            </div>
+            
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 7h16M4 12h16M4 17h10"/>
+                </svg>
+                <h3 class="feature-title">Topic Subscriptions</h3>
+                <p class="feature-description">Subscribe to topics and receive real-time notifications for new content.</p>
+                <a href="/topics" class="feature-link">Browse Topics →</a>
+            </div>
+            
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                <h3 class="feature-title">Real-time Dashboard</h3>
+                <p class="feature-description">Monitor network activity, announcements, and system metrics in real-time.</p>
+                <a href="/dashboard" class="feature-link">View Dashboard →</a>
+            </div>
+            
+            <div class="feature-card">
+                <svg class="feature-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+                    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+                </svg>
+                <h3 class="feature-title">Advanced Search</h3>
+                <p class="feature-description">Search with tags, categories, and size filters using bloom filter matching.</p>
+                <a href="/search" class="feature-link">Search Now →</a>
+            </div>
+        </section>
+    </main>
+    
+    <script>
+        // Fetch and display stats
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('totalAnnouncements').textContent = data.data.totalAnnouncements || '0';
+                    document.getElementById('activeTopics').textContent = Object.keys(data.data.byTopic || {}).length || '0';
+                    document.getElementById('recentUploads').textContent = data.data.recentCount || '0';
+                    // Network peers would come from a different endpoint
+                    document.getElementById('networkPeers').textContent = '-';
+                }
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+            }
+        }
+        
+        // Update stats on load
+        updateStats();
+        
+        // Update stats every 30 seconds
+        setInterval(updateStats, 30000);
+    </script>
+</body>
+</html>

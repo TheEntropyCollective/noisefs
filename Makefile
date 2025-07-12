@@ -27,7 +27,7 @@ LDFLAGS += -X 'main.BuildDate=$(BUILD_DATE)'
 BUILD_TAGS ?=
 
 # Binaries to build
-BINARIES := noisefs noisefs-mount noisefs-config noisefs-security webui legal-review simulation demo
+BINARIES := noisefs noisefs-mount noisefs-config noisefs-security webui noisefs-webui legal-review simulation demo
 
 # Sub-tools under noisefs-tools (built separately)
 TOOLS := noisefs-bootstrap inspect-index benchmark docker-benchmark enterprise-benchmark impact-demo
@@ -94,6 +94,10 @@ help:
 	@echo -e "  $(GREEN)dev$(NC)           Development build with race detection"
 	@echo -e "  $(GREEN)check$(NC)         Run all checks (test, lint, vet)"
 	@echo -e "  $(GREEN)all$(NC)           Clean, build, and test"
+	@echo ""
+	@echo -e "$(YELLOW)Web UI:$(NC)"
+	@echo -e "  $(GREEN)run-unified-webui$(NC) Start unified web UI on :8080"
+	@echo -e "  $(GREEN)run-webui$(NC) Start basic web UI (legacy)"
 	@echo ""
 	@echo -e "$(YELLOW)Docker & Deployment:$(NC)"
 	@echo -e "  $(GREEN)docker$(NC)        Build Docker image"
@@ -418,6 +422,24 @@ build-fuse: BUILD_TAGS := fuse
 build-fuse: build
 	@echo -e "$(GREEN)✓ FUSE build completed$(NC)"
 
+# Web UI targets
+webui: $(BUILD_DIR)/webui
+	@echo -e "$(GREEN)✓ Basic Web UI built$(NC)"
+
+run-webui: webui
+	@echo -e "$(BLUE)Starting Basic Web UI...$(NC)"
+	@echo -e "$(YELLOW)Make sure IPFS daemon is running on localhost:5001$(NC)"
+	@./$(BUILD_DIR)/webui -addr :8088
+
+# Unified Web UI targets
+noisefs-webui: $(BUILD_DIR)/noisefs-webui
+	@echo -e "$(GREEN)✓ Unified Web UI built$(NC)"
+
+run-unified-webui: noisefs-webui
+	@echo -e "$(BLUE)Starting Unified Web UI...$(NC)"
+	@echo -e "$(YELLOW)Make sure IPFS daemon is running on localhost:5001$(NC)"
+	@./$(BUILD_DIR)/noisefs-webui -addr :8080
+
 # Development workflow
 dev-setup: deps
 	@echo -e "$(BLUE)Setting up development environment...$(NC)"
@@ -462,6 +484,10 @@ list-targets:
 	@for binary in $(BINARIES); do \
 		echo "  $(GREEN)$$binary$(NC) -> cmd/$$binary/"; \
 	done
+	@echo ""
+	@echo -e "$(BLUE)Web UI Binaries:$(NC)"
+	@echo "  $(GREEN)webui$(NC) -> cmd/webui/ (basic file upload/download UI)"
+	@echo "  $(GREEN)noisefs-webui$(NC) -> cmd/noisefs-webui/ (unified UI with file management + announcements)"
 	@echo ""
 	@echo -e "$(BLUE)Available Tools:$(NC)"
 	@echo "  $(GREEN)noisefs-bootstrap$(NC) -> cmd/noisefs-tools/bootstrap/noisefs-bootstrap/"

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download - NoiseFS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #58a6ff;
+        }
+        
+        .nav {
+            display: flex;
+            gap: 2rem;
+        }
+        
+        .nav a {
+            color: #c9d1d9;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .nav a:hover {
+            background: #30363d;
+        }
+        
+        .nav a.active {
+            background: #1f6feb;
+            color: white;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .download-form {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            color: #c9d1d9;
+            font-size: 1rem;
+            font-family: monospace;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        
+        .form-hint {
+            font-size: 0.875rem;
+            color: #8b949e;
+            margin-top: 0.25rem;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .btn-primary {
+            background: #1f6feb;
+            color: white;
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background: #1a5dcf;
+        }
+        
+        .btn-primary:disabled {
+            background: #484f58;
+            cursor: not-allowed;
+        }
+        
+        .file-info {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-top: 2rem;
+            display: none;
+        }
+        
+        .file-info.show {
+            display: block;
+        }
+        
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .file-icon {
+            width: 48px;
+            height: 48px;
+            fill: #58a6ff;
+        }
+        
+        .file-title {
+            font-size: 1.25rem;
+            font-weight: 500;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 1rem;
+        }
+        
+        .info-label {
+            color: #8b949e;
+        }
+        
+        .info-value {
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        .download-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        
+        .progress-container {
+            margin-top: 2rem;
+            display: none;
+        }
+        
+        .progress-container.show {
+            display: block;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #30363d;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: #1f6feb;
+            width: 0;
+            transition: width 0.3s;
+        }
+        
+        .error-message {
+            background: #161b22;
+            border: 1px solid #f85149;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        .error-icon {
+            display: inline-block;
+            margin-right: 0.5rem;
+            color: #f85149;
+        }
+        
+        .recent-downloads {
+            margin-top: 3rem;
+        }
+        
+        .recent-title {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        
+        .download-item {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .download-cid {
+            font-family: monospace;
+            color: #58a6ff;
+            text-decoration: none;
+        }
+        
+        .download-cid:hover {
+            text-decoration: underline;
+        }
+        
+        .download-time {
+            color: #8b949e;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">NoiseFS</div>
+        <nav class="nav">
+            <a href="/">Home</a>
+            <a href="/upload">Upload</a>
+            <a href="/download" class="active">Download</a>
+            <a href="/browse">Browse</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/topics">Topics</a>
+        </nav>
+    </header>
+    
+    <main class="container">
+        <h1>Download File</h1>
+        
+        <div class="download-form">
+            <form id="downloadForm">
+                <div class="form-group">
+                    <label class="form-label" for="cidInput">Descriptor CID</label>
+                    <input 
+                        type="text" 
+                        id="cidInput" 
+                        class="form-input" 
+                        placeholder="Enter the descriptor CID"
+                        autocomplete="off"
+                        required
+                    >
+                    <p class="form-hint">Enter the CID of the file descriptor you want to download</p>
+                </div>
+                
+                <button type="submit" class="btn btn-primary" id="checkBtn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                        <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 1 1 0 000 2H6a2 2 0 00-2 2v6a2 2 0 002 2h2a1 1 0 100-2H6V7h8v6h-2a1 1 0 100 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a1 1 0 100-2 2 2 0 012 2z" clip-rule="evenodd"/>
+                    </svg>
+                    Check File Info
+                </button>
+            </form>
+        </div>
+        
+        <div class="file-info" id="fileInfo">
+            <div class="info-header">
+                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
+                    <polyline points="13 2 13 9 20 9"/>
+                </svg>
+                <div>
+                    <h2 class="file-title" id="fileName">Loading...</h2>
+                </div>
+            </div>
+            
+            <div class="info-grid">
+                <div class="info-label">File Name:</div>
+                <div class="info-value" id="infoFileName">-</div>
+                
+                <div class="info-label">Size:</div>
+                <div class="info-value" id="infoFileSize">-</div>
+                
+                <div class="info-label">Content Type:</div>
+                <div class="info-value" id="infoContentType">-</div>
+                
+                <div class="info-label">Descriptor CID:</div>
+                <div class="info-value" id="infoDescriptorCid">-</div>
+            </div>
+            
+            <div class="download-actions">
+                <button class="btn btn-primary" id="downloadBtn">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                    Download File
+                </button>
+                
+                <button class="btn btn-primary" id="streamBtn" style="display: none;">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/>
+                    </svg>
+                    Stream
+                </button>
+            </div>
+        </div>
+        
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-header">
+                <span>Downloading...</span>
+                <span id="progressText">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+        
+        <div class="error-message" id="errorMessage">
+            <span class="error-icon">⚠️</span>
+            <span id="errorText"></span>
+        </div>
+        
+        <div class="recent-downloads">
+            <h2 class="recent-title">Recent Downloads</h2>
+            <div id="recentList"></div>
+        </div>
+    </main>
+    
+    <script>
+        const downloadForm = document.getElementById('downloadForm');
+        const cidInput = document.getElementById('cidInput');
+        const checkBtn = document.getElementById('checkBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const streamBtn = document.getElementById('streamBtn');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        
+        let currentCID = null;
+        let currentFileInfo = null;
+        
+        // Load recent downloads
+        loadRecentDownloads();
+        
+        downloadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const cid = cidInput.value.trim();
+            if (!cid) return;
+            
+            checkBtn.disabled = true;
+            hideError();
+            
+            try {
+                const response = await fetch(`/api/info/${cid}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentCID = cid;
+                    currentFileInfo = data.data;
+                    showFileInfo(data.data);
+                } else {
+                    showError(data.error || 'Failed to fetch file information');
+                }
+            } catch (error) {
+                showError('Failed to connect to server');
+            } finally {
+                checkBtn.disabled = false;
+            }
+        });
+        
+        function showFileInfo(info) {
+            document.getElementById('fileName').textContent = info.filename;
+            document.getElementById('infoFileName').textContent = info.filename;
+            document.getElementById('infoFileSize').textContent = formatFileSize(info.size);
+            document.getElementById('infoContentType').textContent = info.content_type;
+            document.getElementById('infoDescriptorCid').textContent = info.descriptor_cid;
+            
+            // Show stream button for media files
+            if (info.content_type.startsWith('video/') || info.content_type.startsWith('audio/')) {
+                streamBtn.style.display = 'inline-flex';
+            } else {
+                streamBtn.style.display = 'none';
+            }
+            
+            fileInfo.classList.add('show');
+        }
+        
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentCID) return;
+            
+            downloadBtn.disabled = true;
+            progressContainer.classList.add('show');
+            progressFill.style.width = '0%';
+            
+            try {
+                // Create a link to trigger download
+                const link = document.createElement('a');
+                link.href = `/api/download/${currentCID}`;
+                link.download = currentFileInfo.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Save to recent downloads
+                saveRecentDownload(currentCID, currentFileInfo.filename);
+                
+                // Simulate progress (in real implementation, monitor actual download)
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += 10;
+                    progressFill.style.width = `${progress}%`;
+                    progressText.textContent = `${progress}%`;
+                    
+                    if (progress >= 100) {
+                        clearInterval(interval);
+                        setTimeout(() => {
+                            progressContainer.classList.remove('show');
+                            downloadBtn.disabled = false;
+                        }, 1000);
+                    }
+                }, 200);
+            } catch (error) {
+                showError('Download failed');
+                progressContainer.classList.remove('show');
+                downloadBtn.disabled = false;
+            }
+        });
+        
+        streamBtn.addEventListener('click', () => {
+            if (!currentCID) return;
+            
+            // Open in new window for streaming
+            window.open(`/api/stream/${currentCID}`, '_blank');
+        });
+        
+        function showError(message) {
+            errorText.textContent = message;
+            errorMessage.classList.add('show');
+        }
+        
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function saveRecentDownload(cid, filename) {
+            let recent = JSON.parse(localStorage.getItem('recentDownloads') || '[]');
+            recent = recent.filter(item => item.cid !== cid);
+            recent.unshift({ cid, filename, time: new Date().toISOString() });
+            recent = recent.slice(0, 5); // Keep only last 5
+            localStorage.setItem('recentDownloads', JSON.stringify(recent));
+            loadRecentDownloads();
+        }
+        
+        function loadRecentDownloads() {
+            const recent = JSON.parse(localStorage.getItem('recentDownloads') || '[]');
+            const recentList = document.getElementById('recentList');
+            
+            if (recent.length === 0) {
+                recentList.innerHTML = '<p style="color: #8b949e;">No recent downloads</p>';
+                return;
+            }
+            
+            recentList.innerHTML = recent.map(item => `
+                <div class="download-item">
+                    <div>
+                        <a href="#" class="download-cid" data-cid="${item.cid}">${item.filename}</a>
+                        <div class="download-time">${formatTime(item.time)}</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Add click handlers
+            recentList.querySelectorAll('.download-cid').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    cidInput.value = e.target.dataset.cid;
+                    downloadForm.dispatchEvent(new Event('submit'));
+                });
+            });
+        }
+        
+        function formatTime(isoString) {
+            const date = new Date(isoString);
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) return 'Just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)} minutes ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+            return date.toLocaleDateString();
+        }
+    </script>
+</body>
+</html>
