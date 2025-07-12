@@ -588,20 +588,39 @@ func (c *Client) GetConnectedPeers() []peer.ID {
 
 // Upload uploads a file and returns descriptor CID
 // This is a simplified implementation for testing
+// ProgressCallback is called during operations to report progress
+type ProgressCallback func(stage string, current, total int)
+
 // Upload uploads a file to NoiseFS with full protocol implementation
 func (c *Client) Upload(reader io.Reader, filename string) (string, error) {
 	return c.UploadWithBlockSize(reader, filename, blocks.DefaultBlockSize)
 }
 
+// UploadWithProgress uploads a file with progress reporting
+func (c *Client) UploadWithProgress(reader io.Reader, filename string, progress ProgressCallback) (string, error) {
+	return c.UploadWithBlockSizeAndProgress(reader, filename, blocks.DefaultBlockSize, progress)
+}
+
 // UploadWithBlockSize uploads a file with a specific block size
 func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSize int) (string, error) {
+	return c.UploadWithBlockSizeAndProgress(reader, filename, blockSize, nil)
+}
+
+// UploadWithBlockSizeAndProgress uploads a file with a specific block size and progress reporting
+func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename string, blockSize int, progress ProgressCallback) (string, error) {
 	// Read all data to get size
+	if progress != nil {
+		progress("Reading file", 0, 100)
+	}
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return "", fmt.Errorf("failed to read data: %w", err)
 	}
 	
 	fileSize := int64(len(data))
+	if progress != nil {
+		progress("Reading file", 100, 100)
+	}
 	
 	// Create splitter
 	splitter, err := blocks.NewSplitter(blockSize)
@@ -610,16 +629,26 @@ func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSiz
 	}
 	
 	// Split file into blocks
+	if progress != nil {
+		progress("Splitting file into blocks", 0, 100)
+	}
 	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
 	if err != nil {
 		return "", fmt.Errorf("failed to split file: %w", err)
+	}
+	if progress != nil {
+		progress("Splitting file into blocks", 100, 100)
 	}
 	
 	// Create descriptor
 	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
 	
 	// Process each block with XOR
-	for _, fileBlock := range fileBlocks {
+	totalBlocks := len(fileBlocks)
+	for i, fileBlock := range fileBlocks {
+		if progress != nil {
+			progress("Anonymizing blocks", i, totalBlocks)
+		}
 		// Select two randomizer blocks (3-tuple XOR)
 		randBlock1, cid1, randBlock2, cid2, err := c.SelectTwoRandomizers(fileBlock.Size())
 		if err != nil {
@@ -644,7 +673,15 @@ func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSiz
 		}
 	}
 	
+	if progress != nil {
+		progress("Anonymizing blocks", totalBlocks, totalBlocks)
+	}
+	
 	// Store descriptor in IPFS
+	if progress != nil {
+		progress("Saving file descriptor", 0, 100)
+	}
+	
 	// Try to get concrete IPFS client for descriptor store
 	var ipfsClientConcrete *ipfs.Client
 	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
@@ -663,6 +700,10 @@ func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSiz
 		return "", fmt.Errorf("failed to save descriptor: %w", err)
 	}
 	
+	if progress != nil {
+		progress("Saving file descriptor", 100, 100)
+	}
+	
 	// Record metrics
 	c.RecordUpload(fileSize, fileSize*3) // *3 for data + 2 randomizer blocks
 	
@@ -675,9 +716,24 @@ func (c *Client) Download(descriptorCID string) ([]byte, error) {
 	return data, err
 }
 
+// DownloadWithProgress downloads a file with progress reporting
+func (c *Client) DownloadWithProgress(descriptorCID string, progress ProgressCallback) ([]byte, error) {
+	data, _, err := c.DownloadWithMetadataAndProgress(descriptorCID, progress)
+	return data, err
+}
+
 // DownloadWithMetadata downloads a file and returns both data and metadata
 func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, error) {
+	return c.DownloadWithMetadataAndProgress(descriptorCID, nil)
+}
+
+// DownloadWithMetadataAndProgress downloads a file with progress reporting
+func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress ProgressCallback) ([]byte, string, error) {
 	// Try to get concrete IPFS client for descriptor store
+	if progress != nil {
+		progress("Loading file descriptor", 0, 100)
+	}
+	
 	var ipfsClientConcrete *ipfs.Client
 	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
 		ipfsClientConcrete = client
@@ -697,10 +753,18 @@ func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, err
 		return nil, "", fmt.Errorf("failed to load descriptor: %w", err)
 	}
 	
+	if progress != nil {
+		progress("Loading file descriptor", 100, 100)
+	}
+	
 	// Retrieve and reconstruct blocks
 	var originalBlocks []*blocks.Block
+	totalBlocks := len(descriptor.Blocks)
 	
-	for _, blockInfo := range descriptor.Blocks {
+	for i, blockInfo := range descriptor.Blocks {
+		if progress != nil {
+			progress("Downloading blocks", i, totalBlocks)
+		}
 		// Retrieve anonymized data block
 		dataBlock, err := c.ipfsClient.RetrieveBlock(blockInfo.DataCID)
 		if err != nil {
@@ -735,11 +799,23 @@ func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, err
 		originalBlocks = append(originalBlocks, origBlock)
 	}
 	
+	if progress != nil {
+		progress("Downloading blocks", totalBlocks, totalBlocks)
+	}
+	
 	// Assemble file
+	if progress != nil {
+		progress("Assembling file", 0, 100)
+	}
+	
 	assembler := blocks.NewAssembler()
 	var buf strings.Builder
 	if err := assembler.AssembleToWriter(originalBlocks, &buf); err != nil {
 		return nil, "", fmt.Errorf("failed to assemble file: %w", err)
+	}
+	
+	if progress != nil {
+		progress("Assembling file", 100, 100)
 	}
 	
 	// Record download

@@ -230,6 +230,13 @@
             transition: width 0.3s;
         }
         
+        .progress-status {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #8b949e;
+            text-align: center;
+        }
+        
         .result {
             background: #161b22;
             border: 1px solid #30363d;
@@ -379,6 +386,7 @@
             <div class="progress-bar" id="progressBar" style="display: none;">
                 <div class="progress-fill" id="progressFill"></div>
             </div>
+            <div class="progress-status" id="progressStatus" style="display: none;"></div>
             
             <button type="submit" class="btn btn-primary" id="uploadBtn">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
@@ -404,6 +412,7 @@
         const uploadBtn = document.getElementById('uploadBtn');
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
+        const progressStatus = document.getElementById('progressStatus');
         const result = document.getElementById('result');
         const resultTitle = document.getElementById('resultTitle');
         const resultCid = document.getElementById('resultCid');
@@ -506,37 +515,79 @@
             
             uploadBtn.disabled = true;
             progressBar.style.display = 'block';
+            progressStatus.style.display = 'block';
             progressFill.style.width = '0%';
+            progressStatus.textContent = 'Starting upload...';
             
             try {
-                // Simulate progress (in real implementation, use XMLHttpRequest for progress)
-                let progress = 0;
-                const progressInterval = setInterval(() => {
-                    progress += 10;
-                    progressFill.style.width = `${Math.min(progress, 90)}%`;
-                }, 200);
+                // Use XMLHttpRequest for better progress tracking
+                const xhr = new XMLHttpRequest();
                 
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
+                // Track upload progress
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        progressFill.style.width = `${percentComplete}%`;
+                        progressStatus.textContent = `Uploading: ${Math.round(percentComplete)}%`;
+                    }
                 });
                 
-                clearInterval(progressInterval);
+                // Simulate NoiseFS processing stages
+                xhr.addEventListener('load', () => {
+                    if (xhr.status === 200) {
+                        // Show processing stages
+                        const stages = [
+                            'Reading file...',
+                            'Splitting file into blocks...',
+                            'Anonymizing blocks with XOR...',
+                            'Storing encrypted blocks...',
+                            'Saving file descriptor...',
+                            'Upload complete!'
+                        ];
+                        
+                        let stageIndex = 0;
+                        const stageInterval = setInterval(() => {
+                            if (stageIndex < stages.length) {
+                                progressStatus.textContent = stages[stageIndex];
+                                stageIndex++;
+                            } else {
+                                clearInterval(stageInterval);
+                            }
+                        }, 300);
+                    }
+                });
+                
+                xhr.open('POST', '/api/upload');
+                xhr.send(formData);
+                
+                const response = await new Promise((resolve, reject) => {
+                    xhr.onload = () => {
+                        if (xhr.status === 200) {
+                            resolve(JSON.parse(xhr.responseText));
+                        } else {
+                            reject(new Error(xhr.responseText));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Network error'));
+                });
+                
                 progressFill.style.width = '100%';
+                progressStatus.textContent = 'Upload complete!';
                 
-                const data = await response.json();
-                
-                if (data.success) {
-                    showResult('success', 'Upload Successful!', data.descriptor_cid, 
-                        `File "${data.filename}" (${formatFileSize(data.size)}) has been uploaded successfully.`);
+                if (response.success) {
+                    showResult('success', 'Upload Successful!', response.descriptor_cid, 
+                        `File "${response.filename}" (${formatFileSize(response.size)}) has been uploaded successfully.`);
                 } else {
-                    showResult('error', 'Upload Failed', '', data.error || 'An error occurred during upload.');
+                    showResult('error', 'Upload Failed', '', response.error || 'An error occurred during upload.');
                 }
             } catch (error) {
                 showResult('error', 'Upload Failed', '', error.message || 'An error occurred during upload.');
             } finally {
                 uploadBtn.disabled = false;
-                progressBar.style.display = 'none';
+                setTimeout(() => {
+                    progressBar.style.display = 'none';
+                    progressStatus.style.display = 'none';
+                }, 2000);
             }
         });
         

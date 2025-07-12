@@ -507,8 +507,27 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Upload file using the client's proper implementation
-	descriptorCID, err := w.noisefsClient.Upload(file, header.Filename)
+	// Create a progress tracker
+	progressUpdates := make(chan string, 10)
+	go func() {
+		for update := range progressUpdates {
+			log.Printf("Upload progress: %s", update)
+		}
+	}()
+	
+	// Upload file using the client's proper implementation with progress
+	descriptorCID, err := w.noisefsClient.UploadWithProgress(file, header.Filename, func(stage string, current, total int) {
+		percent := 0
+		if total > 0 {
+			percent = (current * 100) / total
+		}
+		select {
+		case progressUpdates <- fmt.Sprintf("%s: %d%%", stage, percent):
+		default:
+		}
+	})
+	close(progressUpdates)
+	
 	if err != nil {
 		sendError(wr, err, http.StatusInternalServerError)
 		return
@@ -573,8 +592,27 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Download file using the client's proper implementation
-	data, filename, err := w.noisefsClient.DownloadWithMetadata(descriptorCID)
+	// Create a progress tracker
+	progressUpdates := make(chan string, 10)
+	go func() {
+		for update := range progressUpdates {
+			log.Printf("Download progress: %s", update)
+		}
+	}()
+	
+	// Download file using the client's proper implementation with progress
+	data, filename, err := w.noisefsClient.DownloadWithMetadataAndProgress(descriptorCID, func(stage string, current, total int) {
+		percent := 0
+		if total > 0 {
+			percent = (current * 100) / total
+		}
+		select {
+		case progressUpdates <- fmt.Sprintf("%s: %d%%", stage, percent):
+		default:
+		}
+	})
+	close(progressUpdates)
+	
 	if err != nil {
 		sendError(wr, err, http.StatusNotFound)
 		return
