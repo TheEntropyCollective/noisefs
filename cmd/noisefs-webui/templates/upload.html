@@ -289,8 +289,8 @@
             <a href="/upload" class="active">Upload</a>
             <a href="/download">Download</a>
             <a href="/browse">Browse</a>
-            <a href="/dashboard">Dashboard</a>
             <a href="/topics">Topics</a>
+            <a href="/dashboard">Dashboard</a>
         </nav>
     </header>
     
@@ -311,19 +311,52 @@
             
             <div class="form-group">
                 <label class="form-label">Topic (Optional)</label>
-                <select class="form-select" id="topicSelect">
-                    <option value="">No announcement</option>
-                    <option value="content">content</option>
-                    <option value="content/books">content/books</option>
-                    <option value="content/books/fiction">content/books/fiction</option>
-                    <option value="content/books/technical">content/books/technical</option>
-                    <option value="content/documents">content/documents</option>
-                    <option value="content/media">content/media</option>
-                    <option value="software">software</option>
-                    <option value="software/opensource">software/opensource</option>
-                    <option value="software/tools">software/tools</option>
-                </select>
-                <p class="form-hint">Select a topic to announce your file to the network</p>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <select class="form-select" id="topicSelect" style="flex: 1;">
+                        <option value="">No announcement</option>
+                        <option value="_custom">Custom topic...</option>
+                        <optgroup label="Software">
+                            <option value="software">software (all)</option>
+                            <option value="software/opensource">software/opensource</option>
+                            <option value="software/opensource/linux">software/opensource/linux</option>
+                            <option value="software/tools">software/tools</option>
+                            <option value="software/libraries">software/libraries</option>
+                        </optgroup>
+                        <optgroup label="Data">
+                            <option value="data">data (all)</option>
+                            <option value="data/scientific">data/scientific</option>
+                            <option value="data/machine-learning">data/machine-learning</option>
+                            <option value="data/geographic">data/geographic</option>
+                        </optgroup>
+                        <optgroup label="Media">
+                            <option value="media">media (all)</option>
+                            <option value="media/audio">media/audio</option>
+                            <option value="media/video">media/video</option>
+                            <option value="media/images">media/images</option>
+                            <option value="media/3d">media/3d</option>
+                        </optgroup>
+                        <optgroup label="Documents">
+                            <option value="documents">documents (all)</option>
+                            <option value="documents/books">documents/books</option>
+                            <option value="documents/research">documents/research</option>
+                            <option value="documents/reference">documents/reference</option>
+                        </optgroup>
+                        <optgroup label="Education">
+                            <option value="education">education (all)</option>
+                            <option value="education/courses">education/courses</option>
+                            <option value="education/tutorials">education/tutorials</option>
+                            <option value="education/lectures">education/lectures</option>
+                        </optgroup>
+                        <optgroup label="Archives">
+                            <option value="archives">archives (all)</option>
+                            <option value="archives/web">archives/web</option>
+                            <option value="archives/cultural">archives/cultural</option>
+                            <option value="archives/historical">archives/historical</option>
+                        </optgroup>
+                    </select>
+                    <input type="text" class="form-input" id="customTopicInput" placeholder="e.g., hobbies/gardening/vegetables" style="flex: 1; display: none;">
+                </div>
+                <p class="form-hint">Select a topic or enter a custom path (use / for hierarchy)</p>
             </div>
             
             <div class="form-group">
@@ -376,8 +409,31 @@
         const resultCid = document.getElementById('resultCid');
         const resultMessage = document.getElementById('resultMessage');
         const copyBtn = document.getElementById('copyBtn');
+        const topicSelect = document.getElementById('topicSelect');
+        const customTopicInput = document.getElementById('customTopicInput');
         
         let selectedFile = null;
+        
+        // Handle custom topic selection
+        topicSelect.addEventListener('change', () => {
+            if (topicSelect.value === '_custom') {
+                topicSelect.style.display = 'none';
+                customTopicInput.style.display = 'block';
+                customTopicInput.focus();
+            } else {
+                topicSelect.style.display = 'block';
+                customTopicInput.style.display = 'none';
+            }
+        });
+        
+        // Allow switching back to dropdown
+        customTopicInput.addEventListener('blur', () => {
+            if (customTopicInput.value === '') {
+                topicSelect.value = '';
+                topicSelect.style.display = 'block';
+                customTopicInput.style.display = 'none';
+            }
+        });
         
         // File selection
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -436,7 +492,15 @@
             
             const formData = new FormData();
             formData.append('file', selectedFile);
-            formData.append('topic', document.getElementById('topicSelect').value);
+            
+            // Get topic value - either from select or custom input
+            let topicValue = '';
+            if (topicSelect.value === '_custom') {
+                topicValue = customTopicInput.value.trim();
+            } else {
+                topicValue = topicSelect.value;
+            }
+            formData.append('topic', topicValue);
             formData.append('tags', document.getElementById('tagsInput').value);
             formData.append('ttl', document.getElementById('ttlSelect').value);
             
