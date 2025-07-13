@@ -152,9 +152,6 @@ func (sc *SystemCoordinator) initializeStorage() error {
 
 // initializeCache sets up the caching layer
 func (sc *SystemCoordinator) initializeCache() error {
-	// Create main block cache
-	sc.blockCache = cache.NewMemoryCache(sc.config.Cache.BlockCacheSize)
-	
 	// Create adaptive cache if enabled
 	// Enable adaptive cache by default
 	if true {
@@ -169,6 +166,28 @@ func (sc *SystemCoordinator) initializeCache() error {
 			PredictionInterval: time.Minute * 10,
 		}
 		sc.adaptiveCache = cache.NewAdaptiveCache(adaptiveCfg)
+		
+		// Wrap with altruistic cache if enabled
+		if sc.config.Cache.EnableAltruistic {
+			altruisticConfig := &cache.AltruisticCacheConfig{
+				MinPersonalCache: int64(sc.config.Cache.MinPersonalCacheMB) * 1024 * 1024,
+				EnableAltruistic: true,
+				EvictionCooldown: 5 * time.Minute,
+			}
+			
+			// Use adaptive cache as the base
+			sc.blockCache = cache.NewAltruisticCache(
+				sc.adaptiveCache,
+				altruisticConfig,
+				int64(sc.config.Cache.MemoryLimit) * 1024 * 1024,
+			)
+		} else {
+			// Use adaptive cache directly
+			sc.blockCache = sc.adaptiveCache
+		}
+	} else {
+		// Create simple memory cache
+		sc.blockCache = cache.NewMemoryCache(sc.config.Cache.BlockCacheSize)
 	}
 	
 	return nil

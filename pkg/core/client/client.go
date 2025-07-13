@@ -384,8 +384,34 @@ func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (s
 
 // cacheBlock stores a block in both standard and adaptive caches with metadata
 func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string]interface{}) {
-	// Store in standard cache
-	c.cache.Store(cid, block)
+	// Determine if this is a personal block (requested by user)
+	// or an altruistic block (for network benefit)
+	isPersonal := true // Default to personal for backward compatibility
+	
+	// Check metadata for explicit origin
+	if origin, ok := metadata["requested_by_user"]; ok {
+		isPersonal = origin.(bool)
+	} else if blockType, ok := metadata["block_type"]; ok {
+		// Randomizers and other system blocks are not personal
+		switch blockType {
+		case "randomizer", "public_domain":
+			isPersonal = false
+		}
+	}
+	
+	// Store in cache with origin info
+	if altruisticCache, ok := c.cache.(*cache.AltruisticCache); ok {
+		// Use altruistic cache with explicit origin
+		if isPersonal {
+			altruisticCache.StoreWithOrigin(cid, block, cache.PersonalBlock)
+		} else {
+			altruisticCache.StoreWithOrigin(cid, block, cache.AltruisticBlock)
+		}
+	} else {
+		// Fallback to standard cache
+		c.cache.Store(cid, block)
+	}
+	
 	c.cache.IncrementPopularity(cid)
 	
 	// Store in adaptive cache if enabled

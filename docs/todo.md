@@ -1,20 +1,44 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Ready for Production Testing
+## Current Milestone: Altruistic Caching with MinPersonal + Flex Model
 
-NoiseFS now has a complete distributed descriptor discovery system with advanced features.
-The system is ready for:
-- Production deployment testing
-- Performance optimization
-- Community feedback
-- Real-world usage
+Implementing a simple, privacy-preserving altruistic caching system that automatically contributes to network health while respecting user storage needs.
 
-Potential next directions:
-1. **Automated Seeding System** - Test and deploy the noisefs-seed tool
-2. **Web Interface Enhancement** - Rich UI for announcements and discovery
-3. **Mobile Support** - iOS/Android clients
-4. **Federation** - Connect multiple NoiseFS networks
-5. **Performance Tuning** - Optimize for large-scale usage
+### Sprint 1: Core Cache Categorization ⏳
+- [x] Extend AdaptiveCache to track personal vs altruistic blocks
+- [x] Add metadata to distinguish block origin (user-requested vs network-beneficial)
+- [x] Implement space allocation logic respecting MinPersonal guarantee
+- [x] Add metrics for personal/altruistic usage tracking
+
+### Sprint 2: Altruistic Block Selection
+- [ ] Implement BlockHealthTracker for privacy-safe network health metrics
+- [ ] Add block value calculation (replication, popularity, randomizer potential)
+- [ ] Create opportunistic fetching for valuable blocks when space available
+- [ ] Implement anti-thrashing mechanisms with cooldown periods
+
+### Sprint 3: Space Management & Eviction
+- [ ] Implement flex pool management between personal and altruistic
+- [ ] Add eviction policies that prioritize altruistic blocks for removal
+- [ ] Ensure personal blocks can use entire disk if needed
+- [ ] Add hysteresis to prevent rapid eviction/refetch cycles
+
+### Sprint 4: Network Health Integration
+- [ ] Implement privacy-preserving gossip protocol for block health
+- [ ] Add Bloom filter exchange for efficient peer coordination
+- [ ] Create aggregated health metrics without exposing individual patterns
+- [ ] Integrate with existing peer discovery mechanisms
+
+### Sprint 5: Configuration & CLI
+- [ ] Add single MinPersonalCache configuration option
+- [ ] Update CLI to show personal vs altruistic usage
+- [ ] Add optional advanced settings (bandwidth limits, disable flag)
+- [ ] Create visual feedback for cache utilization
+
+### Sprint 6: Testing & Documentation
+- [ ] Comprehensive unit tests for all cache behaviors
+- [ ] Integration tests for space management scenarios
+- [ ] Performance benchmarks comparing to non-altruistic mode
+- [ ] User documentation explaining the feature
 
 ## Completed Major Milestones
 

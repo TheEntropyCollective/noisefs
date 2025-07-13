@@ -43,8 +43,10 @@ type IPFSConfig struct {
 
 // CacheConfig holds cache-related configuration
 type CacheConfig struct {
-	BlockCacheSize int `json:"block_cache_size"`
-	MemoryLimit    int `json:"memory_limit_mb"`
+	BlockCacheSize     int  `json:"block_cache_size"`
+	MemoryLimit        int  `json:"memory_limit_mb"`
+	EnableAltruistic   bool `json:"enable_altruistic"`
+	MinPersonalCacheMB int  `json:"min_personal_cache_mb"`
 }
 
 // FUSEConfig holds FUSE filesystem configuration
@@ -106,8 +108,10 @@ func DefaultConfig() *Config {
 			Timeout:     30,
 		},
 		Cache: CacheConfig{
-			BlockCacheSize: 1000,
-			MemoryLimit:    512,
+			BlockCacheSize:     1000,
+			MemoryLimit:        512,
+			EnableAltruistic:   true,
+			MinPersonalCacheMB: 256, // Half of default memory limit
 		},
 		FUSE: FUSEConfig{
 			MountPath:  "",
