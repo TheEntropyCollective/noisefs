@@ -80,6 +80,8 @@ type AltruisticCache struct {
 	
 	// Anti-thrashing
 	lastMajorEviction time.Time
+	recentlyEvicted   map[string]time.Time // Track recently evicted blocks
+	evictionHistory   []string             // Order of evictions
 	
 	// Metrics
 	altruisticHits   int64
@@ -103,6 +105,8 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 		personalBlocks:   make(map[string]*BlockMetadata),
 		altruisticBlocks: make(map[string]*BlockMetadata),
 		totalCapacity:    totalCapacity,
+		recentlyEvicted:  make(map[string]time.Time),
+		evictionHistory:  make([]string, 0, 100),
 	}
 }
 
@@ -171,6 +175,16 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 		
 	} else {
 		// Handle altruistic blocks
+		
+		// Check anti-thrashing: don't re-add recently evicted blocks
+		if evictTime, wasEvicted := ac.recentlyEvicted[cid]; wasEvicted {
+			if time.Since(evictTime) < ac.config.EvictionCooldown {
+				return fmt.Errorf("block was recently evicted, cooldown active")
+			}
+			// Clean up old eviction record
+			delete(ac.recentlyEvicted, cid)
+		}
+		
 		if !ac.canAcceptAltruistic(blockSize) {
 			return fmt.Errorf("insufficient space for altruistic block")
 		}
@@ -379,6 +393,18 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 		freed += int64(metadata.Size)
 		ac.altruisticSize -= int64(metadata.Size)
 		delete(ac.altruisticBlocks, metadata.CID)
+		
+		// Track eviction for anti-thrashing
+		ac.recentlyEvicted[metadata.CID] = time.Now()
+		ac.evictionHistory = append(ac.evictionHistory, metadata.CID)
+		
+		// Limit history size
+		if len(ac.evictionHistory) > 1000 {
+			// Remove oldest entries
+			oldCID := ac.evictionHistory[0]
+			delete(ac.recentlyEvicted, oldCID)
+			ac.evictionHistory = ac.evictionHistory[1:]
+		}
 	}
 	
 	if freed >= needed*2 {
@@ -409,4 +435,36 @@ func (ac *AltruisticCache) getAltruisticBlocksByAge() []*BlockMetadata {
 	}
 	
 	return blocks
+}
+
+// ShouldCacheAltruistic checks if an altruistic block should be cached
+// Returns false if the block was recently evicted or space constraints prevent it
+func (ac *AltruisticCache) ShouldCacheAltruistic(cid string, size int64) bool {
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+	
+	// Check if disabled
+	if !ac.config.EnableAltruistic {
+		return false
+	}
+	
+	// Check anti-thrashing
+	if evictTime, wasEvicted := ac.recentlyEvicted[cid]; wasEvicted {
+		if time.Since(evictTime) < ac.config.EvictionCooldown {
+			return false
+		}
+	}
+	
+	// Check space constraints
+	return ac.canAcceptAltruistic(size)
+}
+
+// GetEvictionHistory returns recent eviction history for debugging
+func (ac *AltruisticCache) GetEvictionHistory() []string {
+	ac.mu.RLock()
+	defer ac.mu.RUnlock()
+	
+	history := make([]string, len(ac.evictionHistory))
+	copy(history, ac.evictionHistory)
+	return history
 }
