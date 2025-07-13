@@ -43,10 +43,11 @@ type IPFSConfig struct {
 
 // CacheConfig holds cache-related configuration
 type CacheConfig struct {
-	BlockCacheSize     int  `json:"block_cache_size"`
-	MemoryLimit        int  `json:"memory_limit_mb"`
-	EnableAltruistic   bool `json:"enable_altruistic"`
-	MinPersonalCacheMB int  `json:"min_personal_cache_mb"`
+	BlockCacheSize        int  `json:"block_cache_size"`
+	MemoryLimit           int  `json:"memory_limit_mb"`
+	EnableAltruistic      bool `json:"enable_altruistic"`
+	MinPersonalCacheMB    int  `json:"min_personal_cache_mb"`
+	AltruisticBandwidthMB int  `json:"altruistic_bandwidth_mb,omitempty"`
 }
 
 // FUSEConfig holds FUSE filesystem configuration

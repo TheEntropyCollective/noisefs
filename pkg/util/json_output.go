@@ -31,11 +31,12 @@ type DownloadResult struct {
 
 // StatsResult represents system statistics
 type StatsResult struct {
-	IPFS     IPFSStats     `json:"ipfs"`
-	Cache    CacheStats    `json:"cache"`
-	Blocks   BlockStats    `json:"blocks"`
-	Storage  StorageStats  `json:"storage"`
-	Activity ActivityStats `json:"activity"`
+	IPFS       IPFSStats          `json:"ipfs"`
+	Cache      CacheStats         `json:"cache"`
+	Blocks     BlockStats         `json:"blocks"`
+	Storage    StorageStats       `json:"storage"`
+	Activity   ActivityStats      `json:"activity"`
+	Altruistic *AltruisticStats   `json:"altruistic,omitempty"`
 }
 
 // IPFSStats represents IPFS connection information
@@ -71,6 +72,23 @@ type StorageStats struct {
 type ActivityStats struct {
 	Uploads   int64 `json:"uploads"`
 	Downloads int64 `json:"downloads"`
+}
+
+// AltruisticStats represents altruistic cache statistics
+type AltruisticStats struct {
+	Enabled              bool    `json:"enabled"`
+	PersonalBlocks       int     `json:"personal_blocks"`
+	AltruisticBlocks     int     `json:"altruistic_blocks"`
+	PersonalSize         int64   `json:"personal_size"`
+	AltruisticSize       int64   `json:"altruistic_size"`
+	TotalCapacity        int64   `json:"total_capacity"`
+	PersonalPercent      float64 `json:"personal_percent"`
+	AltruisticPercent    float64 `json:"altruistic_percent"`
+	UsedPercent          float64 `json:"used_percent"`
+	PersonalHitRate      float64 `json:"personal_hit_rate"`
+	AltruisticHitRate    float64 `json:"altruistic_hit_rate"`
+	FlexPoolUsage        float64 `json:"flex_pool_usage"`
+	MinPersonalCacheMB   int     `json:"min_personal_cache_mb"`
 }
 
 // PrintJSON outputs data as formatted JSON

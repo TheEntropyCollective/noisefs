@@ -566,3 +566,8 @@ func (ac *AltruisticCache) PerformPreEviction() error {
 func (ac *AltruisticCache) GetHealthTracker() *BlockHealthTracker {
 	return ac.healthTracker
 }
+
+// GetConfig returns the altruistic cache configuration
+func (ac *AltruisticCache) GetConfig() *AltruisticCacheConfig {
+	return ac.config
+}

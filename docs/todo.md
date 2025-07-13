@@ -36,11 +36,11 @@ Implementing a simple, privacy-preserving altruistic caching system that automat
 - [x] Create aggregated health metrics without exposing individual patterns
 - [x] Integrate with existing peer discovery mechanisms
 
-### Sprint 5: Configuration & CLI
-- [ ] Add single MinPersonalCache configuration option
-- [ ] Update CLI to show personal vs altruistic usage
-- [ ] Add optional advanced settings (bandwidth limits, disable flag)
-- [ ] Create visual feedback for cache utilization
+### Sprint 5: Configuration & CLI ✅
+- [x] Add single MinPersonalCache configuration option
+- [x] Update CLI to show personal vs altruistic usage
+- [x] Add optional advanced settings (bandwidth limits, disable flag)
+- [x] Create visual feedback for cache utilization
 
 ### Sprint 6: Testing & Documentation
 - [ ] Comprehensive unit tests for all cache behaviors

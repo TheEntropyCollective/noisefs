@@ -29,6 +29,10 @@ func main() {
 		jsonOutput = flag.Bool("json", false, "Output results in JSON format")
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
+		// Altruistic cache flags
+		minPersonalCacheMB = flag.Int("min-personal-cache", 0, "Minimum personal cache size in MB (overrides config)")
+		disableAltruistic = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
+		altruisticBandwidthMB = flag.Int("altruistic-bandwidth", 0, "Bandwidth limit for altruistic operations in MB/s")
 	)
 	
 	// Check for subcommands first
@@ -75,6 +79,16 @@ func main() {
 	if *cacheSize != 0 {
 		cfg.Cache.BlockCacheSize = *cacheSize
 	}
+	// Apply altruistic cache overrides
+	if *minPersonalCacheMB > 0 {
+		cfg.Cache.MinPersonalCacheMB = *minPersonalCacheMB
+	}
+	if *disableAltruistic {
+		cfg.Cache.EnableAltruistic = false
+	}
+	if *altruisticBandwidthMB > 0 {
+		cfg.Cache.AltruisticBandwidthMB = *altruisticBandwidthMB
+	}
 	
 	// Create IPFS client
 	logger.Info("Connecting to IPFS", map[string]interface{}{
@@ -97,8 +111,35 @@ func main() {
 	// Create cache
 	logger.Debug("Initializing block cache", map[string]interface{}{
 		"cache_size": cfg.Cache.BlockCacheSize,
+		"altruistic_enabled": cfg.Cache.EnableAltruistic,
 	})
-	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
+	
+	var blockCache cache.Cache
+	baseCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
+	
+	// Wrap with altruistic cache if enabled
+	if cfg.Cache.EnableAltruistic && cfg.Cache.MinPersonalCacheMB > 0 {
+		altruisticConfig := &cache.AltruisticCacheConfig{
+			MinPersonalCache:      int64(cfg.Cache.MinPersonalCacheMB) * 1024 * 1024,
+			EnableAltruistic:      true,
+			AltruisticBandwidthMB: cfg.Cache.AltruisticBandwidthMB,
+		}
+		
+		// Calculate total capacity based on memory limit or default
+		totalCapacity := int64(cfg.Cache.MemoryLimit) * 1024 * 1024
+		if totalCapacity == 0 {
+			totalCapacity = int64(cfg.Cache.BlockCacheSize) * 128 * 1024 // Assume 128KB blocks
+		}
+		
+		blockCache = cache.NewAltruisticCache(baseCache, altruisticConfig, totalCapacity)
+		logger.Info("Altruistic cache enabled", map[string]interface{}{
+			"min_personal_mb": cfg.Cache.MinPersonalCacheMB,
+			"total_capacity_mb": totalCapacity / (1024 * 1024),
+			"bandwidth_limit_mb": cfg.Cache.AltruisticBandwidthMB,
+		})
+	} else {
+		blockCache = baseCache
+	}
 	
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(ipfsClient, blockCache)
@@ -574,6 +615,54 @@ func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache
 				Downloads: metrics.TotalDownloads,
 			},
 		}
+		
+		// Add altruistic cache stats if available
+		if altruisticStats := client.GetAltruisticCacheStats(); altruisticStats != nil {
+			personalHitRate := 0.0
+			if altruisticStats.PersonalHits+altruisticStats.PersonalMisses > 0 {
+				personalHitRate = float64(altruisticStats.PersonalHits) / 
+					float64(altruisticStats.PersonalHits+altruisticStats.PersonalMisses) * 100
+			}
+			
+			altruisticHitRate := 0.0
+			if altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses > 0 {
+				altruisticHitRate = float64(altruisticStats.AltruisticHits) / 
+					float64(altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses) * 100
+			}
+			
+			personalPercent := 0.0
+			altruisticPercent := 0.0
+			usedPercent := 0.0
+			if altruisticStats.TotalCapacity > 0 {
+				personalPercent = float64(altruisticStats.PersonalSize) / 
+					float64(altruisticStats.TotalCapacity) * 100
+				altruisticPercent = float64(altruisticStats.AltruisticSize) / 
+					float64(altruisticStats.TotalCapacity) * 100
+				usedPercent = float64(altruisticStats.PersonalSize+altruisticStats.AltruisticSize) / 
+					float64(altruisticStats.TotalCapacity) * 100
+			}
+			
+			minPersonalCacheMB := 0
+			if cacheConfig := client.GetCacheConfig(); cacheConfig != nil {
+				minPersonalCacheMB = int(cacheConfig.MinPersonalCache / (1024 * 1024))
+			}
+			
+			result.Altruistic = &util.AltruisticStats{
+				Enabled:            client.IsAltruisticCacheEnabled(),
+				PersonalBlocks:     altruisticStats.PersonalBlocks,
+				AltruisticBlocks:   altruisticStats.AltruisticBlocks,
+				PersonalSize:       altruisticStats.PersonalSize,
+				AltruisticSize:     altruisticStats.AltruisticSize,
+				TotalCapacity:      altruisticStats.TotalCapacity,
+				PersonalPercent:    personalPercent,
+				AltruisticPercent:  altruisticPercent,
+				UsedPercent:        usedPercent,
+				PersonalHitRate:    personalHitRate,
+				AltruisticHitRate:  altruisticHitRate,
+				FlexPoolUsage:      altruisticStats.FlexPoolUsage * 100,
+				MinPersonalCacheMB: minPersonalCacheMB,
+			}
+		}
 		util.PrintJSONSuccess(result)
 		return
 	}
@@ -601,6 +690,62 @@ func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache
 	if total := cacheStats.Hits + cacheStats.Misses; total > 0 {
 		hitRate := float64(cacheStats.Hits) / float64(total) * 100
 		fmt.Printf("Cache Hit Rate: %.1f%%\n", hitRate)
+	}
+	
+	// Altruistic Cache Statistics (if enabled)
+	if altruisticStats := client.GetAltruisticCacheStats(); altruisticStats != nil {
+		fmt.Println("\n--- Altruistic Cache ---")
+		fmt.Printf("Personal Blocks: %d (%s)\n", 
+			altruisticStats.PersonalBlocks, 
+			formatBytes(altruisticStats.PersonalSize))
+		fmt.Printf("Altruistic Blocks: %d (%s)\n", 
+			altruisticStats.AltruisticBlocks, 
+			formatBytes(altruisticStats.AltruisticSize))
+		
+		// Show usage percentages
+		totalUsed := altruisticStats.PersonalSize + altruisticStats.AltruisticSize
+		if altruisticStats.TotalCapacity > 0 {
+			personalPercent := float64(altruisticStats.PersonalSize) / float64(altruisticStats.TotalCapacity) * 100
+			altruisticPercent := float64(altruisticStats.AltruisticSize) / float64(altruisticStats.TotalCapacity) * 100
+			usedPercent := float64(totalUsed) / float64(altruisticStats.TotalCapacity) * 100
+			
+			fmt.Printf("Total Capacity: %s (%.1f%% used)\n", 
+				formatBytes(altruisticStats.TotalCapacity), usedPercent)
+			fmt.Printf("  Personal: %.1f%% | Altruistic: %.1f%%\n", 
+				personalPercent, altruisticPercent)
+		}
+		
+		// Show hit rates
+		if altruisticStats.PersonalHits+altruisticStats.PersonalMisses > 0 {
+			personalHitRate := float64(altruisticStats.PersonalHits) / 
+				float64(altruisticStats.PersonalHits+altruisticStats.PersonalMisses) * 100
+			fmt.Printf("Personal Hit Rate: %.1f%%\n", personalHitRate)
+		}
+		if altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses > 0 {
+			altruisticHitRate := float64(altruisticStats.AltruisticHits) / 
+				float64(altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses) * 100
+			fmt.Printf("Altruistic Hit Rate: %.1f%%\n", altruisticHitRate)
+		}
+		
+		// Show flex pool usage
+		fmt.Printf("Flex Pool Usage: %.1f%%\n", altruisticStats.FlexPoolUsage * 100)
+		
+		// Show MinPersonalCache setting
+		if cacheConfig := client.GetCacheConfig(); cacheConfig != nil {
+			fmt.Printf("Min Personal Cache: %s\n", 
+				formatBytes(cacheConfig.MinPersonalCache))
+		}
+		
+		// Visual representation
+		fmt.Println("\n--- Cache Visualization ---")
+		viz := util.NewCacheVisualization(50)
+		fmt.Print(viz.RenderCacheSummary(
+			altruisticStats.PersonalSize,
+			altruisticStats.AltruisticSize,
+			altruisticStats.TotalCapacity,
+			altruisticStats.FlexPoolUsage,
+			client.GetCacheConfig().MinPersonalCache,
+		))
 	}
 	
 	fmt.Println("\n--- Block Management ---")

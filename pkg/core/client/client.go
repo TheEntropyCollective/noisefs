@@ -507,6 +507,31 @@ func (c *Client) GetAdaptiveCacheStats() *cache.AdaptiveCacheStats {
 	return nil
 }
 
+// GetAltruisticCacheStats returns altruistic cache statistics if available
+func (c *Client) GetAltruisticCacheStats() *cache.AltruisticStats {
+	// Check if the cache is an altruistic cache
+	if altruisticCache, ok := c.cache.(*cache.AltruisticCache); ok {
+		return altruisticCache.GetAltruisticStats()
+	}
+	return nil
+}
+
+// IsAltruisticCacheEnabled returns whether altruistic caching is enabled
+func (c *Client) IsAltruisticCacheEnabled() bool {
+	if altruisticCache, ok := c.cache.(*cache.AltruisticCache); ok {
+		return altruisticCache.GetConfig().EnableAltruistic
+	}
+	return false
+}
+
+// GetCacheConfig returns the cache configuration
+func (c *Client) GetCacheConfig() *cache.AltruisticCacheConfig {
+	if altruisticCache, ok := c.cache.(*cache.AltruisticCache); ok {
+		return altruisticCache.GetConfig()
+	}
+	return nil
+}
+
 // GetPeerStats returns peer performance statistics if available
 func (c *Client) GetPeerStats() map[peer.ID]*ipfs.RequestMetrics {
 	if metricsProvider, ok := c.ipfsClient.(interface {
