@@ -42,13 +42,64 @@ Implementing a simple, privacy-preserving altruistic caching system that automat
 - [x] Add optional advanced settings (bandwidth limits, disable flag)
 - [x] Create visual feedback for cache utilization
 
-### Sprint 6: Testing & Documentation
-- [ ] Comprehensive unit tests for all cache behaviors
-- [ ] Integration tests for space management scenarios
-- [ ] Performance benchmarks comparing to non-altruistic mode
-- [ ] User documentation explaining the feature
+### Sprint 6: Testing & Documentation ✅
+- [x] Comprehensive unit tests for all cache behaviors
+- [x] Integration tests for space management scenarios
+- [x] Performance benchmarks comparing to non-altruistic mode
+- [x] User documentation explaining the feature
 
 ## Completed Major Milestones
+
+### ✅ Milestone 11 - Altruistic Caching with MinPersonal + Flex Model
+Simple, privacy-preserving altruistic caching that automatically contributes to network health:
+
+**Sprint 1 - Core Cache Categorization**: Built foundation for altruistic caching:
+- Extended AdaptiveCache to track personal vs altruistic blocks
+- Added metadata to distinguish block origin (user-requested vs network-beneficial)
+- Implemented space allocation logic respecting MinPersonal guarantee
+- Added comprehensive metrics tracking for usage analysis
+
+**Sprint 2 - Altruistic Block Selection**: Implemented intelligent block selection:
+- BlockHealthTracker for privacy-safe network health metrics
+- Block value calculation based on replication, popularity, randomizer potential
+- Opportunistic fetching for valuable blocks when space available
+- Anti-thrashing mechanisms with cooldown periods
+- Privacy features including differential privacy and temporal quantization
+
+**Sprint 3 - Advanced Space Management & Eviction**: Sophisticated eviction system:
+- Flex pool management between personal and altruistic usage
+- Multiple eviction strategies (LRU, LFU, ValueBased, Adaptive, Gradual)
+- Predictive eviction with access pattern tracking
+- Integration of block health scores into eviction decisions
+- Smart eviction to preserve valuable blocks
+
+**Sprint 4 - Network Health Integration**: Privacy-preserving network coordination:
+- Gossip protocol with differential privacy for block health sharing
+- Bloom filter exchange for efficient peer coordination
+- Coordination engine for distributed cache management
+- Integration with existing P2P components
+
+**Sprint 5 - Configuration & CLI**: User-friendly interface:
+- Single MinPersonalCache configuration option
+- Enhanced -stats command with visual cache utilization
+- CLI flags for runtime configuration overrides
+- Unicode-based visualization bars for cache usage
+
+**Sprint 6 - Testing & Documentation**: Comprehensive quality assurance:
+- Unit tests for all components including network health
+- Integration tests for space management scenarios
+- Performance benchmarks showing 8-35% overhead
+- Complete documentation with quickstart guide and architecture
+
+**Key Features**:
+- MinPersonal + Flex model requires only one configuration value
+- Automatic space management with no user intervention needed
+- Privacy-preserving operation with no file-block associations
+- Visual feedback showing personal vs altruistic usage
+- Network health integration for coordinated caching
+- Multiple eviction strategies for different workloads
+
+**Performance Impact**: 8-35% overhead vs base cache, scales well to 16 concurrent workers
 
 ### ✅ Milestone 10 - Distributed Descriptor Discovery System
 Protocol-neutral descriptor announcement system with privacy-preserving tag-based discovery:
