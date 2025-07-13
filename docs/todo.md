@@ -30,11 +30,11 @@ Implementing a simple, privacy-preserving altruistic caching system that automat
 - [x] Integrate block health scores into eviction decisions
 - [x] Add comprehensive testing for all eviction strategies
 
-### Sprint 4: Network Health Integration
-- [ ] Implement privacy-preserving gossip protocol for block health
-- [ ] Add Bloom filter exchange for efficient peer coordination
-- [ ] Create aggregated health metrics without exposing individual patterns
-- [ ] Integrate with existing peer discovery mechanisms
+### Sprint 4: Network Health Integration ✅
+- [x] Implement privacy-preserving gossip protocol for block health
+- [x] Add Bloom filter exchange for efficient peer coordination
+- [x] Create aggregated health metrics without exposing individual patterns
+- [x] Integrate with existing peer discovery mechanisms
 
 ### Sprint 5: Configuration & CLI
 - [ ] Add single MinPersonalCache configuration option
