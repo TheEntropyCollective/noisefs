@@ -20,11 +20,15 @@ Implementing a simple, privacy-preserving altruistic caching system that automat
 - [x] Add comprehensive testing for health tracking and opportunistic fetching
 - [x] Implement privacy features (differential privacy, temporal quantization)
 
-### Sprint 3: Space Management & Eviction
-- [ ] Implement flex pool management between personal and altruistic
-- [ ] Add eviction policies that prioritize altruistic blocks for removal
-- [ ] Ensure personal blocks can use entire disk if needed
-- [ ] Add hysteresis to prevent rapid eviction/refetch cycles
+### Sprint 3: Space Management & Eviction ✅
+- [x] Implement flex pool management between personal and altruistic
+- [x] Add eviction policies that prioritize altruistic blocks for removal
+- [x] Ensure personal blocks can use entire disk if needed
+- [x] Add hysteresis to prevent rapid eviction/refetch cycles
+- [x] Implement smart eviction strategies (LRU, LFU, Value-based)
+- [x] Add predictive eviction and gradual space reclamation
+- [x] Integrate block health scores into eviction decisions
+- [x] Add comprehensive testing for all eviction strategies
 
 ### Sprint 4: Network Health Integration
 - [ ] Implement privacy-preserving gossip protocol for block health

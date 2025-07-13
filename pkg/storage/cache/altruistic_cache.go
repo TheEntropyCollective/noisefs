@@ -34,6 +34,12 @@ type AltruisticCacheConfig struct {
 	
 	// Optional advanced settings
 	AltruisticBandwidthMB int `json:"altruistic_bandwidth_mb,omitempty"`
+	
+	// Eviction strategy configuration
+	EvictionStrategy      string  `json:"eviction_strategy,omitempty"` // "LRU", "LFU", "ValueBased", "Adaptive"
+	EnablePredictive      bool    `json:"enable_predictive,omitempty"`
+	EnableGradualEviction bool    `json:"enable_gradual_eviction,omitempty"`
+	PreEvictThreshold     float64 `json:"pre_evict_threshold,omitempty"`
 }
 
 // BlockMetadata extends block info with origin tracking
@@ -83,6 +89,11 @@ type AltruisticCache struct {
 	recentlyEvicted   map[string]time.Time // Track recently evicted blocks
 	evictionHistory   []string             // Order of evictions
 	
+	// Eviction strategies
+	evictionStrategy EvictionStrategy
+	healthTracker    *BlockHealthTracker
+	predictiveEvictor *PredictiveEvictionIntegration
+	
 	// Metrics
 	altruisticHits   int64
 	altruisticMisses int64
@@ -99,7 +110,7 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 		config.EvictionCooldown = 5 * time.Minute
 	}
 	
-	return &AltruisticCache{
+	ac := &AltruisticCache{
 		baseCache:        baseCache,
 		config:           config,
 		personalBlocks:   make(map[string]*BlockMetadata),
@@ -108,6 +119,51 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 		recentlyEvicted:  make(map[string]time.Time),
 		evictionHistory:  make([]string, 0, 100),
 	}
+	
+	// Initialize eviction strategy
+	ac.evictionStrategy = ac.createEvictionStrategy()
+	
+	// Initialize health tracker
+	ac.healthTracker = NewBlockHealthTracker(nil)
+	
+	// Initialize predictive eviction if enabled
+	if config.EnablePredictive {
+		predictiveConfig := &PredictiveEvictorConfig{
+			PreEvictThreshold: config.PreEvictThreshold,
+		}
+		if predictiveConfig.PreEvictThreshold == 0 {
+			predictiveConfig.PreEvictThreshold = 0.85
+		}
+		ac.predictiveEvictor = NewPredictiveEvictionIntegration(ac, predictiveConfig)
+	}
+	
+	return ac
+}
+
+// createEvictionStrategy creates the configured eviction strategy
+func (ac *AltruisticCache) createEvictionStrategy() EvictionStrategy {
+	var base EvictionStrategy
+	
+	switch ac.config.EvictionStrategy {
+	case "LRU":
+		base = &LRUEvictionStrategy{}
+	case "LFU":
+		base = &LFUEvictionStrategy{}
+	case "ValueBased":
+		base = NewValueBasedEvictionStrategy()
+	case "Adaptive":
+		base = NewAdaptiveEvictionStrategy()
+	default:
+		// Default to LRU
+		base = &LRUEvictionStrategy{}
+	}
+	
+	// Wrap with gradual eviction if enabled
+	if ac.config.EnableGradualEviction {
+		base = NewGradualEvictionStrategy(base)
+	}
+	
+	return base
 }
 
 // Store adds a block to the cache with origin metadata
@@ -232,11 +288,21 @@ func (ac *AltruisticCache) Get(cid string) (*blocks.Block, error) {
 	// Update access time and track hits
 	if metadata, isPersonal := ac.personalBlocks[cid]; isPersonal {
 		metadata.LastAccessed = time.Now()
+		metadata.Popularity++
 		ac.personalHits++
 	} else if metadata, isAltruistic := ac.altruisticBlocks[cid]; isAltruistic {
 		metadata.LastAccessed = time.Now()
+		metadata.Popularity++
 		ac.altruisticHits++
 	}
+	
+	// Record access for predictive eviction
+	if ac.predictiveEvictor != nil {
+		ac.predictiveEvictor.RecordBlockAccess(cid)
+	}
+	
+	// Update health tracker
+	ac.healthTracker.RecordRequest(cid)
 	
 	return block, nil
 }
@@ -377,8 +443,12 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 		return fmt.Errorf("eviction cooldown active")
 	}
 	
-	// Get altruistic blocks sorted by last access time (oldest first)
-	candidates := ac.getAltruisticBlocksByAge()
+	// Use eviction strategy to select candidates
+	candidates := ac.evictionStrategy.SelectEvictionCandidates(
+		ac.altruisticBlocks,
+		needed,
+		ac.healthTracker,
+	)
 	
 	freed := int64(0)
 	for _, metadata := range candidates {
@@ -467,4 +537,32 @@ func (ac *AltruisticCache) GetEvictionHistory() []string {
 	history := make([]string, len(ac.evictionHistory))
 	copy(history, ac.evictionHistory)
 	return history
+}
+
+// UpdateBlockHealth updates health information for a block
+func (ac *AltruisticCache) UpdateBlockHealth(cid string, hint BlockHint) {
+	ac.healthTracker.UpdateBlockHealth(cid, hint)
+}
+
+// SetEvictionStrategy changes the eviction strategy at runtime
+func (ac *AltruisticCache) SetEvictionStrategy(strategy string) {
+	ac.mu.Lock()
+	defer ac.mu.Unlock()
+	
+	ac.config.EvictionStrategy = strategy
+	ac.evictionStrategy = ac.createEvictionStrategy()
+}
+
+// PerformPreEviction triggers predictive eviction if enabled
+func (ac *AltruisticCache) PerformPreEviction() error {
+	if ac.predictiveEvictor == nil {
+		return nil
+	}
+	
+	return ac.predictiveEvictor.PerformPreEviction()
+}
+
+// GetHealthTracker returns the block health tracker for external use
+func (ac *AltruisticCache) GetHealthTracker() *BlockHealthTracker {
+	return ac.healthTracker
 }
