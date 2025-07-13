@@ -1,3 +1,6 @@
+// Package cache provides caching implementations for NoiseFS blocks.
+// The altruistic cache extends the base cache functionality to support
+// network health contributions while guaranteeing user storage needs.
 package cache
 
 import (
@@ -41,7 +44,24 @@ type BlockMetadata struct {
 	LastAccessed time.Time
 }
 
-// AltruisticCache wraps an existing cache with altruistic functionality
+// AltruisticCache wraps an existing cache with altruistic functionality.
+// It implements the MinPersonal + Flex model where users set a minimum
+// guaranteed personal storage amount, and all remaining capacity flexibly
+// adjusts between personal and altruistic (network benefit) use.
+//
+// The cache ensures:
+//   - Users always have MinPersonal space available for their files
+//   - Spare capacity automatically benefits the network
+//   - No complex configuration or prediction needed
+//   - Privacy-preserving operation with no file-block associations
+//
+// Example usage:
+//
+//	config := &AltruisticCacheConfig{
+//	    MinPersonalCache: 100 * 1024 * 1024 * 1024, // 100GB
+//	    EnableAltruistic: true,
+//	}
+//	cache := NewAltruisticCache(baseCache, config, totalCapacity)
 type AltruisticCache struct {
 	// Embedded base cache (typically AdaptiveCache)
 	baseCache Cache
@@ -92,7 +112,15 @@ func (ac *AltruisticCache) Store(cid string, block *blocks.Block) error {
 	return ac.StoreWithOrigin(cid, block, PersonalBlock)
 }
 
-// StoreWithOrigin adds a block to the cache with explicit origin
+// StoreWithOrigin adds a block to the cache with explicit origin tracking.
+// Personal blocks are protected by the MinPersonal guarantee and will not
+// be evicted to make room for altruistic blocks. Altruistic blocks can be
+// evicted when users need space for personal files.
+//
+// Returns an error if:
+//   - Altruistic caching is disabled and origin is AltruisticBlock
+//   - There is insufficient space even after eviction attempts
+//   - The underlying storage operation fails
 func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, origin BlockOrigin) error {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
@@ -266,7 +294,11 @@ func (ac *AltruisticCache) GetStats() *Stats {
 	}
 }
 
-// GetAltruisticStats returns detailed statistics about cache usage
+// GetAltruisticStats returns detailed statistics about cache usage.
+// This includes separate metrics for personal and altruistic blocks,
+// current space utilization, hit/miss rates, and flex pool usage.
+// The flex pool usage indicates what percentage of the non-guaranteed
+// space is currently in use (0.0 = all free, 1.0 = fully utilized).
 func (ac *AltruisticCache) GetAltruisticStats() *AltruisticStats {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()

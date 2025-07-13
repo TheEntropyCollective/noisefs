@@ -14,6 +14,7 @@ Welcome to the NoiseFS documentation. NoiseFS is a distributed, privacy-preservi
 - **[Block Management](block-management.md)** - How NoiseFS splits and anonymizes files
 - **[Storage Architecture](storage-architecture.md)** - Storage backend design and IPFS integration
 - **[Cache System](cache-system.md)** - Caching strategy and implementation
+- **[Altruistic Caching](altruistic-caching.md)** - Contribute spare capacity to network health
 - **[Privacy Infrastructure](privacy-infrastructure.md)** - Privacy features and anonymity design
 - **[FUSE Integration](fuse-integration.md)** - Mount NoiseFS as a regular filesystem
 
@@ -53,6 +54,7 @@ Welcome to the NoiseFS documentation. NoiseFS is a distributed, privacy-preservi
 - **Privacy by Design** - Files are split and XOR'd with randomizer blocks
 - **Plausible Deniability** - No original content stored, only anonymized blocks
 - **Distributed Storage** - Built on IPFS for decentralized storage
+- **Altruistic Caching** - Automatically contribute spare capacity to improve network health
 - **FUSE Mounting** - Use NoiseFS like a regular filesystem
 - **Configurable Privacy** - Three privacy levels for different use cases
 - **Legal Compliance** - Built-in DMCA compliance framework
