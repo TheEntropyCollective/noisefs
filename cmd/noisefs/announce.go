@@ -11,15 +11,16 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/dht"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/pubsub"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
 // announceCommand handles the announce subcommand
-func announceCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell, quiet bool, jsonOutput bool) error {
+func announceCommand(args []string, storageManager *storage.Manager, shell *shell.Shell, quiet bool, jsonOutput bool) error {
 	// Create flag set for announce command
 	flagSet := flag.NewFlagSet("announce", flag.ExitOnError)
 	
@@ -74,7 +75,7 @@ func announceCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell,
 	}
 	
 	// Create descriptor store
-	descStore, err := descriptors.NewStore(ipfsClient)
+	descStore, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -86,11 +87,22 @@ func announceCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell,
 	}
 	defer file.Close()
 	
-	// Store file and get CID (simplified)
-	cid, err := ipfsClient.Add(file)
+	// Store file using storage manager (simplified)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+	
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		return fmt.Errorf("failed to create block: %w", err)
+	}
+	
+	address, err := storageManager.Put(context.Background(), block)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
+	cid := address.ID
 	
 	// Create descriptor (simplified - would normally include proper block structure)
 	descriptor := descriptors.NewDescriptor(fileInfo.Name(), fileInfo.Size(), 131072)
@@ -140,9 +152,9 @@ func announceCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell,
 	
 	// Create DHT publisher
 	pubConfig := dht.PublisherConfig{
-		IPFSClient:  ipfsClient,
-		IPFSShell:   shell,
-		PublishRate: 1 * time.Minute,
+		StorageManager: storageManager,
+		IPFSShell:      shell,
+		PublishRate:    1 * time.Minute,
 	}
 	
 	publisher, err := dht.NewPublisher(pubConfig)
