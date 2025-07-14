@@ -2,6 +2,7 @@ package privacy
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -12,14 +13,15 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // AnonymizationTestSuite manages privacy validation tests
 type AnonymizationTestSuite struct {
 	ipfsClient     ipfs.BlockStore
 	cache          cache.Cache
-	reuseClient    *reuse.ReuseAwareClient
+	baseClient     *noisefs.Client
 	testData       [][]byte
 	testBlocks     map[string]*blocks.Block
 }
@@ -382,6 +384,31 @@ func (m *MockIPFSClient) HasBlock(cid string) (bool, error) {
 	return exists, nil
 }
 
+// PeerAwareIPFSClient interface methods
+func (m *MockIPFSClient) SetPeerManager(manager *p2p.PeerManager) {
+	// Mock implementation - no-op
+}
+
+func (m *MockIPFSClient) GetConnectedPeers() []peer.ID {
+	// Return mock peer IDs for testing
+	return []peer.ID{
+		peer.ID("mock_peer_1"),
+		peer.ID("mock_peer_2"),
+		peer.ID("mock_peer_3"),
+	}
+}
+
+func (m *MockIPFSClient) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
+	// For mock, just use regular block retrieval
+	return m.RetrieveBlock(cid)
+}
+
+func (m *MockIPFSClient) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
+	// For mock, just store the block
+	_, err := m.StoreBlock(block)
+	return err
+}
+
 func setupAnonymizationTest(t *testing.T) *AnonymizationTestSuite {
 	// Create cache
 	memoryCache := cache.NewMemoryCache(100 * 1024 * 1024) // 100MB cache
@@ -391,16 +418,16 @@ func setupAnonymizationTest(t *testing.T) *AnonymizationTestSuite {
 		blocks: make(map[string]*blocks.Block),
 	}
 	
-	// Create reuse client
-	reuseClient, err := reuse.NewReuseAwareClient(ipfsClient, memoryCache)
+	// Create base client for testing
+	baseClient, err := noisefs.NewClient(ipfsClient, memoryCache)
 	if err != nil {
-		t.Fatalf("Failed to create reuse client: %v", err)
+		t.Fatalf("Failed to create base client: %v", err)
 	}
 
 	return &AnonymizationTestSuite{
 		ipfsClient:   ipfsClient,
 		cache:        memoryCache,
-		reuseClient:  reuseClient,
+		baseClient:   baseClient,
 		testData:     make([][]byte, 0),
 		testBlocks:   make(map[string]*blocks.Block),
 	}
