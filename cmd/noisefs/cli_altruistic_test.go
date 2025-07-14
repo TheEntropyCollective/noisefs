@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,16 +12,25 @@ import (
 )
 
 func TestCLIAltruisticCache(t *testing.T) {
-	// Skip if not running integration tests
+	// Skip if not running integration tests or if IPFS is not available
 	if testing.Short() {
 		t.Skip("Skipping CLI integration test")
+	}
+	
+	// Check if we have IPFS available
+	if os.Getenv("NOISEFS_TEST_IPFS_ENDPOINT") == "" {
+		t.Skip("Skipping CLI test: IPFS not available (set NOISEFS_TEST_IPFS_ENDPOINT to enable)")
 	}
 	
 	// Test basic stats output includes altruistic cache info
 	t.Run("StatsWithAltruisticCache", func(t *testing.T) {
 		// Create a test config with altruistic cache enabled
-		config := `{
-			"ipfs": {"api_endpoint": "http://localhost:5001"},
+		ipfsEndpoint := os.Getenv("NOISEFS_TEST_IPFS_ENDPOINT")
+		if ipfsEndpoint == "" {
+			ipfsEndpoint = "http://localhost:5001"
+		}
+		config := fmt.Sprintf(`{
+			"ipfs": {"api_endpoint": "%s"},
 			"cache": {
 				"block_cache_size": 100,
 				"memory_limit_mb": 512,
@@ -28,7 +38,7 @@ func TestCLIAltruisticCache(t *testing.T) {
 				"min_personal_cache_mb": 100
 			},
 			"performance": {"block_size": 131072}
-		}`
+		}`, ipfsEndpoint)
 		
 		// Write config to temp file
 		tmpConfig, err := os.CreateTemp("", "noisefs-test-*.json")
@@ -83,13 +93,17 @@ func TestCLIAltruisticCache(t *testing.T) {
 	// Test command-line overrides
 	t.Run("CLIOverrides", func(t *testing.T) {
 		// Base config with altruistic disabled
-		config := `{
-			"ipfs": {"api_endpoint": "http://localhost:5001"},
+		ipfsEndpoint := os.Getenv("NOISEFS_TEST_IPFS_ENDPOINT")
+		if ipfsEndpoint == "" {
+			ipfsEndpoint = "http://localhost:5001"
+		}
+		config := fmt.Sprintf(`{
+			"ipfs": {"api_endpoint": "%s"},
 			"cache": {
 				"block_cache_size": 100,
 				"enable_altruistic": false
 			}
-		}`
+		}`, ipfsEndpoint)
 		
 		tmpConfig, err := os.CreateTemp("", "noisefs-test-*.json")
 		if err != nil {
@@ -128,14 +142,18 @@ func TestCLIAltruisticCache(t *testing.T) {
 	
 	// Test disable flag
 	t.Run("DisableAltruistic", func(t *testing.T) {
-		config := `{
-			"ipfs": {"api_endpoint": "http://localhost:5001"},
+		ipfsEndpoint := os.Getenv("NOISEFS_TEST_IPFS_ENDPOINT")
+		if ipfsEndpoint == "" {
+			ipfsEndpoint = "http://localhost:5001"
+		}
+		config := fmt.Sprintf(`{
+			"ipfs": {"api_endpoint": "%s"},
 			"cache": {
 				"block_cache_size": 100,
 				"enable_altruistic": true,
 				"min_personal_cache_mb": 100
 			}
-		}`
+		}`, ipfsEndpoint)
 		
 		tmpConfig, err := os.CreateTemp("", "noisefs-test-*.json")
 		if err != nil {

@@ -21,6 +21,11 @@ func TestFuseIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping FUSE integration test in short mode")
 	}
+	
+	// Check if FUSE is available
+	if _, err := os.Stat("/dev/fuse"); err != nil {
+		t.Skip("Skipping FUSE test: /dev/fuse not available")
+	}
 
 	// Create temporary mount point
 	mountDir, err := os.MkdirTemp("", "noisefs_test_mount")
