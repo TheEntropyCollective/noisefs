@@ -1,8 +1,109 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 3 Planning
+## Current Milestone: Phase 3 - Storage Backend Integration Completion
 
-Phase 2 Cache Performance Optimization has been completed successfully. Planning next phase improvements.
+**Status**: 70% Complete - Storage abstraction layer exists, need integration with main application
+
+**Summary**: The storage backend abstraction infrastructure is largely implemented with comprehensive interfaces, IPFS backend, configuration framework, and error handling. The remaining work focuses on integrating this abstraction layer with the main application to replace direct IPFS usage.
+
+### Sprint 1 - Core Integration Analysis ✅
+**Objective**: Analyze existing storage abstraction and identify integration points
+
+**Completed Tasks**:
+- [x] Analyze current IPFS coupling points in main.go and client.go
+- [x] Review existing storage abstraction (`/pkg/storage/interface.go`) 
+- [x] Examine IPFS backend implementation (`/pkg/storage/backends/ipfs.go`)
+- [x] Identify specific lines requiring modification for integration
+- [x] Document backward compatibility requirements
+
+**Key Findings**:
+- ✅ Complete Backend interface hierarchy with Put/Get/Has/Delete operations
+- ✅ Comprehensive BlockAddress abstraction for backend-agnostic addressing  
+- ✅ Full IPFS backend implementation (724 lines) with peer-aware operations
+- ✅ Rich error handling with StorageError types and health monitoring
+- 🔄 Main application (lines 104, 152, 170, 198, 214) uses direct ipfs.NewClient()
+- 🔄 Client layer (lines 23, 42, 72-82) has type assertions to concrete IPFS client
+- 🔄 Descriptor operations still require concrete *ipfs.Client type
+
+### Sprint 2 - Backend Adapter Implementation ✅
+**Objective**: Create adapter layer for seamless transition from direct IPFS to generic backend
+
+**Completed Tasks**:
+- [x] Create `BackendManager` in `/pkg/storage/manager.go` for backend lifecycle (already existed)
+- [x] Implement `LegacyIPFSAdapter` for backward compatibility (`/pkg/storage/adapters/ipfs_legacy.go`)
+- [x] Add configuration loading for storage backends (`/pkg/storage/factory.go`)
+- [x] Create factory methods for backend initialization (`/pkg/storage/factory.go`)
+- [x] Implement address conversion utilities (CID ↔ BlockAddress) in adapter
+- [x] Create `SimpleStorageManager` for easy migration (`/pkg/storage/integration/simple_manager.go`)
+
+**Success Criteria Achieved**:
+- ✅ Zero breaking changes to existing interfaces
+- ✅ IPFS backend accessible through generic interface via LegacyIPFSAdapter
+- ✅ Configuration-driven backend selection through factory methods
+- ✅ Simple migration path with `MigrateFromIPFSClient()` function
+
+### Sprint 3 - Main Application Integration 🔄  
+**Objective**: Replace direct IPFS usage in main application with backend abstraction
+
+**Tasks**:
+- [ ] Update `cmd/noisefs/main.go` to use backend manager instead of direct IPFS
+- [ ] Modify upload/download functions to use Backend interface
+- [ ] Update descriptor operations to work with abstracted storage
+- [ ] Replace concrete IPFS client with backend interface in CLI commands
+- [ ] Ensure all peer-aware operations continue working through abstraction
+
+**Files to Modify**:
+- `cmd/noisefs/main.go` (lines 104, 152, 170, 198, 214)
+- Upload/download functions to use Backend.Put/Get operations
+- Descriptor store creation to use abstracted backend
+
+### Sprint 4 - Client Layer Integration 🔄
+**Objective**: Update client layer to use backend abstraction consistently
+
+**Tasks**:
+- [ ] Modify `pkg/core/client/client.go` to accept Backend interface instead of concrete IPFS
+- [ ] Remove type assertions to concrete IPFS client (lines 72-82)
+- [ ] Update block operations to use Backend interface methods
+- [ ] Ensure peer-aware operations work through PeerAwareBackend interface
+- [ ] Update metrics and caching to work with abstracted backends
+
+**Files to Modify**:
+- `pkg/core/client/client.go` - Replace ipfs.BlockStore with storage.Backend
+- Constructor functions to accept generic Backend interface
+- Method implementations to use Backend.Put/Get instead of StoreBlock/RetrieveBlock
+
+### Sprint 5 - Testing & Validation 🔄
+**Objective**: Comprehensive testing to ensure zero functionality loss
+
+**Tasks**:
+- [ ] Create mock storage backend for unit testing
+- [ ] Add integration tests for backend manager
+- [ ] Test backward compatibility with existing IPFS functionality  
+- [ ] Validate peer-aware operations work correctly
+- [ ] Performance testing to ensure no regression
+- [ ] End-to-end testing of upload/download flows
+
+**Success Criteria**:
+- All existing tests pass with backend abstraction
+- No performance degradation
+- Mock backend enables faster testing
+- Complete test coverage for new abstraction layer
+
+### Sprint 6 - Documentation & Configuration 🔄
+**Objective**: Document new architecture and provide migration guide
+
+**Tasks**:
+- [ ] Update package documentation to reflect storage abstraction
+- [ ] Create configuration examples for different backend types
+- [ ] Document migration path from direct IPFS to abstraction  
+- [ ] Add usage examples for generic backend interface
+- [ ] Update CLI help text to reflect backend configuration options
+
+**Deliverables**:
+- Updated CLAUDE.md files with backend abstraction details
+- Configuration templates for different deployment scenarios
+- Migration guide for existing users
+- API documentation for Backend interface
 
 ## Completed Major Milestones
 

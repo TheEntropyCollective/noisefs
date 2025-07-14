@@ -13,6 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/integration"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
@@ -97,13 +98,31 @@ func main() {
 		cfg.Cache.AltruisticBandwidthMB = *altruisticBandwidthMB
 	}
 	
-	// Create IPFS client
-	logger.Info("Connecting to IPFS", map[string]interface{}{
+	// Create storage backend (IPFS with abstraction layer)
+	logger.Info("Connecting to storage backend", map[string]interface{}{
+		"backend":  "ipfs",
 		"endpoint": cfg.IPFS.APIEndpoint,
 	})
+	
+	// Create IPFS client through storage abstraction for better architecture
+	storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
+	if err != nil {
+		logger.Error("Failed to connect to storage backend", map[string]interface{}{
+			"endpoint": cfg.IPFS.APIEndpoint,
+			"error":    err.Error(),
+		})
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
+		os.Exit(1)
+	}
+	
+	// For backward compatibility, we need the underlying IPFS client for descriptors
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
-		logger.Error("Failed to connect to IPFS", map[string]interface{}{
+		logger.Error("Failed to create IPFS client for descriptors", map[string]interface{}{
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})
