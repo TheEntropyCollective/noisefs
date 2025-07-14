@@ -14,13 +14,13 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
 // subscribeCommand handles the subscribe subcommand
-func subscribeCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell, quiet bool, jsonOutput bool) error {
+func subscribeCommand(args []string, storageManager *storage.Manager, shell *shell.Shell, quiet bool, jsonOutput bool) error {
 	flagSet := flag.NewFlagSet("subscribe", flag.ExitOnError)
 	
 	var (
@@ -66,7 +66,7 @@ func subscribeCommand(args []string, ipfsClient *ipfs.Client, shell *shell.Shell
 	
 	// Handle monitor command
 	if *monitor {
-		return monitorSubscriptions(subConfig, ipfsClient, shell, quiet)
+		return monitorSubscriptions(subConfig, storageManager, shell, quiet)
 	}
 	
 	// Get topic pattern
@@ -170,7 +170,7 @@ func removeSubscription(subConfig *config.Subscriptions, topic string, configPat
 	return nil
 }
 
-func monitorSubscriptions(subConfig *config.Subscriptions, ipfsClient *ipfs.Client, sh *shell.Shell, quiet bool) error {
+func monitorSubscriptions(subConfig *config.Subscriptions, storageManager *storage.Manager, sh *shell.Shell, quiet bool) error {
 	// Create announcement store
 	storeConfig := store.DefaultStoreConfig(filepath.Join(config.GetConfigDir(), "announcements"))
 	annStore, err := store.NewStore(storeConfig)
@@ -181,9 +181,9 @@ func monitorSubscriptions(subConfig *config.Subscriptions, ipfsClient *ipfs.Clie
 	
 	// Create subscribers
 	dhtConfig := dht.SubscriberConfig{
-		IPFSClient:   ipfsClient,
-		IPFSShell:    sh,
-		PollInterval: 30 * time.Second,
+		StorageManager: storageManager,
+		IPFSShell:      sh,
+		PollInterval:   30 * time.Second,
 	}
 	
 	dhtSubscriber, err := dht.NewSubscriber(dhtConfig)

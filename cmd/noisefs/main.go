@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -120,10 +121,15 @@ func main() {
 	// 	os.Exit(1)
 	// }
 	
-	// Create IPFS client with peer awareness
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Create storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		logger.Error("Failed to connect to IPFS", map[string]interface{}{
+		logger.Error("Failed to create storage manager", map[string]interface{}{
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})
@@ -134,6 +140,20 @@ func main() {
 		}
 		os.Exit(1)
 	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		logger.Error("Failed to start storage manager", map[string]interface{}{
+			"error": err.Error(),
+		})
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
+		os.Exit(1)
+	}
+	defer storageManager.Stop(context.Background())
 	
 	// Create cache
 	logger.Debug("Initializing block cache", map[string]interface{}{
@@ -169,7 +189,7 @@ func main() {
 	}
 	
 	// Create NoiseFS client
-	client, err := noisefs.NewClient(ipfsClient, blockCache)
+	client, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		logger.Error("Failed to create NoiseFS client", map[string]interface{}{
 			"error": err.Error(),
@@ -187,7 +207,7 @@ func main() {
 			"file":       *upload,
 			"block_size": cfg.Performance.BlockSize,
 		})
-		if err := uploadFile(ipfsClient, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, logger); err != nil {
+		if err := uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, logger); err != nil {
 			logger.Error("Upload failed", map[string]interface{}{
 				"file":  *upload,
 				"error": err.Error(),
@@ -215,7 +235,7 @@ func main() {
 			"descriptor_cid": *download,
 			"output_file":    *output,
 		})
-		if err := downloadFile(ipfsClient, client, *download, *output, *quiet, *jsonOutput, logger); err != nil {
+		if err := downloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, logger); err != nil {
 			logger.Error("Download failed", map[string]interface{}{
 				"descriptor_cid": *download,
 				"output_file":    *output,
@@ -231,7 +251,7 @@ func main() {
 		}
 	} else if *stats {
 		// Show statistics
-		showSystemStats(ipfsClient, client, blockCache, *jsonOutput, logger)
+		showSystemStats(storageManager, client, blockCache, *jsonOutput, logger)
 	} else {
 		flag.Usage()
 	}
@@ -250,7 +270,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, logger *logging.Logger) error {
+func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -356,8 +376,8 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 		}
 	}
 	
-	// Store descriptor in IPFS
-	store, err := descriptors.NewStore(ipfsClient)
+	// Store descriptor using storage manager
+	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -404,9 +424,9 @@ func uploadFile(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string
 	return nil
 }
 
-func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
+func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	// Create descriptor store
-	store, err := descriptors.NewStore(ipfsClient)
+	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -446,7 +466,8 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 	
 	dataBlocks := make([]*blocks.Block, len(dataCIDs))
 	for i, cid := range dataCIDs {
-		block, err := ipfsClient.RetrieveBlock(cid)
+		address := &storage.BlockAddress{ID: cid}
+		block, err := storageManager.Get(context.Background(), address)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve data block %d: %w", i, err)
 		}
@@ -467,7 +488,8 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 	
 	randomizer1Blocks := make([]*blocks.Block, len(randomizer1CIDs))
 	for i, cid := range randomizer1CIDs {
-		block, err := ipfsClient.RetrieveBlock(cid)
+		address := &storage.BlockAddress{ID: cid}
+		block, err := storageManager.Get(context.Background(), address)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
 		}
@@ -490,7 +512,8 @@ func downloadFile(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID
 		
 		randomizer2Blocks = make([]*blocks.Block, len(randomizer2CIDs))
 		for i, cid := range randomizer2CIDs {
-			block, err := ipfsClient.RetrieveBlock(cid)
+			address := &storage.BlockAddress{ID: cid}
+		block, err := storageManager.Get(context.Background(), address)
 			if err != nil {
 				return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 			}
@@ -591,16 +614,17 @@ func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 }
 
 // showSystemStats displays comprehensive system statistics
-func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache cache.Cache, jsonOutput bool, logger *logging.Logger) {
+func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, blockCache cache.Cache, jsonOutput bool, logger *logging.Logger) {
 	// Gather all statistics
 	var ipfsConnected bool
 	var peerCount int
 	
-	// Test IPFS connection
+	// Test storage manager connection
 	testBlock, _ := blocks.NewBlock([]byte("test"))
-	if _, err := ipfsClient.StoreBlock(testBlock); err == nil {
+	if _, err := storageManager.Put(context.Background(), testBlock); err == nil {
 		ipfsConnected = true
-		peerCount = len(ipfsClient.GetConnectedPeers())
+		// TODO: Get peer count from storage manager
+		peerCount = 0
 	}
 	
 	// Get cache stats
@@ -885,16 +909,32 @@ func handleSubcommand(cmd string, args []string) {
 		cfg.IPFS.APIEndpoint = ipfsAPI
 	}
 	
-	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Create storage manager for subcommands
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		if jsonOutput {
 			util.PrintJSONError(err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Error connecting to IPFS: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error creating storage manager: %s\n", err)
 		}
 		os.Exit(1)
 	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		if jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error starting storage manager: %s\n", err)
+		}
+		os.Exit(1)
+	}
+	defer storageManager.Stop(context.Background())
 	
 	// Create shell for PubSub
 	ipfsShell := shell.NewShell(cfg.IPFS.APIEndpoint)
@@ -902,9 +942,9 @@ func handleSubcommand(cmd string, args []string) {
 	// Handle subcommands
 	switch cmd {
 	case "announce":
-		err = announceCommand(args, ipfsClient, ipfsShell, quiet, jsonOutput)
+		err = announceCommand(args, storageManager, ipfsShell, quiet, jsonOutput)
 	case "subscribe":
-		err = subscribeCommand(args, ipfsClient, ipfsShell, quiet, jsonOutput)
+		err = subscribeCommand(args, storageManager, ipfsShell, quiet, jsonOutput)
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
