@@ -1,196 +1,110 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 5 - Documentation & Remediation Planning
+## Current Milestone: Phase 2 - Comprehensive Mock Infrastructure
 
-**Status**: CRITICAL SYSTEM DOCUMENTATION & RECOVERY PLANNING
+**Status**: READY FOR IMPLEMENTATION
 
-**Summary**: Comprehensive documentation of all phases 1-4 work and creation of detailed remediation plans to address critical system issues. System requires immediate stabilization before production deployment due to interface compatibility crisis, cache system failures, and privacy guarantee regressions.
+**Summary**: Creating comprehensive mock infrastructure for unit testing without external dependencies. This phase builds on the dependency injection foundation from Phase 1 to enable complete unit testing isolation.
 
-### Sprint 1 - Comprehensive Change Documentation ✅
-**Objective**: Document all changes and issues from phases 1-4
+**Current Analysis**: 
+- Existing mock infrastructure in `/pkg/storage/testing/` provides basic backend mocking
+- MockBackend has comprehensive storage.Backend implementation with test controls
+- MockStorageManager provides storage.Manager interface for testing
+- Test helpers exist but lack comprehensive IPFS client mocking
+- PeerAwareIPFSClient interface needs complete mock implementation
+- Missing environment controls and test data generators
 
-**Completed Tasks**:
-- [x] Analyze system state after phases 1-4 completion
-- [x] Document Phase 1 achievements (compliance decomposition - 80% reduction achieved)
-- [x] Document Phase 2 issues (cache optimization - major regressions despite 27% claims)
-- [x] Document Phase 3 problems (storage abstraction - 70% complete but broken integration)
-- [x] Document Phase 4 findings (integration validation - identified all critical issues)
-- [x] Root cause analysis of interface compatibility crisis
-- [x] Assessment of privacy/security regressions
+### ✅ Sprint 1 - Enhanced Mock IPFS Client Infrastructure
+**Objective**: Create complete mock IPFS client with full interface compatibility
 
-**Critical Issues Documented**:
+**Tasks**:
+- [x] Analyze existing PeerAwareIPFSClient interface requirements
+- [x] Create comprehensive MockIPFSClient with all required methods
+- [x] Implement peer simulation and network behavior mocking
+- [x] Add test controls for simulating various IPFS conditions
+- [x] Create adapter for compatibility with existing storage backends
+- [x] Add comprehensive test validation
 
-**1. Interface Compatibility Crisis (BLOCKING ALL INTEGRATION)**:
-- Root Cause: Dual IPFS implementations created during Phase 3
-  - `/pkg/ipfs/client.go` - Original implementation with PeerAwareIPFSClient interface
-  - `/pkg/storage/ipfs/client.go` - New storage abstraction with BlockStore interface
-- Impact: Type assertion failures in `pkg/core/client/client.go` lines 72-82
-- Result: All integration tests failing with "IPFS client must implement PeerAwareIPFSClient interface"
+**Success Criteria**: ✅ COMPLETED
+- MockIPFSClient implements all PeerAwareIPFSClient interface methods
+- Can simulate peer behavior and network conditions  
+- Integrates seamlessly with existing storage abstraction
+- Provides test controls for error simulation and latency
 
-**2. Privacy/Security Regressions (CRITICAL)**:
-- TestBlockAnonymization failing: "Block 7 anonymized data failed randomness test"
-- Privacy tests timing out (30s+) indicating performance degradation
-- Core anonymization guarantees compromised
+**Key Deliverables**:
+- **MockIPFSClient** (`mock_ipfs_client.go`): Comprehensive PeerAwareBackend implementation with full IPFS simulation
+- **NetworkSimulator** (`network_simulation.go`): Realistic P2P network behavior with DHT, gossip, and byzantine fault simulation
+- **ConditionSimulator** (`test_conditions.go`): 10 predefined test conditions and 4 test scenarios for comprehensive IPFS condition simulation
+- **MockBackendAdapter** (`adapter.go`): Compatibility layer with factory functions for unit/integration/e2e testing
+- **Comprehensive Tests** (`validation_test.go`): Full test suite validating all components with benchmarks
 
-**3. Cache System Failures (CRITICAL)**:
-- Block health tracker panics with "non-positive interval for NewTicker"
-- Altruistic cache eviction failures with insufficient space freed
-- Performance regressions despite Phase 2 claims of 27% improvement
+### Sprint 2 - Test Environment Controls and Configuration
+**Objective**: Implement environment variable controls and test mode management
 
-**4. Incomplete Phase 3 Integration**:
-- Storage abstraction 70% complete, Sprint 4 (client layer) never finished
-- System left in unstable transitional state
-- Storage manager created but commented out in main.go
+**Tasks**:
+- [ ] Add environment variable controls for test modes (NOISEFS_TEST_MODE)
+- [ ] Create test configuration management system
+- [ ] Implement test backend registration and selection
+- [ ] Add test isolation and cleanup mechanisms
+- [ ] Create test environment setup utilities
+- [ ] Add test debugging and monitoring capabilities
 
-### Integration Test Results Summary
+**Success Criteria**:
+- Tests can run in isolated test mode without external dependencies
+- Environment variables control test behavior consistently
+- Test backends can be registered and selected dynamically
+- Test environments are properly isolated and cleaned up
 
-**Test Status**: 14 of 25 packages passing (56% success rate)
+### Sprint 3 - Comprehensive Test Data Generators
+**Objective**: Create test data generators and fixtures for comprehensive testing
 
-**✅ STABLE PACKAGES**:
-- Core functionality: blocks, client, descriptors, fuse, config, logging
-- Announcements: announce, tags  
-- Storage base: storage, ipfs backend
-- Privacy: reuse components
-- Benchmarks: performance testing suite
+**Tasks**:
+- [ ] Create test data generators for blocks, files, and descriptors
+- [ ] Implement realistic test scenarios and fixtures
+- [ ] Add edge case and corner case test data
+- [ ] Create performance test data generators
+- [ ] Implement test data validation and verification
+- [ ] Add test data persistence and reuse capabilities
 
-**❌ FAILING PACKAGES**:
-- Integration layer: coordinator, cache system
-- Command line: noisefs CLI, examples
-- Compliance: DMCA workflows, legal documentation
-- End-to-end: fixtures, integration tests, privacy tests, system tests
+**Success Criteria**:
+- Comprehensive test data generation for all scenarios
+- Edge cases and corner cases properly covered
+- Performance test data available for benchmarking
+- Test data validation ensures correctness
 
-**Phase Validation Results**:
-- **Phase 1 (Refactor Agent)**: ✅ Partially validated - Minor compliance test precision issues
-- **Phase 2 (Performance Agent)**: ❌ Major regressions - Cache panics, eviction failures, performance degradation
-- **Phase 3 (Architecture Agent)**: ❌ Incomplete/broken - Interface compatibility crisis affecting all E2E tests
+### Sprint 4 - Mock Network and Peer Components
+**Objective**: Implement mock peer manager and network components
 
-### Sprint 1 Complete: Documentation Created ✅
+**Tasks**:
+- [ ] Create MockPeerManager with realistic peer behavior
+- [ ] Implement network simulation and latency modeling
+- [ ] Add peer discovery and connection simulation
+- [ ] Create network partition and failure simulation
+- [ ] Implement gossip protocol mocking
+- [ ] Add network health monitoring simulation
 
-**Phase 5 Documentation Deliverables**:
-- [x] **Comprehensive Remediation Plan** (`docs/REMEDIATION_PLAN.md`)
-  - Priority-based systematic approach to fixing all critical issues
-  - 4-6 week timeline with weekly milestones and testing checkpoints
-  - Risk assessment and rollback procedures for each remediation step
-- [x] **Lessons Learned Analysis** (`docs/LESSONS_LEARNED.md`)
-  - Phase-by-phase analysis of what went right and wrong
-  - Root cause analysis of systemic issues and process failures
-  - Process improvements and best practices for future development
-- [x] **Phase 5 Summary** (`docs/PHASE5_SUMMARY.md`)
-  - Complete documentation of Phase 5 objectives and achievements
-  - Current system status and critical issue analysis
-  - Success metrics and next steps for remediation implementation
+**Success Criteria**:
+- Complete peer network simulation for testing
+- Network conditions can be simulated and controlled
+- Peer behavior is realistic and configurable
+- Network failures and partitions can be tested
 
-**Key Achievements**:
-- ✅ Root cause analysis complete for all critical issues
-- ✅ Systematic remediation approach with clear priorities
-- ✅ Comprehensive recovery timeline and resource requirements
-- ✅ Process improvements to prevent future similar issues
+### Sprint 5 - Integration and Validation
+**Objective**: Integrate all mock components and validate comprehensive test coverage
 
-### Sprint 2 - Remediation Planning (COMPLETED IN SPRINT 1) ✅
-**Objective**: Create detailed remediation plans for all critical issues
+**Tasks**:
+- [ ] Integrate all mock components into unified test framework
+- [ ] Create comprehensive test suite using mock infrastructure
+- [ ] Validate unit tests can run without external dependencies
+- [ ] Optimize test performance (target: under 10 seconds)
+- [ ] Add test coverage monitoring and reporting
+- [ ] Create documentation for mock infrastructure usage
 
-**Remediation Plans**:
-
-**Priority 1: Interface Compatibility Crisis Resolution**
-- [ ] **Create Interface Adapter**: Design transitional adapter in `/pkg/storage/adapters/`
-  - Implement `IPFSClientAdapter` that wraps storage backend as PeerAwareIPFSClient
-  - Bridge method calls between old interface and new backend abstraction
-  - Maintain backward compatibility during transition period
-- [ ] **Update Client Constructor**: Modify `pkg/core/client/client.go` NewClient function
-  - Accept either old or new interface types
-  - Use adapter pattern for seamless interface bridging
-  - Ensure zero breaking changes for existing code
-- [ ] **Integration Point Fixes**: Update main application integration
-  - Modify `cmd/noisefs/main.go` to use new client construction pattern
-  - Update descriptor operations to work with abstract backends
-  - Test all integration points after adapter implementation
-
-**Priority 2: Cache System Stabilization**
-- [ ] **Ticker Panic Investigation**: Fix "non-positive interval for NewTicker" errors
-  - Audit all NewTicker usage in cache system components
-  - Add interval validation and safe defaults
-  - Implement graceful fallback for invalid intervals
-- [ ] **Eviction Logic Repair**: Fix altruistic cache eviction failures
-  - Debug "insufficient space freed" errors in eviction system
-  - Validate space calculation logic and constraints
-  - Add comprehensive testing for edge cases
-- [ ] **Performance Regression Analysis**: Validate Phase 2 optimization claims
-  - Benchmark current performance vs baseline measurements
-  - Identify specific regressions introduced by optimizations
-  - Rollback problematic optimizations if necessary
-
-**Priority 3: Privacy/Security Guarantee Restoration**
-- [ ] **Randomness Test Analysis**: Debug anonymization test failures
-  - Investigate "Block 7 anonymized data failed randomness test"
-  - Validate XOR anonymization implementation integrity
-  - Ensure proper entropy and randomness in anonymized blocks
-- [ ] **Performance Timeout Investigation**: Address privacy test timeouts
-  - Profile privacy test execution to identify bottlenecks
-  - Optimize or simplify complex privacy validation logic
-  - Set appropriate test timeouts for realistic scenarios
-- [ ] **Anonymization Pipeline Audit**: Comprehensive security review
-  - Validate that blocks appear as random data under analysis
-  - Ensure no file content leakage in anonymized blocks
-  - Test plausible deniability guarantees across all scenarios
-
-**Priority 4: Phase 3 Integration Completion**
-- [ ] **Complete Sprint 4 Work**: Finish abandoned client layer integration
-  - Implement remaining storage abstraction integration points
-  - Update all descriptor operations to use abstract backends
-  - Enable storage manager functionality in main.go
-- [ ] **Backward Compatibility Testing**: Ensure no functionality loss
-  - Test all existing IPFS functionality through new abstraction
-  - Validate peer selection and performance features
-  - Confirm caching and metrics continue to work correctly
-
-### Sprint 3 - Recovery Strategy & Lessons Learned (COMPLETED IN SPRINT 1) ✅
-**Objective**: Document recovery strategy and lessons learned for future improvements
-
-**Recovery Strategy Tasks** (All completed in comprehensive remediation plan):
-- [x] **Step-by-Step Remediation Guide**: Detailed 4-6 week implementation guide created
-- [x] **Validation Testing Strategy**: Comprehensive test plan with regression detection framework
-- [x] **Risk Assessment**: Complete evaluation of remediation approach risks and mitigation strategies
-
-**Lessons Learned Documentation** (All completed in comprehensive analysis):
-- [x] **Phase Analysis**: Complete phase-by-phase analysis of successes and failures
-- [x] **Technical Debt Assessment**: Comprehensive identification of current technical debt
-- [x] **Process Improvements**: Detailed recommendations for future development standards
-
-### Sprint 4 - Updated Architecture Documentation (COMPLETED IN SPRINT 1) ✅
-**Objective**: Update documentation to reflect current system state and future direction
-
-**Documentation Update Tasks** (All completed in comprehensive documentation suite):
-- [x] **Architecture Overview**: Current system state and planned solutions documented
-- [x] **API Documentation**: Interface conflicts and adapter pattern solutions explained
-- [x] **Developer Guidelines**: Development practices and standards established
-- [x] **Troubleshooting Guide**: Common errors and debugging procedures documented
-- [x] **Migration Guide**: Complete remediation implementation roadmap created
-
-**Updated Development Priorities** (Established in remediation plan):
-- [x] **Priority Framework**: Systematic priority-based approach to critical issue resolution
-- [x] **Resource Allocation**: Clear timeline and resource requirements documented
-- [x] **Success Criteria**: Measurable outcomes and validation requirements defined
-- [x] **Risk Mitigation**: Rollback procedures and fallback strategies established
-
-## Phase 5 Expert Analysis Summary
-
-**Current System Status**: CRITICAL STABILITY ISSUES IDENTIFIED
-
-The comprehensive analysis reveals that phases 1-4 have created a system requiring immediate remediation:
-
-**Phase Assessment**:
-- **Phase 1**: ✅ Successful compliance decomposition (80% reduction achieved)
-- **Phase 2**: ❌ Performance optimizations introduced critical cache system failures
-- **Phase 3**: ❌ Storage abstraction incomplete (70%) with broken interface compatibility  
-- **Phase 4**: ✅ Excellent issue identification and comprehensive analysis
-
-**Critical Issues Requiring Immediate Attention**:
-1. **Interface Compatibility Crisis**: Dual IPFS implementations breaking all integration tests
-2. **Privacy/Security Regressions**: Anonymization failures compromising core guarantees
-3. **Cache System Instability**: Ticker panics and eviction failures despite performance claims
-4. **Incomplete Integration**: Phase 3 left system in unstable transitional state
-
-**Remediation Approach**: Priority-based systematic fixes with comprehensive testing at each stage. Interface compatibility must be resolved first as it blocks all other validation efforts.
+**Success Criteria**:
+- All unit tests run without external dependencies
+- Test suite completes in under 10 seconds
+- Comprehensive test coverage for all core components
+- Documentation enables easy mock infrastructure usage
 
 ## Completed Major Milestones
 
