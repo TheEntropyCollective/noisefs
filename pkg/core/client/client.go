@@ -15,17 +15,13 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 )
 
 // Client provides high-level NoiseFS operations with caching and peer selection
 type Client struct {
-	// Storage abstraction (preferred, new approach)
+	// Storage abstraction
 	storageManager *storage.Manager
-	
-	// Legacy IPFS client (for backward compatibility)
-	ipfsClient ipfs.PeerAwareIPFSClient
 	
 	// Common components
 	cache         cache.Cache
@@ -36,9 +32,6 @@ type Client struct {
 	// Configuration for intelligent operations
 	preferRandomizerPeers bool
 	adaptiveCacheEnabled  bool
-	
-	// Implementation mode
-	useStorageManager bool
 }
 
 // ClientConfig holds configuration for NoiseFS client
@@ -48,8 +41,8 @@ type ClientConfig struct {
 	AdaptiveCacheConfig   *cache.AdaptiveCacheConfig
 }
 
-// NewClient creates a new NoiseFS client
-func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, error) {
+// NewClient creates a new NoiseFS client using storage manager
+func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client, error) {
 	config := &ClientConfig{
 		EnableAdaptiveCache:   true,
 		PreferRandomizerPeers: true,
@@ -65,31 +58,23 @@ func NewClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*Client, err
 		},
 	}
 	
-	return NewClientWithConfig(ipfsClient, blockCache, config)
+	return NewClientWithConfig(storageManager, blockCache, config)
 }
 
 // NewClientWithStorageManager creates a NoiseFS client using the storage abstraction layer
+// This is kept for backward compatibility and delegates to NewClient
 func NewClientWithStorageManager(storageManager *storage.Manager, blockCache cache.Cache) (*Client, error) {
-	config := &ClientConfig{
-		EnableAdaptiveCache:   true,
-		PreferRandomizerPeers: true,
-		AdaptiveCacheConfig: &cache.AdaptiveCacheConfig{
-			MaxSize:            100 * 1024 * 1024, // 100MB
-			MaxItems:           10000,
-			HotTierRatio:       0.1,  // 10% hot tier
-			WarmTierRatio:      0.3,  // 30% warm tier
-			PredictionWindow:   time.Hour * 24,
-			EvictionBatchSize:  10,
-			ExchangeInterval:   time.Minute * 15,
-			PredictionInterval: time.Minute * 10,
-		},
-	}
-	
-	return NewClientWithStorageManagerAndConfig(storageManager, blockCache, config)
+	return NewClient(storageManager, blockCache)
 }
 
 // NewClientWithStorageManagerAndConfig creates a NoiseFS client with storage manager and custom config
+// This is kept for backward compatibility and delegates to NewClientWithConfig
 func NewClientWithStorageManagerAndConfig(storageManager *storage.Manager, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
+	return NewClientWithConfig(storageManager, blockCache, config)
+}
+
+// NewClientWithConfig creates a new NoiseFS client with custom configuration
+func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
 	if storageManager == nil {
 		return nil, errors.New("storage manager is required")
 	}
@@ -104,47 +89,6 @@ func NewClientWithStorageManagerAndConfig(storageManager *storage.Manager, block
 		metrics:               NewMetrics(),
 		preferRandomizerPeers: config.PreferRandomizerPeers,
 		adaptiveCacheEnabled:  config.EnableAdaptiveCache,
-		useStorageManager:     true,
-	}
-	
-	// Initialize adaptive cache if enabled
-	if config.EnableAdaptiveCache && config.AdaptiveCacheConfig != nil {
-		client.adaptiveCache = cache.NewAdaptiveCache(config.AdaptiveCacheConfig)
-	}
-	
-	return client, nil
-}
-
-// NewClientWithConfig creates a new NoiseFS client with custom configuration
-func NewClientWithConfig(ipfsClient ipfs.BlockStore, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
-	if ipfsClient == nil {
-		return nil, errors.New("IPFS client is required")
-	}
-	
-	if blockCache == nil {
-		return nil, errors.New("cache is required")
-	}
-	
-	// Try to cast to peer-aware IPFS client
-	peerAwareClient, isPeerAware := ipfsClient.(ipfs.PeerAwareIPFSClient)
-	if !isPeerAware {
-		// If the ipfs.Client type is passed, it implements PeerAwareIPFSClient
-		// but might be passed as BlockStore interface. Try a type assertion to *ipfs.Client
-		if ipfsClientImpl, ok := ipfsClient.(*ipfs.Client); ok {
-			// The concrete type implements all methods, use it directly
-			peerAwareClient = ipfsClientImpl
-		} else {
-			return nil, errors.New("IPFS client must implement PeerAwareIPFSClient interface")
-		}
-	}
-	
-	client := &Client{
-		ipfsClient:            peerAwareClient,
-		cache:                 blockCache,
-		metrics:               NewMetrics(),
-		preferRandomizerPeers: config.PreferRandomizerPeers,
-		adaptiveCacheEnabled:  config.EnableAdaptiveCache,
-		useStorageManager:     false, // Legacy mode
 	}
 	
 	// Initialize adaptive cache if enabled
@@ -177,57 +121,44 @@ func NewClientWithDefaultStorageManager(blockCache cache.Cache) (*Client, error)
 	return NewClientWithStorageManager(storageManager, blockCache)
 }
 
-// Storage abstraction methods for dual compatibility
+// Storage abstraction methods
 
-// storeBlock stores a block using either storage manager or legacy IPFS client
+// storeBlock stores a block using the storage manager
 func (c *Client) storeBlock(ctx context.Context, block *blocks.Block) (string, error) {
-	if c.useStorageManager {
-		// Use storage manager
-		address, err := c.storageManager.Put(ctx, block)
-		if err != nil {
-			return "", fmt.Errorf("storage manager put failed: %w", err)
-		}
-		return address.ID, nil
-	} else {
-		// Use legacy IPFS client
-		return c.ipfsClient.StoreBlock(block)
+	// Use storage manager
+	address, err := c.storageManager.Put(ctx, block)
+	if err != nil {
+		return "", fmt.Errorf("storage manager put failed: %w", err)
 	}
+	return address.ID, nil
 }
 
-// retrieveBlock retrieves a block using either storage manager or legacy IPFS client  
+// retrieveBlock retrieves a block using the storage manager
 func (c *Client) retrieveBlock(ctx context.Context, cid string) (*blocks.Block, error) {
-	if c.useStorageManager {
-		// Use storage manager
-		address := &storage.BlockAddress{ID: cid}
-		return c.storageManager.Get(ctx, address)
-	} else {
-		// Use legacy IPFS client
-		return c.ipfsClient.RetrieveBlock(cid)
-	}
+	// Use storage manager
+	address := &storage.BlockAddress{ID: cid}
+	return c.storageManager.Get(ctx, address)
 }
 
-// hasBlock checks if a block exists using either storage manager or legacy IPFS client
+// hasBlock checks if a block exists using the storage manager
 func (c *Client) hasBlock(ctx context.Context, cid string) (bool, error) {
-	if c.useStorageManager {
-		// Use storage manager
-		address := &storage.BlockAddress{ID: cid}
-		return c.storageManager.Has(ctx, address)
-	} else {
-		// Use legacy IPFS client
-		return c.ipfsClient.HasBlock(cid)
-	}
+	// Use storage manager
+	address := &storage.BlockAddress{ID: cid}
+	return c.storageManager.Has(ctx, address)
 }
 
 // SetPeerManager sets the peer manager for intelligent peer selection
 func (c *Client) SetPeerManager(manager *p2p.PeerManager) {
 	c.peerManager = manager
 	
-	// Set peer manager on legacy IPFS client if using legacy mode
-	if !c.useStorageManager && c.ipfsClient != nil {
-		c.ipfsClient.SetPeerManager(manager)
-	}
-	
 	// For storage manager mode, peer management is handled at the backend level
+	// The storage manager will propagate this to peer-aware backends
+	if ipfsBackend, ok := c.storageManager.GetBackend("ipfs"); ok {
+		if peerAware, ok := ipfsBackend.(storage.PeerAwareBackend); ok {
+			// TODO: Add SetPeerManager method to PeerAwareBackend interface
+			_ = peerAware // For now, just acknowledge the interface
+		}
+	}
 }
 
 // SelectRandomizer selects a randomizer block for the given block size (legacy 2-tuple support)
@@ -304,12 +235,13 @@ func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block
 	for _, peerID := range peers {
 		// This would require a protocol to query peer for available randomizers
 		// For now, we'll use the peer as a hint for block retrieval
+		_ = peerID // TODO: Use peerID for peer-aware retrieval in storage manager
 		randomizers, err := c.cache.GetRandomizers(10)
 		if err == nil && len(randomizers) > 0 {
 			for _, info := range randomizers {
 				if info.Size == blockSize {
 					// Try to retrieve this block with peer hint
-					if block, err := c.ipfsClient.RetrieveBlockWithPeerHint(info.CID, []peer.ID{peerID}); err == nil {
+					if block, err := c.retrieveBlock(context.Background(), info.CID); err == nil {
 						c.cache.IncrementPopularity(info.CID)
 						c.metrics.RecordBlockReuse()
 						return block, info.CID, nil
@@ -406,7 +338,7 @@ func (c *Client) SelectTwoRandomizers(blockSize int) (*blocks.Block, string, *bl
 				return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
 			}
 			
-			cid2, err := c.ipfsClient.StoreBlock(randBlock2)
+			cid2, err := c.storeBlock(context.Background(), randBlock2)
 			if err != nil {
 				return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
 			}
@@ -479,59 +411,22 @@ func (c *Client) StoreBlockWithCache(block *blocks.Block) (string, error) {
 func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	ctx := context.Background() // TODO: Accept context parameter in future version
 	
-	if c.useStorageManager {
-		// Use storage manager (strategy is handled at backend level)
-		cid, err := c.storeBlock(ctx, block)
-		if err != nil {
-			return "", err
-		}
-		
-		// Cache the block with metadata
-		metadata := map[string]interface{}{
-			"block_type": "data",
-			"strategy":   strategy,
-		}
-		if strategy == "randomizer" {
-			metadata["is_randomizer"] = true
-		}
-		
-		c.cacheBlock(cid, block, metadata)
-		return cid, nil
-	}
-	
-	// Legacy IPFS client mode
-	// Try to use strategy-aware storage if available
-	if strategyStore, ok := c.ipfsClient.(interface {
-		StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error)
-	}); ok {
-		cid, err := strategyStore.StoreBlockWithStrategy(block, strategy)
-		if err != nil {
-			return "", err
-		}
-		
-		// Cache the block with metadata
-		metadata := map[string]interface{}{
-			"block_type": "data",
-			"strategy":   strategy,
-		}
-		if strategy == "randomizer" {
-			metadata["is_randomizer"] = true
-		}
-		
-		c.cacheBlock(cid, block, metadata)
-		return cid, nil
-	}
-	
-	// Fallback to standard storage
-	cid, err := c.ipfsClient.StoreBlock(block)
+	// Use storage manager (strategy is handled at backend level)
+	cid, err := c.storeBlock(ctx, block)
 	if err != nil {
 		return "", err
 	}
 	
-	// Cache the block
-	c.cache.Store(cid, block)
-	c.cache.IncrementPopularity(cid)
+	// Cache the block with metadata
+	metadata := map[string]interface{}{
+		"block_type": "data",
+		"strategy":   strategy,
+	}
+	if strategy == "randomizer" {
+		metadata["is_randomizer"] = true
+	}
 	
+	c.cacheBlock(cid, block, metadata)
 	return cid, nil
 }
 
@@ -607,14 +502,10 @@ func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []
 	var block *blocks.Block
 	var err error
 	
-	// Use peer-aware retrieval if available
-	if peerAware, ok := c.ipfsClient.(interface {
-		RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error)
-	}); ok {
-		block, err = peerAware.RetrieveBlockWithPeerHint(cid, preferredPeers)
-	} else {
-		block, err = c.ipfsClient.RetrieveBlock(cid)
-	}
+	// Use storage manager for retrieval
+	// TODO: Implement peer hints in storage manager
+	_ = preferredPeers // TODO: Use preferredPeers for peer-aware retrieval
+	block, err = c.retrieveBlock(context.Background(), cid)
 	
 	if err != nil {
 		return nil, err
@@ -679,12 +570,9 @@ func (c *Client) GetCacheConfig() *cache.AltruisticCacheConfig {
 }
 
 // GetPeerStats returns peer performance statistics if available
-func (c *Client) GetPeerStats() map[peer.ID]*ipfs.RequestMetrics {
-	if metricsProvider, ok := c.ipfsClient.(interface {
-		GetPeerMetrics() map[peer.ID]*ipfs.RequestMetrics
-	}); ok {
-		return metricsProvider.GetPeerMetrics()
-	}
+func (c *Client) GetPeerStats() map[peer.ID]interface{} {
+	// TODO: Implement peer stats through storage manager
+	// This requires extending the storage interface to support peer metrics
 	return nil
 }
 
@@ -696,7 +584,7 @@ func (c *Client) PreloadBlocks(ctx context.Context) error {
 	
 	// Define block fetcher for preloading
 	blockFetcher := func(cid string) ([]byte, error) {
-		block, err := c.ipfsClient.RetrieveBlock(cid)
+		block, err := c.retrieveBlock(ctx, cid)
 		if err != nil {
 			return nil, err
 		}
@@ -727,7 +615,9 @@ func (c *Client) SetPeerSelectionStrategy(strategy string) error {
 
 // GetConnectedPeers returns currently connected peers
 func (c *Client) GetConnectedPeers() []peer.ID {
-	return c.ipfsClient.GetConnectedPeers()
+	// TODO: Implement through storage manager backend
+	// This requires extending the storage interface to support peer information
+	return nil
 }
 
 // Upload uploads a file and returns descriptor CID
@@ -826,15 +716,8 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		progress("Saving file descriptor", 0, 100)
 	}
 	
-	// Try to get concrete IPFS client for descriptor store
-	var ipfsClientConcrete *ipfs.Client
-	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
-		ipfsClientConcrete = client
-	} else {
-		return "", fmt.Errorf("IPFS client does not support descriptor operations")
-	}
-	
-	descriptorStore, err := descriptors.NewStore(ipfsClientConcrete)
+	// Create descriptor store with storage manager
+	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
 	if err != nil {
 		return "", fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -873,20 +756,12 @@ func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, err
 
 // DownloadWithMetadataAndProgress downloads a file with progress reporting
 func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress ProgressCallback) ([]byte, string, error) {
-	// Try to get concrete IPFS client for descriptor store
 	if progress != nil {
 		progress("Loading file descriptor", 0, 100)
 	}
 	
-	var ipfsClientConcrete *ipfs.Client
-	if client, ok := c.ipfsClient.(*ipfs.Client); ok {
-		ipfsClientConcrete = client
-	} else {
-		return nil, "", fmt.Errorf("IPFS client does not support descriptor operations")
-	}
-	
-	// Create descriptor store
-	descriptorStore, err := descriptors.NewStore(ipfsClientConcrete)
+	// Create descriptor store with storage manager
+	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -910,13 +785,13 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 			progress("Downloading blocks", i, totalBlocks)
 		}
 		// Retrieve anonymized data block
-		dataBlock, err := c.ipfsClient.RetrieveBlock(blockInfo.DataCID)
+		dataBlock, err := c.retrieveBlock(context.Background(), blockInfo.DataCID)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to retrieve data block: %w", err)
 		}
 		
 		// Retrieve randomizer blocks
-		randBlock1, err := c.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID1)
+		randBlock1, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID1)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
 		}
@@ -924,7 +799,7 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 		var origBlock *blocks.Block
 		if descriptor.IsThreeTuple() && blockInfo.RandomizerCID2 != "" {
 			// 3-tuple XOR
-			randBlock2, err := c.ipfsClient.RetrieveBlock(blockInfo.RandomizerCID2)
+			randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
 			}

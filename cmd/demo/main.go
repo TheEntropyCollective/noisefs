@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,8 +13,8 @@ import (
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 )
 
 func main() {
@@ -59,13 +60,22 @@ func runDemo() error {
 	cfg := config.DefaultConfig()
 	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
 
-	// Initialize IPFS client
-	fmt.Println("1. Connecting to IPFS...")
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Initialize storage manager
+	fmt.Println("1. Initializing storage manager...")
+	storageConfig := storage.DefaultConfig()
+	storageConfig.IPFS.APIEndpoint = cfg.IPFS.APIEndpoint
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to IPFS: %w", err)
+		return fmt.Errorf("failed to create storage manager: %w", err)
 	}
-	fmt.Println("✓ Connected to IPFS")
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to start storage manager: %w", err)
+	}
+	defer storageManager.Stop(context.Background())
+	fmt.Println("✓ Storage manager initialized")
 
 	// Create cache
 	fmt.Println("\n2. Initializing block cache...")
@@ -74,7 +84,7 @@ func runDemo() error {
 
 	// Create NoiseFS client
 	fmt.Println("\n3. Creating NoiseFS client...")
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
@@ -109,7 +119,7 @@ This file demonstrates the OFFSystem architecture:
 
 	// Upload using the uploadFile function
 	var descriptorCID string
-	err = uploadFileDemo(ipfsClient, noisefsClient, tempFile.Name(), blocks.DefaultBlockSize, &descriptorCID)
+	err = uploadFileDemo(storageManager, noisefsClient, tempFile.Name(), blocks.DefaultBlockSize, &descriptorCID)
 	if err != nil {
 		return fmt.Errorf("upload failed: %w", err)
 	}
@@ -119,7 +129,8 @@ This file demonstrates the OFFSystem architecture:
 
 	// Retrieve and show descriptor details
 	fmt.Println("\n5. Retrieving descriptor details...")
-	descriptorData, err := ipfsClient.RetrieveBlock(descriptorCID)
+	address := &storage.BlockAddress{ID: descriptorCID}
+	descriptorData, err := storageManager.Get(context.Background(), address)
 	if err != nil {
 		fmt.Printf("  ⚠ Could not retrieve descriptor: %v\n", err)
 	} else {
@@ -149,7 +160,7 @@ This file demonstrates the OFFSystem architecture:
 	defer os.Remove(tempOutput.Name())
 	tempOutput.Close()
 
-	err = downloadFileDemo(ipfsClient, noisefsClient, descriptorCID, tempOutput.Name())
+	err = downloadFileDemo(storageManager, noisefsClient, descriptorCID, tempOutput.Name())
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
@@ -193,7 +204,7 @@ This file demonstrates the OFFSystem architecture:
 }
 
 // uploadFileDemo is a simplified version of uploadFile for the demo
-func uploadFileDemo(ipfsClient *ipfs.Client, client *noisefs.Client, filePath string, blockSize int, descriptorCID *string) error {
+func uploadFileDemo(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, descriptorCID *string) error {
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -261,19 +272,20 @@ func uploadFileDemo(ipfsClient *ipfs.Client, client *noisefs.Client, filePath st
 		return fmt.Errorf("failed to create descriptor block: %w", err)
 	}
 
-	cid, err := ipfsClient.StoreBlock(descriptorBlock)
+	address, err := storageManager.Put(context.Background(), descriptorBlock)
 	if err != nil {
 		return fmt.Errorf("failed to store descriptor: %w", err)
 	}
 
-	*descriptorCID = cid
+	*descriptorCID = address.ID
 	return nil
 }
 
 // downloadFileDemo is a simplified version of downloadFile for the demo
-func downloadFileDemo(ipfsClient *ipfs.Client, client *noisefs.Client, descriptorCID string, outputPath string) error {
+func downloadFileDemo(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string) error {
 	// Retrieve descriptor
-	descriptorBlock, err := ipfsClient.RetrieveBlock(descriptorCID)
+	address := &storage.BlockAddress{ID: descriptorCID}
+	descriptorBlock, err := storageManager.Get(context.Background(), address)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve descriptor: %w", err)
 	}
@@ -331,14 +343,23 @@ func runDemoReuse() error {
 	cfg := config.DefaultConfig()
 	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
 
-	// Initialize
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Initialize storage manager
+	storageConfig := storage.DefaultConfig()
+	storageConfig.IPFS.APIEndpoint = cfg.IPFS.APIEndpoint
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		return fmt.Errorf("failed to connect to IPFS: %w", err)
+		return fmt.Errorf("failed to create storage manager: %w", err)
 	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to start storage manager: %w", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	blockCache := cache.NewMemoryCache(100)
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
@@ -387,7 +408,7 @@ func runDemoReuse() error {
 		tempFile.Close()
 
 		var descriptorCID string
-		err = uploadFileDemo(ipfsClient, noisefsClient, tempFile.Name(), blocks.DefaultBlockSize, &descriptorCID)
+		err = uploadFileDemo(storageManager, noisefsClient, tempFile.Name(), blocks.DefaultBlockSize, &descriptorCID)
 		if err != nil {
 			return fmt.Errorf("failed to upload %s: %w", file.name, err)
 		}
@@ -395,7 +416,8 @@ func runDemoReuse() error {
 		descriptorCIDs = append(descriptorCIDs, descriptorCID)
 
 		// Retrieve descriptor to track block usage
-		descriptorBlock, err := ipfsClient.RetrieveBlock(descriptorCID)
+		address := &storage.BlockAddress{ID: descriptorCID}
+		descriptorBlock, err := storageManager.Get(context.Background(), address)
 		if err == nil {
 			descriptor, err := descriptors.FromJSON(descriptorBlock.Data)
 			if err == nil {

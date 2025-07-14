@@ -1,14 +1,14 @@
 package descriptors
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // EncryptedDescriptor represents an encrypted descriptor stored in IPFS
@@ -33,25 +33,25 @@ type PasswordProvider func() (string, error)
 
 // EncryptedStore handles encrypted descriptor storage and retrieval
 type EncryptedStore struct {
-	ipfsClient       *ipfs.Client
+	storageManager   *storage.Manager
 	passwordProvider PasswordProvider
 }
 
 // NewEncryptedStore creates a new encrypted descriptor store
-func NewEncryptedStore(ipfsClient *ipfs.Client, passwordProvider PasswordProvider) (*EncryptedStore, error) {
-	if ipfsClient == nil {
-		return nil, errors.New("IPFS client is required")
+func NewEncryptedStore(storageManager *storage.Manager, passwordProvider PasswordProvider) (*EncryptedStore, error) {
+	if storageManager == nil {
+		return nil, errors.New("storage manager is required")
 	}
 	
 	return &EncryptedStore{
-		ipfsClient:       ipfsClient,
+		storageManager:   storageManager,
 		passwordProvider: passwordProvider,
 	}, nil
 }
 
 // NewEncryptedStoreWithPassword creates a new encrypted descriptor store with a static password
 // WARNING: This is a convenience function. For better security, use NewEncryptedStore with a custom PasswordProvider
-func NewEncryptedStoreWithPassword(ipfsClient *ipfs.Client, password string) (*EncryptedStore, error) {
+func NewEncryptedStoreWithPassword(storageManager *storage.Manager, password string) (*EncryptedStore, error) {
 	// Create a copy of the password to avoid external modifications
 	passwordCopy := password
 	
@@ -63,7 +63,7 @@ func NewEncryptedStoreWithPassword(ipfsClient *ipfs.Client, password string) (*E
 		return passwordCopy, nil
 	}
 	
-	return NewEncryptedStore(ipfsClient, provider)
+	return NewEncryptedStore(storageManager, provider)
 }
 
 // Save stores a descriptor in IPFS with encryption
@@ -113,12 +113,18 @@ func (s *EncryptedStore) Save(descriptor *Descriptor) (string, error) {
 		}
 	}
 
-	// Store in IPFS
-	reader := bytes.NewReader(data)
-	cid, err := s.ipfsClient.Add(reader)
+	// Store in storage manager
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to create block: %w", err)
+	}
+	
+	address, err := s.storageManager.Put(context.Background(), block)
 	if err != nil {
 		return "", fmt.Errorf("failed to store encrypted descriptor: %w", err)
 	}
+	
+	cid := address.ID
 
 	return cid, nil
 }
@@ -129,18 +135,14 @@ func (s *EncryptedStore) Load(cid string) (*Descriptor, error) {
 		return nil, errors.New("CID cannot be empty")
 	}
 
-	// Retrieve from IPFS
-	reader, err := s.ipfsClient.Cat(cid)
+	// Retrieve from storage manager
+	address := &storage.BlockAddress{ID: cid}
+	block, err := s.storageManager.Get(context.Background(), address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve descriptor: %w", err)
 	}
-	defer reader.Close()
 
-	// Read data
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read descriptor data: %w", err)
-	}
+	data := block.Data
 
 	// Try to parse as encrypted descriptor first
 	var encDesc EncryptedDescriptor
@@ -264,18 +266,14 @@ func (s *EncryptedStore) IsEncrypted(cid string) (bool, error) {
 		return false, errors.New("CID cannot be empty")
 	}
 
-	// Retrieve from IPFS
-	reader, err := s.ipfsClient.Cat(cid)
+	// Retrieve from storage manager
+	address := &storage.BlockAddress{ID: cid}
+	block, err := s.storageManager.Get(context.Background(), address)
 	if err != nil {
 		return false, fmt.Errorf("failed to retrieve descriptor: %w", err)
 	}
-	defer reader.Close()
 
-	// Read data
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return false, fmt.Errorf("failed to read descriptor data: %w", err)
-	}
+	data := block.Data
 
 	// Try to parse as encrypted descriptor
 	var encDesc EncryptedDescriptor

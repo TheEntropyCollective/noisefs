@@ -1,18 +1,37 @@
 package cache
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
 	
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // BlockRetriever defines the interface for fetching blocks
 type BlockRetriever interface {
 	RetrieveBlock(cid string) (*blocks.Block, error)
+}
+
+// StorageManagerAdapter adapts a storage.Manager to the BlockRetriever interface
+type StorageManagerAdapter struct {
+	storageManager *storage.Manager
+}
+
+// NewStorageManagerAdapter creates a new storage manager adapter
+func NewStorageManagerAdapter(storageManager *storage.Manager) BlockRetriever {
+	return &StorageManagerAdapter{
+		storageManager: storageManager,
+	}
+}
+
+// RetrieveBlock implements the BlockRetriever interface
+func (a *StorageManagerAdapter) RetrieveBlock(cid string) (*blocks.Block, error) {
+	address := &storage.BlockAddress{ID: cid}
+	return a.storageManager.Get(context.Background(), address)
 }
 
 // SequentialAccessTracker tracks sequential access patterns for files
@@ -253,60 +272,70 @@ func ExtractDescriptorCID(blockCID string) (string, bool) {
 	return "", false
 }
 
-// IntegrateReadAheadWithIPFS creates a read-ahead enabled IPFS client
-func IntegrateReadAheadWithIPFS(ipfsClient ipfs.BlockStore, cache Cache) *ReadAheadIPFSClient {
-	return &ReadAheadIPFSClient{
-		ipfsClient: ipfsClient,
-		cache:      cache,
-		worker:     NewEnhancedReadAheadWorker(cache, ipfsClient),
+// IntegrateReadAheadWithStorage creates a read-ahead enabled storage client
+func IntegrateReadAheadWithStorage(storageManager *storage.Manager, cache Cache) *ReadAheadStorageClient {
+	return &ReadAheadStorageClient{
+		storageManager: storageManager,
+		cache:          cache,
+		worker:         NewEnhancedReadAheadWorker(cache, NewStorageManagerAdapter(storageManager)),
 	}
 }
 
-// ReadAheadIPFSClient wraps an IPFS client with read-ahead functionality
-type ReadAheadIPFSClient struct {
-	ipfsClient ipfs.BlockStore
-	cache      Cache
-	worker     *EnhancedReadAheadWorker
+// IntegrateReadAheadWithIPFS creates a read-ahead enabled storage client
+// This function is deprecated, use IntegrateReadAheadWithStorage instead
+func IntegrateReadAheadWithIPFS(storageManager *storage.Manager, cache Cache) *ReadAheadStorageClient {
+	return IntegrateReadAheadWithStorage(storageManager, cache)
 }
 
+// ReadAheadStorageClient wraps a storage manager with read-ahead functionality
+type ReadAheadStorageClient struct {
+	storageManager *storage.Manager
+	cache          Cache
+	worker         *EnhancedReadAheadWorker
+}
+
+// ReadAheadIPFSClient is deprecated, use ReadAheadStorageClient instead
+type ReadAheadIPFSClient = ReadAheadStorageClient
+
 // RetrieveBlock retrieves a block with read-ahead
-func (c *ReadAheadIPFSClient) RetrieveBlock(cid string) (*blocks.Block, error) {
+func (c *ReadAheadStorageClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	// Try cache first
 	if block, err := c.cache.Get(cid); err == nil {
 		// Trigger read-ahead for next blocks
 		go c.worker.ProcessReadAheadRequest(cid)
 		return block, nil
 	}
-	
-	// Fetch from IPFS
-	block, err := c.ipfsClient.RetrieveBlock(cid)
+
+	// Retrieve from storage manager
+	address := &storage.BlockAddress{ID: cid}
+	block, err := c.storageManager.Get(context.Background(), address)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Store in cache
-	_ = c.cache.Store(cid, block)
-	
-	// Trigger read-ahead
+	c.cache.Store(cid, block)
+
+	// Trigger read-ahead for next blocks
 	go c.worker.ProcessReadAheadRequest(cid)
-	
+
 	return block, nil
 }
 
 // StoreBlock stores a block
-func (c *ReadAheadIPFSClient) StoreBlock(block *blocks.Block) (string, error) {
-	cid, err := c.ipfsClient.StoreBlock(block)
+func (c *ReadAheadStorageClient) StoreBlock(block *blocks.Block) (string, error) {
+	address, err := c.storageManager.Put(context.Background(), block)
 	if err != nil {
 		return "", err
 	}
 	
 	// Also store in cache
-	_ = c.cache.Store(cid, block)
+	_ = c.cache.Store(address.ID, block)
 	
-	return cid, nil
+	return address.ID, nil
 }
 
 // RegisterDescriptor registers a descriptor for sequential access tracking
-func (c *ReadAheadIPFSClient) RegisterDescriptor(descriptorCID string, desc *descriptors.Descriptor) {
+func (c *ReadAheadStorageClient) RegisterDescriptor(descriptorCID string, desc *descriptors.Descriptor) {
 	c.worker.tracker.RegisterDescriptor(descriptorCID, desc)
 }
