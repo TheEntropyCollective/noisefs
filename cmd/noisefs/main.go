@@ -14,6 +14,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
 	// "github.com/TheEntropyCollective/noisefs/pkg/storage/integration" // TODO: Uncomment when Sprint 4 complete
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
@@ -20,10 +21,24 @@ func TestSystemCoordinatorCreation(t *testing.T) {
 			t.Skip("SystemCoordinator creation unexpectedly succeeded - requires real IPFS")
 		}
 		
-		// We expect it to fail trying to connect to IPFS
-		expectedError := "failed to initialize IPFS"
-		if err.Error()[:len(expectedError)] != expectedError {
-			t.Errorf("Expected error starting with '%s', got: %v", expectedError, err)
+		// We expect it to fail trying to connect to storage backend
+		// After refactoring, the error is about storage/reuse initialization
+		expectedErrors := []string{
+			"failed to initialize IPFS",
+			"failed to initialize reuse",
+			"failed to initialize storage",
+		}
+		
+		foundExpectedError := false
+		for _, expected := range expectedErrors {
+			if strings.Contains(err.Error(), expected) {
+				foundExpectedError = true
+				break
+			}
+		}
+		
+		if !foundExpectedError {
+			t.Errorf("Expected error containing one of %v, got: %v", expectedErrors, err)
 		}
 	})
 }
