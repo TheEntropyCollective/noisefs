@@ -45,9 +45,73 @@ type AltruisticCacheConfig struct {
 // BlockMetadata extends block info with origin tracking
 type BlockMetadata struct {
 	*BlockInfo
-	Origin      BlockOrigin
-	CachedAt    time.Time
+	Origin       BlockOrigin
+	CachedAt     time.Time
 	LastAccessed time.Time
+	
+	// Performance optimization: cached scores with TTL
+	cachedScores    map[string]float64 // strategy name -> score
+	scoreExpiry     map[string]time.Time // strategy name -> expiry
+	scoresCacheTTL  time.Duration // configurable TTL (default 5min)
+	scoreMutex      sync.RWMutex // protect score cache
+}
+
+// DefaultScoreCacheTTL is the default time-to-live for cached scores
+const DefaultScoreCacheTTL = 5 * time.Minute
+
+// NewBlockMetadata creates a new BlockMetadata with score caching initialized
+func NewBlockMetadata(blockInfo *BlockInfo, origin BlockOrigin) *BlockMetadata {
+	return &BlockMetadata{
+		BlockInfo:      blockInfo,
+		Origin:         origin,
+		CachedAt:       time.Now(),
+		LastAccessed:   time.Now(),
+		cachedScores:   make(map[string]float64),
+		scoreExpiry:    make(map[string]time.Time),
+		scoresCacheTTL: DefaultScoreCacheTTL,
+	}
+}
+
+// GetCachedScore retrieves a cached score if it's still valid
+func (bm *BlockMetadata) GetCachedScore(strategyName string) (float64, bool) {
+	bm.scoreMutex.RLock()
+	defer bm.scoreMutex.RUnlock()
+	
+	score, exists := bm.cachedScores[strategyName]
+	if !exists {
+		return 0, false
+	}
+	
+	expiry, expiryExists := bm.scoreExpiry[strategyName]
+	if !expiryExists || time.Now().After(expiry) {
+		return 0, false
+	}
+	
+	return score, true
+}
+
+// SetCachedScore stores a score with TTL expiry
+func (bm *BlockMetadata) SetCachedScore(strategyName string, score float64) {
+	bm.scoreMutex.Lock()
+	defer bm.scoreMutex.Unlock()
+	
+	if bm.cachedScores == nil {
+		bm.cachedScores = make(map[string]float64)
+		bm.scoreExpiry = make(map[string]time.Time)
+		bm.scoresCacheTTL = DefaultScoreCacheTTL
+	}
+	
+	bm.cachedScores[strategyName] = score
+	bm.scoreExpiry[strategyName] = time.Now().Add(bm.scoresCacheTTL)
+}
+
+// ClearCachedScores removes all cached scores (called when metadata changes)
+func (bm *BlockMetadata) ClearCachedScores() {
+	bm.scoreMutex.Lock()
+	defer bm.scoreMutex.Unlock()
+	
+	bm.cachedScores = make(map[string]float64)
+	bm.scoreExpiry = make(map[string]time.Time)
 }
 
 // AltruisticCache wraps an existing cache with altruistic functionality.

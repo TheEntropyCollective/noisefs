@@ -1,52 +1,51 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Altruistic Caching with MinPersonal + Flex Model
+## Current Milestone: Phase 2 Cache Performance Optimization
 
-Implementing a simple, privacy-preserving altruistic caching system that automatically contributes to network health while respecting user storage needs.
+Optimize cache scoring algorithms and metrics tracking for 20%+ performance improvement under high load while maintaining cache effectiveness.
 
-### Sprint 1: Core Cache Categorization ✅
-- [x] Extend AdaptiveCache to track personal vs altruistic blocks
-- [x] Add metadata to distinguish block origin (user-requested vs network-beneficial)
-- [x] Implement space allocation logic respecting MinPersonal guarantee
-- [x] Add metrics for personal/altruistic usage tracking
-- [x] Add comprehensive testing including edge cases and benchmarks
-- [x] Create detailed documentation with examples
+### Sprint 1: Cache Performance Analysis & Baseline
+- [x] Analyze cache eviction strategies performance bottlenecks
+- [x] Identify expensive scoring calculations in LFU and ValueBased strategies  
+- [x] Map out health tracker calculation overhead patterns
+- [x] Run baseline performance benchmarks (current scores)
+- [ ] Profile cache operations under 1000+ concurrent load
+- [ ] Document performance hotspots and target improvements
 
-### Sprint 2: Altruistic Block Selection ✅
-- [x] Implement BlockHealthTracker for privacy-safe network health metrics
-- [x] Add block value calculation (replication, popularity, randomizer potential)
-- [x] Create opportunistic fetching for valuable blocks when space available
-- [x] Implement anti-thrashing mechanisms with cooldown periods
-- [x] Add comprehensive testing for health tracking and opportunistic fetching
-- [x] Implement privacy features (differential privacy, temporal quantization)
+**Baseline Performance Results (1000 blocks, 50 evictions needed):**
+- LRU: 438ms (baseline)
+- LFU: 543ms (24% slower than LRU) 
+- ValueBased: 1133ms (158% slower than LRU, 2.5x penalty)
+- Adaptive: 444ms (1% slower than LRU)
 
-### Sprint 3: Space Management & Eviction ✅
-- [x] Implement flex pool management between personal and altruistic
-- [x] Add eviction policies that prioritize altruistic blocks for removal
-- [x] Ensure personal blocks can use entire disk if needed
-- [x] Add hysteresis to prevent rapid eviction/refetch cycles
-- [x] Implement smart eviction strategies (LRU, LFU, Value-based)
-- [x] Add predictive eviction and gradual space reclamation
-- [x] Integrate block health scores into eviction decisions
-- [x] Add comprehensive testing for all eviction strategies
+**Key Bottlenecks Found:**
+- ValueBased scoring: 51.9μs per call vs 17.0μs for LRU (3x slower)
+- Health tracker calculations in ValueBased strategy
+- Repeated time.Since() calls in LFU scoring
+- Full O(n log n) sorting for partial eviction needs
 
-### Sprint 4: Network Health Integration ✅
-- [x] Implement privacy-preserving gossip protocol for block health
-- [x] Add Bloom filter exchange for efficient peer coordination
-- [x] Create aggregated health metrics without exposing individual patterns
-- [x] Integrate with existing peer discovery mechanisms
+### Sprint 2: Cache Scoring Optimization
+- [ ] Implement lazy score evaluation with TTL-based caching
+- [ ] Add score caching to BlockMetadata with configurable TTL (5 min default)
+- [ ] Optimize LFU strategy to avoid repeated time.Since() calls
+- [ ] Optimize ValueBased strategy to cache health calculations
+- [ ] Replace O(n log n) sorting with partial sorting for eviction candidates
+- [ ] Add approximation algorithms for popularity tracking
 
-### Sprint 5: Configuration & CLI ✅
-- [x] Add single MinPersonalCache configuration option
-- [x] Update CLI to show personal vs altruistic usage
-- [x] Add optional advanced settings (bandwidth limits, disable flag)
-- [x] Create visual feedback for cache utilization
+### Sprint 3: Metrics Sampling Implementation  
+- [ ] Replace continuous metrics tracking with statistical sampling
+- [ ] Implement configurable sampling rates (default: every 10th operation)
+- [ ] Add probabilistic data structures for cardinality estimation
+- [ ] Optimize stats calculation to avoid full block iteration
+- [ ] Maintain ≥95% accuracy while reducing overhead by ≥50%
 
-### Sprint 6: Testing & Documentation ✅
-- [x] Comprehensive unit tests for all cache behaviors
-- [x] Integration tests for space management scenarios
-- [x] Performance benchmarks comparing to non-altruistic mode
-- [x] User documentation explaining the feature
+### Sprint 4: Performance Monitoring & Validation
+- [ ] Add cache performance profiling endpoints
+- [ ] Create comprehensive benchmark tests for optimized operations
+- [ ] Implement performance regression detection
+- [ ] Load test with 1000+ concurrent operations
+- [ ] Verify cache hit rates remain ≥80% and all tests pass
+- [ ] Document 20%+ performance improvements achieved
 
 ## Completed Major Milestones
 

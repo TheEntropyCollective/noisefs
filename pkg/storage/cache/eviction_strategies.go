@@ -65,6 +65,13 @@ func (s *LFUEvictionStrategy) Name() string {
 }
 
 func (s *LFUEvictionStrategy) Score(block *BlockMetadata, healthTracker *BlockHealthTracker) float64 {
+	strategyName := s.Name()
+	
+	// Check for cached score first
+	if cachedScore, valid := block.GetCachedScore(strategyName); valid {
+		return cachedScore
+	}
+	
 	// Calculate access frequency
 	age := time.Since(block.CachedAt).Hours()
 	if age < 1 {
@@ -73,11 +80,17 @@ func (s *LFUEvictionStrategy) Score(block *BlockMetadata, healthTracker *BlockHe
 	
 	// Inverse of access rate (lower frequency = higher score)
 	accessRate := float64(block.Popularity) / age
+	var score float64
 	if accessRate == 0 {
-		return 1000.0 // Never accessed
+		score = 1000.0 // Never accessed
+	} else {
+		score = 1.0 / accessRate
 	}
 	
-	return 1.0 / accessRate
+	// Cache the calculated score
+	block.SetCachedScore(strategyName, score)
+	
+	return score
 }
 
 func (s *LFUEvictionStrategy) SelectEvictionCandidates(blocks map[string]*BlockMetadata, spaceNeeded int64, healthTracker *BlockHealthTracker) []*BlockMetadata {
@@ -127,6 +140,13 @@ func (s *ValueBasedEvictionStrategy) Name() string {
 }
 
 func (s *ValueBasedEvictionStrategy) Score(block *BlockMetadata, healthTracker *BlockHealthTracker) float64 {
+	strategyName := s.Name()
+	
+	// Check for cached score first
+	if cachedScore, valid := block.GetCachedScore(strategyName); valid {
+		return cachedScore
+	}
+	
 	score := 0.0
 	
 	// Age component (older = higher score)
@@ -156,6 +176,9 @@ func (s *ValueBasedEvictionStrategy) Score(block *BlockMetadata, healthTracker *
 		// This is a simplified check - in practice, you'd analyze the block data
 		score *= (1.0 - s.RandomizerWeight)
 	}
+	
+	// Cache the calculated score
+	block.SetCachedScore(strategyName, score)
 	
 	return score
 }
