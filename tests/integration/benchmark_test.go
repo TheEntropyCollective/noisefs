@@ -18,18 +18,28 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 )
 
+// MockRequestMetrics represents mock request metrics
+type MockRequestMetrics struct {
+	TotalRequests      int
+	SuccessfulRequests int
+	FailedRequests     int
+	AverageLatency     time.Duration
+	Bandwidth          int64
+}
+
 // BenchmarkSuite provides comprehensive performance testing for NoiseFS
 type BenchmarkSuite struct {
-	clients       []*noisefs.Client
-	peerManagers  []*p2p.PeerManager
-	ipfsClients   []*ipfs.Client
-	blockSizes    []int
-	numPeers      int
-	numBlocks     int
+	clients          []*noisefs.Client
+	peerManagers     []*p2p.PeerManager
+	storageManagers  []*storage.Manager
+	blockSizes       []int
+	numPeers         int
+	numBlocks        int
 }
 
 // NewBenchmarkSuite creates a new benchmark suite
@@ -45,14 +55,14 @@ func NewBenchmarkSuite(numPeers, numBlocks int) *BenchmarkSuite {
 func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 	b.Helper()
 	
-	// Create IPFS clients
+	// Create storage managers
 	for i := 0; i < bs.numPeers; i++ {
-		ipfsClient, err := ipfs.NewClient(fmt.Sprintf("localhost:%d", 5001+i))
+		// Create storage manager for benchmarking
+		storageManager, err := storagetesting.CreateRealTestStorageManager()
 		if err != nil {
-			// For benchmarking, create mock clients if real IPFS not available
-			ipfsClient = NewMockIPFSClient()
+			return fmt.Errorf("failed to create storage manager %d: %w", i, err)
 		}
-		bs.ipfsClients = append(bs.ipfsClients, ipfsClient)
+		bs.storageManagers = append(bs.storageManagers, storageManager)
 		
 		// Create peer manager
 		host := NewMockHost(peer.ID(fmt.Sprintf("peer-%d", i)))
@@ -63,7 +73,7 @@ func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 		cache := cache.NewMemoryCache(1000)
 		
 		// Create NoiseFS client
-		client, err := noisefs.NewClient(ipfsClient, cache)
+		client, err := noisefs.NewClient(storageManager, cache)
 		if err != nil {
 			return fmt.Errorf("failed to create NoiseFS client %d: %w", i, err)
 		}
@@ -77,12 +87,23 @@ func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 	return nil
 }
 
+// CleanupBenchmark cleans up the benchmark environment
+func (bs *BenchmarkSuite) CleanupBenchmark() {
+	// Stop all storage managers
+	for _, manager := range bs.storageManagers {
+		if manager != nil {
+			manager.Stop(context.Background())
+		}
+	}
+}
+
 // BenchmarkRandomizerSelection benchmarks randomizer selection performance
 func BenchmarkRandomizerSelection(b *testing.B) {
 	suite := NewBenchmarkSuite(5, 1000)
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
+	defer suite.CleanupBenchmark()
 	
 	client := suite.clients[0]
 	blockSize := 131072 // 128KB
@@ -104,6 +125,7 @@ func BenchmarkPeerSelection(b *testing.B) {
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
+	defer suite.CleanupBenchmark()
 	
 	strategies := []string{"performance", "randomizer", "privacy", "hybrid"}
 	peerManager := suite.peerManagers[0]
@@ -128,6 +150,7 @@ func BenchmarkCachePerformance(b *testing.B) {
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
+	defer suite.CleanupBenchmark()
 	
 	client := suite.clients[0]
 	testBlocks := make([]*blocks.Block, 100)
@@ -176,6 +199,7 @@ func BenchmarkThroughput(b *testing.B) {
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
+	defer suite.CleanupBenchmark()
 	
 	var totalBytes int64
 	var totalOps int64
@@ -355,9 +379,10 @@ type MockIPFSClient struct {
 	mutex  sync.RWMutex
 }
 
-func NewMockIPFSClient() *ipfs.Client {
-	// Create a minimal IPFS client for testing
-	return &ipfs.Client{}
+func NewMockStorageManager() *storage.Manager {
+	// Create a minimal storage manager for testing
+	manager, _ := storagetesting.CreateRealTestStorageManager()
+	return manager
 }
 
 func (m *MockIPFSClient) StoreBlock(block *blocks.Block) (string, error) {
@@ -423,8 +448,8 @@ func (m *MockIPFSClient) BroadcastBlock(ctx context.Context, cid string, block *
 	return nil
 }
 
-func (m *MockIPFSClient) GetPeerMetrics() map[peer.ID]*ipfs.RequestMetrics {
-	return map[peer.ID]*ipfs.RequestMetrics{
+func (m *MockIPFSClient) GetPeerMetrics() map[peer.ID]*MockRequestMetrics {
+	return map[peer.ID]*MockRequestMetrics{
 		peer.ID("mock-peer-1"): {
 			TotalRequests:      100,
 			SuccessfulRequests: 95,
