@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,12 +9,13 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
-// DirectDHT provides enhanced DHT operations using IPFS API
+// DirectDHT provides enhanced DHT operations using storage manager
 type DirectDHT struct {
-	ipfsClient    *ipfs.Client
+	storageManager *storage.Manager
 	
 	// Local cache of announcements
 	cache         map[string][]*announce.Announcement
@@ -32,14 +32,14 @@ type DirectDHT struct {
 
 // DirectDHTConfig configuration for direct DHT
 type DirectDHTConfig struct {
-	IPFSClient   *ipfs.Client
-	CacheExpiry  time.Duration
+	StorageManager *storage.Manager
+	CacheExpiry    time.Duration
 }
 
 // NewDirectDHT creates a new direct DHT implementation
 func NewDirectDHT(config DirectDHTConfig) (*DirectDHT, error) {
-	if config.IPFSClient == nil {
-		return nil, errors.New("IPFS client is required")
+	if config.StorageManager == nil {
+		return nil, errors.New("storage manager is required")
 	}
 	
 	cacheExpiry := config.CacheExpiry
@@ -48,9 +48,9 @@ func NewDirectDHT(config DirectDHTConfig) (*DirectDHT, error) {
 	}
 	
 	dht := &DirectDHT{
-		ipfsClient:  config.IPFSClient,
-		cache:       make(map[string][]*announce.Announcement),
-		cacheExpiry: cacheExpiry,
+		storageManager: config.StorageManager,
+		cache:          make(map[string][]*announce.Announcement),
+		cacheExpiry:    cacheExpiry,
 	}
 	
 	// Start cache cleanup routine
@@ -72,12 +72,17 @@ func (d *DirectDHT) PutAnnouncement(ctx context.Context, announcement *announce.
 		return fmt.Errorf("failed to serialize: %w", err)
 	}
 	
-	// Store in IPFS
-	cid, err := d.ipfsClient.Add(bytes.NewReader(data))
+	// Store using storage manager
+	block, err := blocks.NewBlock(data)
 	if err != nil {
-		return fmt.Errorf("failed to store in IPFS: %w", err)
+		return fmt.Errorf("failed to create block: %w", err)
 	}
-	_ = cid // CID is stored for future DHT implementation
+	
+	address, err := d.storageManager.Put(ctx, block)
+	if err != nil {
+		return fmt.Errorf("failed to store in storage: %w", err)
+	}
+	_ = address // Address is stored for future DHT implementation
 	
 	// Create composite key for DHT-like storage
 	compositeKey := fmt.Sprintf("noisefs-announce-%s-%d", announcement.TopicHash, announcement.Timestamp)

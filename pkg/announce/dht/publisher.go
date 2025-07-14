@@ -1,7 +1,6 @@
 package dht
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,7 +9,8 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
@@ -27,9 +27,9 @@ const (
 
 // Publisher handles publishing announcements to IPFS DHT
 type Publisher struct {
-	ipfsClient *ipfs.Client
-	shell      *shell.Shell
-	directDHT  *DirectDHT // Optional direct DHT for enhanced access
+	storageManager *storage.Manager
+	shell          *shell.Shell
+	directDHT      *DirectDHT // Optional direct DHT for enhanced access
 	
 	// Rate limiting
 	publishRate   time.Duration
@@ -44,15 +44,15 @@ type Publisher struct {
 
 // PublisherConfig holds configuration for the publisher
 type PublisherConfig struct {
-	IPFSClient    *ipfs.Client
-	IPFSShell     *shell.Shell
-	PublishRate   time.Duration // Minimum time between publishes to same topic
+	StorageManager *storage.Manager
+	IPFSShell      *shell.Shell
+	PublishRate    time.Duration // Minimum time between publishes to same topic
 }
 
 // NewPublisher creates a new DHT publisher
 func NewPublisher(config PublisherConfig) (*Publisher, error) {
-	if config.IPFSClient == nil || config.IPFSShell == nil {
-		return nil, errors.New("IPFS client and shell are required")
+	if config.StorageManager == nil || config.IPFSShell == nil {
+		return nil, errors.New("storage manager and shell are required")
 	}
 	
 	publishRate := config.PublishRate
@@ -61,10 +61,10 @@ func NewPublisher(config PublisherConfig) (*Publisher, error) {
 	}
 	
 	return &Publisher{
-		ipfsClient:  config.IPFSClient,
-		shell:       config.IPFSShell,
-		publishRate: publishRate,
-		lastPublish: make(map[string]time.Time),
+		storageManager: config.StorageManager,
+		shell:          config.IPFSShell,
+		publishRate:    publishRate,
+		lastPublish:    make(map[string]time.Time),
 	}, nil
 }
 
@@ -107,15 +107,21 @@ func (p *Publisher) Publish(ctx context.Context, announcement *announce.Announce
 	publishCtx, cancel := context.WithTimeout(ctx, defaultPublishTimeout)
 	defer cancel()
 	
-	// Store in IPFS first
-	cid, err := p.ipfsClient.Add(bytes.NewReader(data))
+	// Store using storage manager first
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		p.incrementErrors()
+		return fmt.Errorf("failed to create block: %w", err)
+	}
+	
+	address, err := p.storageManager.Put(publishCtx, block)
 	if err != nil {
 		p.incrementErrors()
 		return fmt.Errorf("failed to store announcement: %w", err)
 	}
 	
 	// Publish CID to DHT
-	if err := p.publishToDHT(publishCtx, timestampedKey, cid); err != nil {
+	if err := p.publishToDHT(publishCtx, timestampedKey, address.ID); err != nil {
 		p.incrementErrors()
 		return fmt.Errorf("failed to publish to DHT: %w", err)
 	}

@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	shell "github.com/ipfs/go-ipfs-api"
 )
 
@@ -19,9 +18,9 @@ type AnnouncementHandler func(announcement *announce.Announcement) error
 
 // Subscriber handles subscribing to announcement topics
 type Subscriber struct {
-	ipfsClient *ipfs.Client
-	shell      *shell.Shell
-	directDHT  *DirectDHT // Optional direct DHT for enhanced access
+	storageManager *storage.Manager
+	shell          *shell.Shell
+	directDHT      *DirectDHT // Optional direct DHT for enhanced access
 	
 	// Subscriptions
 	subscriptions map[string]*subscription
@@ -50,16 +49,16 @@ type subscription struct {
 
 // SubscriberConfig holds configuration for the subscriber
 type SubscriberConfig struct {
-	IPFSClient   *ipfs.Client
-	IPFSShell    *shell.Shell
-	DedupWindow  time.Duration // How long to remember seen announcements
-	PollInterval time.Duration // How often to check for new announcements
+	StorageManager *storage.Manager
+	IPFSShell      *shell.Shell
+	DedupWindow    time.Duration // How long to remember seen announcements
+	PollInterval   time.Duration // How often to check for new announcements
 }
 
 // NewSubscriber creates a new DHT subscriber
 func NewSubscriber(config SubscriberConfig) (*Subscriber, error) {
-	if config.IPFSClient == nil || config.IPFSShell == nil {
-		return nil, errors.New("IPFS client and shell are required")
+	if config.StorageManager == nil || config.IPFSShell == nil {
+		return nil, errors.New("storage manager and shell are required")
 	}
 	
 	dedupWindow := config.DedupWindow
@@ -75,14 +74,14 @@ func NewSubscriber(config SubscriberConfig) (*Subscriber, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	return &Subscriber{
-		ipfsClient:        config.IPFSClient,
-		shell:            config.IPFSShell,
-		subscriptions:    make(map[string]*subscription),
+		storageManager:    config.StorageManager,
+		shell:             config.IPFSShell,
+		subscriptions:     make(map[string]*subscription),
 		seenAnnouncements: make(map[string]time.Time),
-		dedupWindow:      dedupWindow,
-		pollInterval:     pollInterval,
-		ctx:              ctx,
-		cancel:           cancel,
+		dedupWindow:       dedupWindow,
+		pollInterval:      pollInterval,
+		ctx:               ctx,
+		cancel:            cancel,
 	}, nil
 }
 
@@ -336,16 +335,14 @@ func (s *Subscriber) SetDirectDHT(dht *DirectDHT) {
 
 // FetchAnnouncement retrieves a specific announcement by CID
 func (s *Subscriber) FetchAnnouncement(cid string) (*announce.Announcement, error) {
-	reader, err := s.ipfsClient.Cat(cid)
+	// Retrieve using storage manager
+	address := &storage.BlockAddress{ID: cid}
+	block, err := s.storageManager.Get(context.Background(), address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch announcement: %w", err)
 	}
-	defer reader.Close()
 	
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read announcement: %w", err)
-	}
+	data := block.Data
 	
 	return announce.FromJSON(data)
 }
