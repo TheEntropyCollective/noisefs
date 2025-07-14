@@ -1,6 +1,7 @@
 package fuse
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,8 +12,8 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // TestFuseIntegration tests the FUSE filesystem with real IPFS integration
@@ -31,15 +32,16 @@ func TestFuseIntegration(t *testing.T) {
 	// Create temporary index file
 	indexFile := filepath.Join(mountDir, "test_index.json")
 
-	// Setup IPFS client (requires running IPFS daemon)
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+	// Setup storage manager and NoiseFS client
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
 	if err != nil {
-		t.Skipf("Skipping FUSE test - IPFS not available: %v", err)
+		t.Skipf("Skipping FUSE test - storage manager setup failed: %v", err)
 	}
+	defer storageManager.Stop(context.Background())
 
 	// Create cache and NoiseFS client
 	blockCache := cache.NewMemoryCache(100)
-	client, err := noisefs.NewClient(ipfsClient, blockCache)
+	client, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		t.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -56,7 +58,7 @@ func TestFuseIntegration(t *testing.T) {
 	// Start mount in background
 	mountErr := make(chan error, 1)
 	go func() {
-		err := MountWithIndex(client, ipfsClient, opts, indexFile)
+		err := MountWithIndex(client, storageManager, opts, indexFile)
 		mountErr <- err
 	}()
 
@@ -386,15 +388,16 @@ func BenchmarkFuseFileOperations(b *testing.B) {
 	}
 	defer os.RemoveAll(mountDir)
 
-	// Setup IPFS client
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+	// Setup storage manager
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
 	if err != nil {
-		b.Skipf("Skipping FUSE benchmark - IPFS not available: %v", err)
+		b.Skipf("Skipping FUSE benchmark - storage manager setup failed: %v", err)
 	}
+	defer storageManager.Stop(context.Background())
 
 	// Create cache and NoiseFS client
 	blockCache := cache.NewMemoryCache(100)
-	client, err := noisefs.NewClient(ipfsClient, blockCache)
+	client, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		b.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -411,7 +414,7 @@ func BenchmarkFuseFileOperations(b *testing.B) {
 	// Start mount in background
 	mountErr := make(chan error, 1)
 	go func() {
-		err := MountWithIndex(client, ipfsClient, opts, "")
+		err := MountWithIndex(client, storageManager, opts, "")
 		mountErr <- err
 	}()
 

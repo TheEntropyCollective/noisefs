@@ -13,7 +13,6 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/relay"
@@ -25,7 +24,6 @@ import (
 type SystemCoordinator struct {
 	// Core components
 	config           *config.Config
-	ipfsClient       *ipfs.Client
 	storageManager   *storage.Manager
 	// blockManager is not needed - blocks are managed directly
 	noisefsClient    *noisefs.Client
@@ -76,10 +74,6 @@ func NewSystemCoordinator(cfg *config.Config) (*SystemCoordinator, error) {
 	}
 	
 	// Initialize components in dependency order
-	if err := coordinator.initializeIPFS(); err != nil {
-		return nil, fmt.Errorf("failed to initialize IPFS: %w", err)
-	}
-	
 	if err := coordinator.initializeStorage(); err != nil {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
@@ -112,34 +106,12 @@ func NewSystemCoordinator(cfg *config.Config) (*SystemCoordinator, error) {
 	return coordinator, nil
 }
 
-// initializeIPFS sets up the IPFS client
-func (sc *SystemCoordinator) initializeIPFS() error {
-	ipfsClient, err := ipfs.NewClient(sc.config.IPFS.APIEndpoint)
-	if err != nil {
-		return err
-	}
-	sc.ipfsClient = ipfsClient
-	return nil
-}
-
 // initializeStorage sets up the storage manager
 func (sc *SystemCoordinator) initializeStorage() error {
 	// Create storage manager with IPFS backend
-	backendConfig := &storage.BackendConfig{
-		Type:     "ipfs",
-		Enabled:  true,
-		Priority: 100,
-		Settings: map[string]interface{}{
-			"endpoint": sc.config.IPFS.APIEndpoint,
-			"client":   sc.ipfsClient,
-		},
-	}
-	
-	storageConfig := &storage.Config{
-		Backends: map[string]*storage.BackendConfig{
-			"ipfs": backendConfig,
-		},
-		DefaultBackend: "ipfs",
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = sc.config.IPFS.APIEndpoint
 	}
 	
 	manager, err := storage.NewManager(storageConfig)
@@ -279,7 +251,7 @@ func (sc *SystemCoordinator) initializeReuse() error {
 	poolConfig := reuse.DefaultPoolConfig()
 	poolConfig.PublicDomainRatio = 0.3
 	poolConfig.MinReuseCount = 3
-	sc.universalPool = reuse.NewUniversalBlockPool(poolConfig, sc.ipfsClient)
+	sc.universalPool = reuse.NewUniversalBlockPool(poolConfig, sc.storageManager)
 	
 	// Initialize the pool
 	if err := sc.universalPool.Initialize(); err != nil {
@@ -297,7 +269,7 @@ func (sc *SystemCoordinator) initializeReuse() error {
 	sc.publicMixer = reuse.NewPublicDomainMixer(sc.universalPool, mixerConfig)
 	
 	// Create reuse-aware client
-	reuseClient, err := reuse.NewReuseAwareClient(sc.ipfsClient, sc.blockCache)
+	reuseClient, err := reuse.NewReuseAwareClient(sc.storageManager, sc.blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create reuse client: %w", err)
 	}
@@ -323,14 +295,14 @@ func (sc *SystemCoordinator) initializeCore() error {
 	// Block management is handled by the blocks package directly
 	
 	// Create NoiseFS client
-	noisefsClient, err := noisefs.NewClient(sc.ipfsClient, sc.blockCache)
+	noisefsClient, err := noisefs.NewClient(sc.storageManager, sc.blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
 	sc.noisefsClient = noisefsClient
 	
 	// Create descriptor store
-	sc.descriptorStore, err = descriptors.NewStore(sc.ipfsClient)
+	sc.descriptorStore, err = descriptors.NewStore(sc.storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}

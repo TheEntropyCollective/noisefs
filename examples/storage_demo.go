@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/integration"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // Simple demonstration of the new storage abstraction layer
@@ -14,11 +15,21 @@ func main() {
 	fmt.Println("================================")
 
 	// Create storage manager with default IPFS backend
-	storageManager, err := integration.CreateDefaultStorageManager("127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		log.Fatalf("Failed to create storage manager: %v", err)
 	}
-	defer storageManager.Close()
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	// Test connectivity
 	if !storageManager.IsConnected() {
@@ -72,7 +83,7 @@ func main() {
 	fmt.Printf("✅ Data integrity verified\n")
 
 	// Get health status
-	health := storageManager.HealthCheck()
+	health := storageManager.HealthCheck(context.Background())
 	fmt.Printf("🏥 Backend health: %s\n", health.Status)
 
 	fmt.Println("\n🎉 Storage abstraction demo completed successfully!")

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 	
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // RequestTracker tracks the status of distributed requests
@@ -14,7 +14,7 @@ type RequestTracker struct {
 	mu               sync.RWMutex
 	activeRequests   map[string]*TrackedRequest
 	completedRequests map[string]*CompletedRequest
-	blockRetriever   ipfs.BlockStore
+	blockRetriever   storage.Backend
 }
 
 // TrackedRequest represents a request being tracked
@@ -69,7 +69,7 @@ type DistributionResult struct {
 }
 
 // NewRequestTracker creates a new request tracker
-func NewRequestTracker(blockRetriever ipfs.BlockStore) *RequestTracker {
+func NewRequestTracker(blockRetriever storage.Backend) *RequestTracker {
 	return &RequestTracker{
 		activeRequests:    make(map[string]*TrackedRequest),
 		completedRequests: make(map[string]*CompletedRequest),
@@ -161,13 +161,13 @@ func (rt *RequestTracker) GetTrackedRequest(requestID string) (*TrackedRequest, 
 // EnhancedMixerExecutor provides enhanced execution with proper tracking
 type EnhancedMixerExecutor struct {
 	tracker        *RequestTracker
-	blockRetriever ipfs.BlockStore
+	blockRetriever storage.Backend
 	distributor    *RequestDistributor
 	coverCache     *CoverBlockCache
 }
 
 // NewEnhancedMixerExecutor creates a new enhanced mixer executor
-func NewEnhancedMixerExecutor(blockRetriever ipfs.BlockStore, distributor *RequestDistributor, coverCache *CoverBlockCache) *EnhancedMixerExecutor {
+func NewEnhancedMixerExecutor(blockRetriever storage.Backend, distributor *RequestDistributor, coverCache *CoverBlockCache) *EnhancedMixerExecutor {
 	return &EnhancedMixerExecutor{
 		tracker:        NewRequestTracker(blockRetriever),
 		blockRetriever: blockRetriever,
@@ -263,10 +263,14 @@ func (e *EnhancedMixerExecutor) ExecuteMixedRequest(ctx context.Context, mixed *
 	}
 }
 
-// fetchBlockData fetches actual block data from IPFS or relays
+// fetchBlockData fetches actual block data from storage backend or relays
 func (e *EnhancedMixerExecutor) fetchBlockData(ctx context.Context, blockID string, distribution *DistributedRequest) ([]byte, error) {
-	// Try to fetch from IPFS directly first
-	block, err := e.blockRetriever.RetrieveBlock(blockID)
+	// Try to fetch from storage backend directly first
+	address := &storage.BlockAddress{
+		ID:          blockID,
+		BackendType: storage.BackendTypeIPFS,
+	}
+	block, err := e.blockRetriever.Get(ctx, address)
 	if err == nil && block != nil {
 		return block.Data, nil
 	}

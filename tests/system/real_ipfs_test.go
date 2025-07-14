@@ -17,7 +17,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // RealIPFSTestSuite provides real IPFS network testing

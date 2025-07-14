@@ -15,7 +15,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // TestEndToEndFlow demonstrates the complete upload/download cycle
@@ -29,17 +29,22 @@ func TestEndToEndFlow(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
 
-	// Initialize components
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Initialize storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Fatalf("Failed to create IPFS client: %v", err)
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
 	// Create cache
 	blockCache := cache.NewMemoryCache(100)
 
 	// Create NoiseFS client
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		t.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -204,7 +209,12 @@ func TestEndToEndFlow(t *testing.T) {
 
 // Helper function to check if IPFS is available
 func isIPFSAvailable() bool {
-	client, err := ipfs.NewClient("http://127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "http://127.0.0.1:5001"
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		return false
 	}
@@ -213,9 +223,17 @@ func isIPFSAvailable() bool {
 	defer cancel()
 	_ = ctx // Use ctx to avoid unused warning
 
-	// Test basic IPFS connection instead of ID method
-	_, err = client.StoreBlock(&blocks.Block{Data: []byte("test"), ID: "test"})
-	return err == nil
+	// Test basic storage manager connection
+	err = storageManager.Start(ctx)
+	if err != nil {
+		return false
+	}
+	defer storageManager.Stop(ctx)
+	
+	// Test basic block storage
+	testBlock, _ := blocks.NewBlock([]byte("test"))
+	address, err := storageManager.Put(ctx, testBlock)
+	return err == nil && address != nil
 }
 
 // Helper function to detect patterns in data
@@ -317,9 +335,14 @@ func BenchmarkUploadDownload(b *testing.B) {
 	}
 
 	// Setup
-	ipfsClient, _ := ipfs.NewClient("http://127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "http://127.0.0.1:5001"
+	}
+	
+	storageManager, _ := storage.NewManager(storageConfig)
 	blockCache := cache.NewMemoryCache(100)
-	noisefsClient, _ := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, _ := noisefs.NewClient(storageManager, blockCache)
 
 	// Test data (10KB)
 	testData := make([]byte, 10*1024)

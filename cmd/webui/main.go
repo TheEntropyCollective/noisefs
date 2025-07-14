@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -18,19 +19,19 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	noisefsX509 "github.com/TheEntropyCollective/noisefs/cmd/webui/tls"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 )
 
 type WebUI struct {
-	ipfsClient    *ipfs.Client
-	noisefsClient *noisefs.Client
-	cache         cache.Cache
-	config        *config.Config
-	validator     *validation.Validator
-	rateLimiter   *validation.RateLimiter
+	storageManager *storage.Manager
+	noisefsClient  *noisefs.Client
+	cache          cache.Cache
+	config         *config.Config
+	validator      *validation.Validator
+	rateLimiter    *validation.RateLimiter
 }
 
 type UploadResponse struct {
@@ -70,15 +71,26 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
-	if err != nil {
-		log.Fatalf("Failed to connect to IPFS: %v", err)
+	// Create storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
-
+	
+	storageManager, err := storage.NewManager(storageConfig)
+	if err != nil {
+		log.Fatalf("Failed to create storage manager: %v", err)
+	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	// Create cache and NoiseFS client
 	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -92,12 +104,12 @@ func main() {
 	rateLimiter := validation.NewRateLimiter(rateLimitConfig)
 
 	webui := &WebUI{
-		ipfsClient:    ipfsClient,
-		noisefsClient: noisefsClient,
-		cache:         blockCache,
-		config:        cfg,
-		validator:     validator,
-		rateLimiter:   rateLimiter,
+		storageManager: storageManager,
+		noisefsClient:  noisefsClient,
+		cache:          blockCache,
+		config:         cfg,
+		validator:      validator,
+		rateLimiter:    rateLimiter,
 	}
 
 	// Set up HTTP routes
@@ -665,7 +677,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 	
 	if useEncryption {
 		// Use encrypted store
-		encStore, storeErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
+		encStore, storeErr := descriptors.NewEncryptedStoreWithPassword(w.storageManager, password)
 		if storeErr != nil {
 			return "", storeErr
 		}
@@ -676,7 +688,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 		descriptorCID = cid
 	} else {
 		// Use regular store for public content
-		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		store, storeErr := descriptors.NewStore(w.storageManager)
 		if storeErr != nil {
 			return "", storeErr
 		}
@@ -704,7 +716,7 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 	
 	if password != "" {
 		// Try encrypted store first
-		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
+		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.storageManager, password)
 		if encErr == nil {
 			descriptor, loadErr = encStore.Load(descriptorCID)
 			if loadErr == nil {
@@ -718,7 +730,7 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 	
 	if descriptor == nil {
 		// Fallback to regular store (for unencrypted descriptors or if password fails)
-		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		store, storeErr := descriptors.NewStore(w.storageManager)
 		if storeErr != nil {
 			return nil, "", storeErr
 		}
@@ -740,14 +752,16 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 
 	for i, blockPair := range descriptor.Blocks {
 		// Get data block
-		dataBlock, err := w.ipfsClient.RetrieveBlock(blockPair.DataCID)
+		address := &storage.BlockAddress{ID: blockPair.DataCID}
+		dataBlock, err := w.storageManager.Get(context.Background(), address)
 		if err != nil {
 			return nil, "", err
 		}
 		dataBlocks[i] = dataBlock
 
 		// Get first randomizer block
-		randomizer1Block, err := w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID1)
+		rand1Address := &storage.BlockAddress{ID: blockPair.RandomizerCID1}
+		randomizer1Block, err := w.storageManager.Get(context.Background(), rand1Address)
 		if err != nil {
 			return nil, "", err
 		}
@@ -755,7 +769,8 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 
 		// Get second randomizer block if using 3-tuple format
 		if descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-			randomizer2Block, err := w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID2)
+			rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
+			randomizer2Block, err := w.storageManager.Get(context.Background(), rand2Address)
 			if err != nil {
 				return nil, "", err
 			}
@@ -834,7 +849,7 @@ func (w *WebUI) loadStreamingFile(descriptorCID string, password string) (*Strea
 	var loadErr error
 	
 	if password != "" {
-		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
+		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.storageManager, password)
 		if encErr == nil {
 			descriptor, loadErr = encStore.Load(descriptorCID)
 			if loadErr != nil {
@@ -844,7 +859,7 @@ func (w *WebUI) loadStreamingFile(descriptorCID string, password string) (*Strea
 	}
 	
 	if descriptor == nil {
-		store, storeErr := descriptors.NewStore(w.ipfsClient)
+		store, storeErr := descriptors.NewStore(w.storageManager)
 		if storeErr != nil {
 			return nil, storeErr
 		}
@@ -1028,13 +1043,15 @@ func (w *WebUI) reconstructBlock(descriptor *descriptors.Descriptor, blockIdx in
 	blockPair := descriptor.Blocks[blockIdx]
 	
 	// Get data block
-	dataBlock, err := w.ipfsClient.RetrieveBlock(blockPair.DataCID)
+	address := &storage.BlockAddress{ID: blockPair.DataCID}
+	dataBlock, err := w.storageManager.Get(context.Background(), address)
 	if err != nil {
 		return nil, err
 	}
 	
 	// Get first randomizer block
-	randomizer1Block, err := w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID1)
+	rand1Address := &storage.BlockAddress{ID: blockPair.RandomizerCID1}
+	randomizer1Block, err := w.storageManager.Get(context.Background(), rand1Address)
 	if err != nil {
 		return nil, err
 	}
@@ -1042,7 +1059,8 @@ func (w *WebUI) reconstructBlock(descriptor *descriptors.Descriptor, blockIdx in
 	// Get second randomizer block if using 3-tuple format
 	var randomizer2Block *blocks.Block
 	if descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-		randomizer2Block, err = w.ipfsClient.RetrieveBlock(blockPair.RandomizerCID2)
+		rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
+		randomizer2Block, err = w.storageManager.Get(context.Background(), rand2Address)
 		if err != nil {
 			return nil, err
 		}

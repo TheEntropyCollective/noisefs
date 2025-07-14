@@ -4,7 +4,7 @@ package fuse
 
 import (
 	"errors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
@@ -28,7 +28,7 @@ type MountInfo struct {
 }
 
 // Mount is a stub implementation when FUSE is not available
-func Mount(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions) error {
+func Mount(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions) error {
 	return errors.New("FUSE support not available - build with 'go build -tags fuse' and ensure macFUSE/FUSE is installed")
 }
 
@@ -43,17 +43,17 @@ func ListMounts() ([]MountInfo, error) {
 }
 
 // Daemon is a stub implementation when FUSE is not available
-func Daemon(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, pidFile string) error {
+func Daemon(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, pidFile string) error {
 	return errors.New("FUSE support not available - build with 'go build -tags fuse' and ensure macFUSE/FUSE is installed")
 }
 
 // MountWithIndex is a stub implementation when FUSE is not available
-func MountWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, indexPath string) error {
+func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, indexPath string) error {
 	return errors.New("FUSE support not available - build with 'go build -tags fuse' and ensure macFUSE/FUSE is installed")
 }
 
 // DaemonWithIndex is a stub implementation when FUSE is not available
-func DaemonWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, pidFile, indexPath string) error {
+func DaemonWithIndex(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, pidFile, indexPath string) error {
 	return errors.New("FUSE support not available - build with 'go build -tags fuse' and ensure macFUSE/FUSE is installed")
 }
 

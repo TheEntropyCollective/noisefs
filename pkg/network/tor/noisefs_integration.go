@@ -8,12 +8,12 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
-// TorEnabledClient wraps IPFS client with Tor support
+// TorEnabledClient wraps storage manager with Tor support
 type TorEnabledClient struct {
-	baseClient  ipfs.BlockStore
+	baseClient  storage.Backend
 	torClient   *Client
 	transport   *IPFSTransport
 	config      *config.TorConfig
@@ -30,8 +30,8 @@ type IntegrationMetrics struct {
 	AvgDirectSpeed  float64
 }
 
-// NewTorEnabledClient creates a new Tor-enabled IPFS client
-func NewTorEnabledClient(baseClient ipfs.BlockStore, cfg *config.Config) (*TorEnabledClient, error) {
+// NewTorEnabledClient creates a new Tor-enabled storage client
+func NewTorEnabledClient(baseClient storage.Backend, cfg *config.Config) (*TorEnabledClient, error) {
 	if !cfg.Tor.Enabled {
 		// Return wrapper that just uses base client
 		return &TorEnabledClient{
@@ -104,7 +104,11 @@ func (c *TorEnabledClient) StoreBlock(block *blocks.Block) (string, error) {
 	
 	// Direct upload (faster)
 	c.metrics.DirectUploads++
-	return c.baseClient.StoreBlock(block)
+	address, err := c.baseClient.Put(context.Background(), block)
+	if err != nil {
+		return "", err
+	}
+	return address.ID, nil
 }
 
 // RetrieveBlock retrieves a block, using Tor if configured
@@ -120,13 +124,21 @@ func (c *TorEnabledClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	
 	// Direct download (faster)
 	c.metrics.DirectDownloads++
-	return c.baseClient.RetrieveBlock(cid)
+	address := &storage.BlockAddress{
+		ID:          cid,
+		BackendType: storage.BackendTypeIPFS,
+	}
+	return c.baseClient.Get(context.Background(), address)
 }
 
 // HasBlock checks if a block exists (always direct for performance)
 func (c *TorEnabledClient) HasBlock(cid string) (bool, error) {
 	// PERFORMANCE: Always use direct connection for existence checks
-	return c.baseClient.HasBlock(cid)
+	address := &storage.BlockAddress{
+		ID:          cid,
+		BackendType: storage.BackendTypeIPFS,
+	}
+	return c.baseClient.Has(context.Background(), address)
 }
 
 // storeBlockViaTor uploads a block through Tor
@@ -191,11 +203,11 @@ func (c *TorEnabledClient) BatchStoreBlocks(blocks []*blocks.Block) ([]string, e
 		// Direct batch upload
 		cids := make([]string, len(blocks))
 		for i, block := range blocks {
-			cid, err := c.baseClient.StoreBlock(block)
+			address, err := c.baseClient.Put(context.Background(), block)
 			if err != nil {
 				return nil, err
 			}
-			cids[i] = cid
+			cids[i] = address.ID
 			c.metrics.DirectUploads++
 		}
 		return cids, nil
@@ -253,7 +265,12 @@ func (c *TorEnabledClient) StoreDescriptor(desc *descriptors.Descriptor) (string
 	}
 	
 	// Fallback to direct
-	return c.baseClient.StoreBlock(&blocks.Block{Data: mustMarshal(desc)})
+	block := &blocks.Block{Data: mustMarshal(desc)}
+	address, err := c.baseClient.Put(context.Background(), block)
+	if err != nil {
+		return "", err
+	}
+	return address.ID, nil
 }
 
 // shouldUseTorForUpload decides whether to use Tor for uploads

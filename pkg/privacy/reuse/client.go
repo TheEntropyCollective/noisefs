@@ -7,7 +7,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
@@ -31,23 +31,21 @@ type UploadResult struct {
 }
 
 // NewReuseAwareClient creates a client with mandatory reuse enforcement
-func NewReuseAwareClient(ipfsClient ipfs.BlockStore, blockCache cache.Cache) (*ReuseAwareClient, error) {
+func NewReuseAwareClient(storageManager *storage.Manager, blockCache cache.Cache) (*ReuseAwareClient, error) {
 	// Create base NoiseFS client
-	baseClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	baseClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create base client: %w", err)
 	}
 
-	// Initialize reuse components
-	// Note: We need the actual IPFS client for the pool
-	var actualIPFSClient *ipfs.Client
-	if ipfsClientConcrete, ok := ipfsClient.(*ipfs.Client); ok {
-		actualIPFSClient = ipfsClientConcrete
-	} else {
-		return nil, fmt.Errorf("ipfsClient must be of type *ipfs.Client for reuse functionality")
+	// Get the default backend for reuse functionality
+	backend, err := storageManager.GetDefaultBackend()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get default backend: %w", err)
 	}
 	
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), actualIPFSClient)
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), backend)
+	pool.StorageManager = storageManager // Store manager reference for descriptors
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 	mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
 
@@ -115,7 +113,7 @@ func (client *ReuseAwareClient) UploadFile(reader io.Reader, filename string, bl
 
 	// Step 4: Store descriptor in IPFS
 	// Get the IPFS client from the pool (which we know has it)
-	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
+	descriptorStore, err := descriptors.NewStore(client.pool.StorageManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -155,7 +153,7 @@ func (client *ReuseAwareClient) UploadFile(reader io.Reader, filename string, bl
 // DownloadFile downloads a file, preserving reuse tracking
 func (client *ReuseAwareClient) DownloadFile(descriptorCID string) ([]byte, error) {
 	// Load descriptor
-	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
+	descriptorStore, err := descriptors.NewStore(client.pool.StorageManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -197,7 +195,7 @@ func (client *ReuseAwareClient) DownloadFile(descriptorCID string) ([]byte, erro
 // ValidateDescriptor validates that a descriptor meets reuse requirements
 func (client *ReuseAwareClient) ValidateDescriptor(descriptorCID string) (*ValidationResult, error) {
 	// Load descriptor
-	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
+	descriptorStore, err := descriptors.NewStore(client.pool.StorageManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -247,7 +245,7 @@ func (client *ReuseAwareClient) GetLegalDocumentation(descriptorCID string) (*Le
 	}
 
 	// Load descriptor for analysis
-	descriptorStore, err := descriptors.NewStore(client.pool.ipfsClient)
+	descriptorStore, err := descriptors.NewStore(client.pool.StorageManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}

@@ -551,3 +551,35 @@ func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
 		Issues:    issues,
 	}
 }
+
+// Convenience methods for legacy compatibility (work with CIDs directly)
+
+// StoreBlock stores a block and returns its CID (convenience method)
+func (m *Manager) StoreBlock(block *blocks.Block) (string, error) {
+	ctx := context.Background()
+	address, err := m.Put(ctx, block)
+	if err != nil {
+		return "", err
+	}
+	return address.ID, nil
+}
+
+// RetrieveBlock retrieves a block by CID (convenience method)
+func (m *Manager) RetrieveBlock(cid string) (*blocks.Block, error) {
+	ctx := context.Background()
+	address := &BlockAddress{
+		ID:          cid,
+		BackendType: m.config.DefaultBackend,
+	}
+	return m.Get(ctx, address)
+}
+
+// HasBlock checks if a block exists by CID (convenience method)
+func (m *Manager) HasBlock(cid string) (bool, error) {
+	ctx := context.Background()
+	address := &BlockAddress{
+		ID:          cid,
+		BackendType: m.config.DefaultBackend,
+	}
+	return m.Has(ctx, address)
+}

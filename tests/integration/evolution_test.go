@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // TestEvolutionAnalyzer demonstrates the comprehensive evolution analysis

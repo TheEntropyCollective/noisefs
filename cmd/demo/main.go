@@ -63,7 +63,9 @@ func runDemo() error {
 	// Initialize storage manager
 	fmt.Println("1. Initializing storage manager...")
 	storageConfig := storage.DefaultConfig()
-	storageConfig.IPFS.APIEndpoint = cfg.IPFS.APIEndpoint
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
 	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
@@ -345,7 +347,9 @@ func runDemoReuse() error {
 
 	// Initialize storage manager
 	storageConfig := storage.DefaultConfig()
-	storageConfig.IPFS.APIEndpoint = cfg.IPFS.APIEndpoint
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
 	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {

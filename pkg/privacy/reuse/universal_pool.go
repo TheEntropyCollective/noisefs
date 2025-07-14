@@ -10,7 +10,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/tools/bootstrap"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // UniversalBlockPool manages the mandatory pool of reusable blocks
@@ -23,7 +23,8 @@ type UniversalBlockPool struct {
 	
 	// Configuration
 	config           *PoolConfig
-	ipfsClient       *ipfs.Client
+	storageBackend   storage.Backend
+	StorageManager   *storage.Manager // Exported for access
 	initialized      bool
 }
 
@@ -75,7 +76,7 @@ func DefaultPoolConfig() *PoolConfig {
 }
 
 // NewUniversalBlockPool creates a new universal block pool
-func NewUniversalBlockPool(config *PoolConfig, ipfsClient *ipfs.Client) *UniversalBlockPool {
+func NewUniversalBlockPool(config *PoolConfig, storageBackend storage.Backend) *UniversalBlockPool {
 	if config == nil {
 		config = DefaultPoolConfig()
 	}
@@ -86,7 +87,7 @@ func NewUniversalBlockPool(config *PoolConfig, ipfsClient *ipfs.Client) *Univers
 		publicDomainCIDs: make(map[string]bool),
 		metrics:          &PoolMetrics{},
 		config:           config,
-		ipfsClient:       ipfsClient,
+		storageBackend:   storageBackend,
 		initialized:      false,
 	}
 }

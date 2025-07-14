@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -37,12 +37,12 @@ type MountInfo struct {
 }
 
 // Mount mounts the NoiseFS FUSE filesystem using go-fuse
-func Mount(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions) error {
-	return MountWithIndex(client, ipfsClient, opts, "")
+func Mount(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions) error {
+	return MountWithIndex(client, storageManager, opts, "")
 }
 
 // MountWithIndex mounts the NoiseFS FUSE filesystem with a custom index path
-func MountWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, indexPath string) error {
+func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, indexPath string) error {
 	// Ensure mount point exists
 	if err := os.MkdirAll(opts.MountPath, 0755); err != nil {
 		return fmt.Errorf("failed to create mount point: %w", err)
@@ -88,7 +88,7 @@ func MountWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountO
 	nfs := &NoiseFS{
 		FileSystem: pathfs.NewDefaultFileSystem(),
 		client:     client,
-		ipfsClient: ipfsClient,
+		storageManager: storageManager,
 		mountPath:  opts.MountPath,
 		readOnly:   opts.ReadOnly,
 		index:      index,
@@ -160,10 +160,10 @@ func Unmount(mountPath string) error {
 // NoiseFS implements pathfs.FileSystem
 type NoiseFS struct {
 	pathfs.FileSystem
-	client     *noisefs.Client
-	ipfsClient *ipfs.Client
-	mountPath  string
-	readOnly   bool
+	client         *noisefs.Client
+	storageManager *storage.Manager
+	mountPath      string
+	readOnly       bool
 	
 	// Persistent file index
 	index *FileIndex
@@ -303,7 +303,7 @@ func (fs *NoiseFS) Open(name string, flags uint32, context *fuse.Context) (nodef
 	
 	// Create NoiseFS file handle
 	readOnly := (flags & fuse.O_ANYWRITE) == 0
-	file := NewNoiseFile(fs.client, fs.ipfsClient, entry.DescriptorCID, relativePath, readOnly, fs.index)
+	file := NewNoiseFile(fs.client, fs.storageManager, entry.DescriptorCID, relativePath, readOnly, fs.index)
 	
 	return file, fuse.OK
 }
@@ -323,7 +323,7 @@ func (fs *NoiseFS) Create(name string, flags uint32, mode uint32, context *fuse.
 	relativePath := strings.TrimPrefix(name, "files/")
 	
 	// Create new NoiseFS file handle with empty descriptor CID (new file)
-	file := NewNoiseFile(fs.client, fs.ipfsClient, "", relativePath, false, fs.index)
+	file := NewNoiseFile(fs.client, fs.storageManager, "", relativePath, false, fs.index)
 	
 	return file, fuse.OK
 }
@@ -629,12 +629,12 @@ func (fs *NoiseFS) GetIndex() *FileIndex {
 }
 
 // Daemon runs the FUSE filesystem as a background daemon
-func Daemon(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, pidFile string) error {
-	return DaemonWithIndex(client, ipfsClient, opts, pidFile, "")
+func Daemon(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, pidFile string) error {
+	return DaemonWithIndex(client, storageManager, opts, pidFile, "")
 }
 
 // DaemonWithIndex runs the FUSE filesystem as a background daemon with a custom index
-func DaemonWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts MountOptions, pidFile, indexPath string) error {
+func DaemonWithIndex(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, pidFile, indexPath string) error {
 	if pidFile != "" {
 		if err := writePIDFile(pidFile); err != nil {
 			return fmt.Errorf("failed to write PID file: %w", err)
@@ -642,7 +642,7 @@ func DaemonWithIndex(client *noisefs.Client, ipfsClient *ipfs.Client, opts Mount
 		defer os.Remove(pidFile)
 	}
 	
-	return MountWithIndex(client, ipfsClient, opts, indexPath)
+	return MountWithIndex(client, storageManager, opts, indexPath)
 }
 
 func writePIDFile(pidFile string) error {

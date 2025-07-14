@@ -10,8 +10,8 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
 )
@@ -21,10 +21,10 @@ type NoiseFile struct {
 	nodefs.File
 	
 	// NoiseFS components
-	client        *noisefs.Client
-	ipfsClient    *ipfs.Client
-	descriptorCID string
-	descriptor    *descriptors.Descriptor
+	client         *noisefs.Client
+	storageManager *storage.Manager
+	descriptorCID  string
+	descriptor     *descriptors.Descriptor
 	
 	// File metadata
 	path     string
@@ -48,25 +48,25 @@ type NoiseFile struct {
 }
 
 // NewNoiseFile creates a new NoiseFS file handle
-func NewNoiseFile(client *noisefs.Client, ipfsClient *ipfs.Client, descriptorCID string, path string, readOnly bool, index *FileIndex) *NoiseFile {
+func NewNoiseFile(client *noisefs.Client, storageManager *storage.Manager, descriptorCID string, path string, readOnly bool, index *FileIndex) *NoiseFile {
 	return &NoiseFile{
-		File:          nodefs.NewDefaultFile(),
-		client:        client,
-		ipfsClient:    ipfsClient,
-		descriptorCID: descriptorCID,
-		path:          path,
-		readOnly:      readOnly,
-		index:         index,
+		File:           nodefs.NewDefaultFile(),
+		client:         client,
+		storageManager: storageManager,
+		descriptorCID:  descriptorCID,
+		path:           path,
+		readOnly:       readOnly,
+		index:          index,
 	}
 }
 
-// loadDescriptor loads the file descriptor from IPFS
+// loadDescriptor loads the file descriptor from storage
 func (f *NoiseFile) loadDescriptor() error {
 	if f.descriptor != nil {
 		return nil
 	}
 	
-	store, err := descriptors.NewStore(f.ipfsClient)
+	store, err := descriptors.NewStore(f.storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
@@ -93,14 +93,14 @@ func (f *NoiseFile) downloadContent() ([]byte, error) {
 	
 	for i, blockPair := range f.descriptor.Blocks {
 		// Get data block
-		dataBlock, err := f.ipfsClient.RetrieveBlock(blockPair.DataCID)
+		dataBlock, err := f.storageManager.RetrieveBlock(blockPair.DataCID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve data block %d: %w", i, err)
 		}
 		dataBlocks[i] = dataBlock
 		
 		// Get first randomizer block
-		randomizer1Block, err := f.ipfsClient.RetrieveBlock(blockPair.RandomizerCID1)
+		randomizer1Block, err := f.storageManager.RetrieveBlock(blockPair.RandomizerCID1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
 		}
@@ -108,7 +108,7 @@ func (f *NoiseFile) downloadContent() ([]byte, error) {
 		
 		// Get second randomizer block if using 3-tuple format
 		if f.descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-			randomizer2Block, err := f.ipfsClient.RetrieveBlock(blockPair.RandomizerCID2)
+			randomizer2Block, err := f.storageManager.RetrieveBlock(blockPair.RandomizerCID2)
 			if err != nil {
 				return nil, fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 			}
@@ -221,8 +221,8 @@ func (f *NoiseFile) uploadFile() error {
 		}
 	}
 	
-	// Store descriptor in IPFS
-	store, err := descriptors.NewStore(f.ipfsClient)
+	// Store descriptor in storage
+	store, err := descriptors.NewStore(f.storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}

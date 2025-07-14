@@ -33,7 +33,7 @@ import (
 	noisefsConfig "github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/validation"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	shell "github.com/ipfs/go-ipfs-api"
@@ -42,12 +42,12 @@ import (
 // UnifiedWebUI combines file management and announcement discovery
 type UnifiedWebUI struct {
 	// File management components
-	ipfsClient    *ipfs.Client
-	noisefsClient *noisefs.Client
-	cache         cache.Cache
-	config        *noisefsConfig.Config
-	validator     *validation.Validator
-	rateLimiter   *validation.RateLimiter
+	storageManager *storage.Manager
+	noisefsClient  *noisefs.Client
+	cache          cache.Cache
+	config         *noisefsConfig.Config
+	validator      *validation.Validator
+	rateLimiter    *validation.RateLimiter
 	
 	// Announcement components
 	store            *store.Store
@@ -221,15 +221,26 @@ func main() {
 		cfg.IPFS.APIEndpoint = *ipfsAPI
 	}
 
-	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
-	if err != nil {
-		log.Fatalf("Failed to connect to IPFS: %v", err)
+	// Create storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
+	if err != nil {
+		log.Fatalf("Failed to create storage manager: %v", err)
+	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	// Create cache and NoiseFS client
 	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -272,9 +283,9 @@ func main() {
 
 	// Create subscribers
 	dhtSubscriber, err := dht.NewSubscriber(dht.SubscriberConfig{
-		IPFSClient:   ipfsClient,
-		IPFSShell:    ipfsShell,
-		PollInterval: *pollInterval,
+		StorageManager: storageManager,
+		IPFSShell:      ipfsShell,
+		PollInterval:   *pollInterval,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create DHT subscriber: %v", err)
@@ -287,9 +298,9 @@ func main() {
 
 	// Create publishers
 	dhtPublisher, err := dht.NewPublisher(dht.PublisherConfig{
-		IPFSClient:  ipfsClient,
-		IPFSShell:   ipfsShell,
-		PublishRate: 5 * time.Minute,
+		StorageManager: storageManager,
+		IPFSShell:      ipfsShell,
+		PublishRate:    5 * time.Minute,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create DHT publisher: %v", err)
@@ -311,8 +322,8 @@ func main() {
 	// Create unified web UI
 	webui := &UnifiedWebUI{
 		// File management
-		ipfsClient:    ipfsClient,
-		noisefsClient: noisefsClient,
+		storageManager: storageManager,
+		noisefsClient:  noisefsClient,
 		cache:         blockCache,
 		config:        cfg,
 		validator:     validator,
@@ -636,8 +647,8 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 		// Not a NoiseFS descriptor, try direct IPFS download
 		log.Printf("Not a NoiseFS descriptor, attempting direct IPFS download: %v", err)
 		
-		// Download directly from IPFS
-		reader, err := w.ipfsClient.Cat(descriptorCID)
+		// Download directly from IPFS using shell
+		reader, err := shell.NewShell(w.config.IPFS.APIEndpoint).Cat(descriptorCID)
 		if err != nil {
 			sendError(wr, fmt.Errorf("failed to download file: %w", err), http.StatusNotFound)
 			return
@@ -806,7 +817,7 @@ func (w *UnifiedWebUI) handleInfo(wr http.ResponseWriter, r *http.Request) {
 		fileSize := int64(0)
 		
 		// Try to get file size and detect content type by downloading first 512 bytes
-		reader, err := w.ipfsClient.Cat(descriptorCID)
+		reader, err := shell.NewShell(w.config.IPFS.APIEndpoint).Cat(descriptorCID)
 		if err == nil {
 			defer reader.Close()
 			
@@ -1543,7 +1554,7 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 // loadDescriptor loads a descriptor without downloading the file
 func (w *UnifiedWebUI) loadDescriptor(descriptorCID string) (*descriptors.Descriptor, error) {
 	// Create descriptor store
-	descriptorStore, err := descriptors.NewStore(w.ipfsClient)
+	descriptorStore, err := descriptors.NewStore(w.storageManager)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create descriptor store: %w", err)
 	}

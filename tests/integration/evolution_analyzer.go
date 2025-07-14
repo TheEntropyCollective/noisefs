@@ -9,18 +9,18 @@ import (
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // TestPeer represents a simulated peer in the network
 type TestPeer struct {
-	ID           peer.ID
-	IPFSClient   *ipfs.Client
-	BlockCount   int
-	Latency      time.Duration
-	Bandwidth    float64
-	Availability float64
+	ID              peer.ID
+	StorageManager  *storage.Manager
+	BlockCount      int
+	Latency         time.Duration
+	Bandwidth       float64
+	Availability    float64
 }
 
 // TierMetrics tracks performance by cache tier
@@ -121,7 +121,7 @@ type OptimizationMetrics struct {
 
 // BaselineClient simulates the original basic NoiseFS implementation
 type BaselineClient struct {
-	ipfsClient *ipfs.Client
+	storageManager *storage.Manager
 	cache      cache.Cache
 	metrics    *BaselineMetrics
 }
@@ -186,15 +186,19 @@ func (analyzer *EvolutionAnalyzer) setupSimulatedNetwork() error {
 		peerID := peer.ID(fmt.Sprintf("peer_%d", i))
 
 		// Create mock IPFS client for testing
-		ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+		storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	storageManager, err := storage.NewManager(storageConfig)
 		if err != nil {
 			log.Printf("Creating mock IPFS client for peer %d", i)
-			ipfsClient = nil // Use mock in real testing
+			storageManager = nil // Use mock in real testing
 		}
 
 		analyzer.testPeers[i] = &TestPeer{
 			ID:           peerID,
-			IPFSClient:   ipfsClient,
+			StorageManager: storageManager,
 			BlockCount:   rand.Intn(1000) + 100,
 			Latency:      time.Duration(10+rand.Intn(90)) * time.Millisecond,
 			Bandwidth:    float64(1 + rand.Intn(100)), // MB/s
@@ -221,7 +225,11 @@ func (analyzer *EvolutionAnalyzer) setupBaselineClient() error {
 // setupMilestone4Client creates client with Milestone 4 features
 func (analyzer *EvolutionAnalyzer) setupMilestone4Client() error {
 	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		log.Println("Creating mock IPFS client for milestone4 testing")
 	}
@@ -246,7 +254,7 @@ func (analyzer *EvolutionAnalyzer) setupMilestone4Client() error {
 	}
 
 	basicCache := cache.NewMemoryCache(1000)
-	milestone4Client, err := noisefs.NewClientWithConfig(ipfsClient, basicCache, clientConfig)
+	milestone4Client, err := noisefs.NewClientWithConfig(storageManager, basicCache, clientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create milestone4 client: %w", err)
 	}
@@ -258,7 +266,11 @@ func (analyzer *EvolutionAnalyzer) setupMilestone4Client() error {
 // setupMilestone5Client creates client with privacy-preserving cache improvements
 func (analyzer *EvolutionAnalyzer) setupMilestone5Client() error {
 	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		log.Println("Creating mock IPFS client for milestone5 testing")
 	}
@@ -285,7 +297,7 @@ func (analyzer *EvolutionAnalyzer) setupMilestone5Client() error {
 	}
 
 	basicCache := cache.NewMemoryCache(1500)
-	milestone5Client, err := noisefs.NewClientWithConfig(ipfsClient, basicCache, clientConfig)
+	milestone5Client, err := noisefs.NewClientWithConfig(storageManager, basicCache, clientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create milestone5 client: %w", err)
 	}
@@ -297,7 +309,11 @@ func (analyzer *EvolutionAnalyzer) setupMilestone5Client() error {
 // setupMilestone7Client creates client with block reuse and DMCA compliance
 func (analyzer *EvolutionAnalyzer) setupMilestone7Client() error {
 	// Create IPFS client
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001")
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		log.Println("Creating mock IPFS client for milestone7 testing")
 	}
@@ -324,7 +340,7 @@ func (analyzer *EvolutionAnalyzer) setupMilestone7Client() error {
 	}
 
 	basicCache := cache.NewMemoryCache(2000)
-	milestone7Client, err := noisefs.NewClientWithConfig(ipfsClient, basicCache, clientConfig)
+	milestone7Client, err := noisefs.NewClientWithConfig(storageManager, basicCache, clientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create milestone7 client: %w", err)
 	}
@@ -336,7 +352,11 @@ func (analyzer *EvolutionAnalyzer) setupMilestone7Client() error {
 // setupCurrentClient creates client with ALL latest optimizations
 func (analyzer *EvolutionAnalyzer) setupCurrentClient() error {
 	// Create IPFS client with optimized endpoint
-	ipfsClient, err := ipfs.NewClient("127.0.0.1:5001") // Optimized endpoint
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = "127.0.0.1:5001"
+	}
+	storageManager, err := storage.NewManager(storageConfig) // Optimized endpoint
 	if err != nil {
 		log.Println("Creating mock IPFS client for current testing")
 	}
@@ -363,7 +383,7 @@ func (analyzer *EvolutionAnalyzer) setupCurrentClient() error {
 	}
 
 	basicCache := cache.NewMemoryCache(3000)
-	currentClient, err := noisefs.NewClientWithConfig(ipfsClient, basicCache, clientConfig)
+	currentClient, err := noisefs.NewClientWithConfig(storageManager, basicCache, clientConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create current client: %w", err)
 	}

@@ -168,19 +168,49 @@ func (pa *PerformanceAnalyzer) CollectMetrics() {
 			pa.cacheMetrics = append(pa.cacheMetrics, metric)
 		}
 		
-		// Collect peer metrics
+		// Collect peer metrics (TODO: implement when storage manager provides peer stats)
 		if peerStats := client.GetPeerStats(); peerStats != nil {
-			for peerID, stats := range peerStats {
-				metric := PeerMetric{
-					PeerID:         peerID,
-					Timestamp:      timestamp,
-					Latency:        stats.AverageLatency,
-					Bandwidth:      stats.Bandwidth,
-					SuccessRate:    float64(stats.SuccessfulRequests) / float64(stats.TotalRequests),
-					SelectionCount: int(stats.TotalRequests),
-					Strategy:       "mixed", // Would need to track per strategy
+			for peerID, statsInterface := range peerStats {
+				// Type assert to a stats struct (when implemented)
+				if statsMap, ok := statsInterface.(map[string]interface{}); ok {
+					// Extract metrics with safe type assertions
+					latency := time.Duration(0)
+					bandwidth := float64(0)
+					successfulReqs := int64(0)
+					totalReqs := int64(1) // Avoid division by zero
+					
+					if l, ok := statsMap["average_latency"]; ok {
+						if dur, ok := l.(time.Duration); ok {
+							latency = dur
+						}
+					}
+					if b, ok := statsMap["bandwidth"]; ok {
+						if bw, ok := b.(float64); ok {
+							bandwidth = bw
+						}
+					}
+					if s, ok := statsMap["successful_requests"]; ok {
+						if sr, ok := s.(int64); ok {
+							successfulReqs = sr
+						}
+					}
+					if t, ok := statsMap["total_requests"]; ok {
+						if tr, ok := t.(int64); ok && tr > 0 {
+							totalReqs = tr
+						}
+					}
+					
+					metric := PeerMetric{
+						PeerID:         peerID,
+						Timestamp:      timestamp,
+						Latency:        latency,
+						Bandwidth:      bandwidth,
+						SuccessRate:    float64(successfulReqs) / float64(totalReqs),
+						SelectionCount: int(totalReqs),
+						Strategy:       "mixed", // Would need to track per strategy
+					}
+					pa.peerMetrics = append(pa.peerMetrics, metric)
 				}
-				pa.peerMetrics = append(pa.peerMetrics, metric)
 			}
 		}
 	}

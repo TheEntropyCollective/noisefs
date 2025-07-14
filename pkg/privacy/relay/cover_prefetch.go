@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 	
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // SimpleRateLimiter provides basic rate limiting functionality
@@ -81,7 +81,7 @@ func (rl *SimpleRateLimiter) Stop() {
 type PrefetchWorker struct {
 	id           int
 	cache        *CoverBlockCache
-	ipfsClient   ipfs.BlockStore
+	backend      storage.Backend
 	rateLimiter  *SimpleRateLimiter
 	metrics      *PrefetchMetrics
 	errors       chan error
@@ -103,7 +103,7 @@ type PrefetchMetrics struct {
 type PrefetchManager struct {
 	workers      []*PrefetchWorker
 	workerCount  int
-	ipfsClient   ipfs.BlockStore
+	backend      storage.Backend
 	cache        *CoverBlockCache
 	metrics      *PrefetchMetrics
 	ctx          context.Context
@@ -127,7 +127,7 @@ type PrefetchConfig struct {
 }
 
 // NewPrefetchManager creates a new prefetch manager
-func NewPrefetchManager(cache *CoverBlockCache, ipfsClient ipfs.BlockStore, config PrefetchConfig) *PrefetchManager {
+func NewPrefetchManager(cache *CoverBlockCache, backend storage.Backend, config PrefetchConfig) *PrefetchManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	// Set defaults
@@ -153,7 +153,7 @@ func NewPrefetchManager(cache *CoverBlockCache, ipfsClient ipfs.BlockStore, conf
 	
 	manager := &PrefetchManager{
 		workerCount:    config.WorkerCount,
-		ipfsClient:     ipfsClient,
+		backend:        backend,
 		cache:          cache,
 		metrics:        metrics,
 		ctx:            ctx,
@@ -179,7 +179,7 @@ func (pm *PrefetchManager) initWorkers() {
 		worker := &PrefetchWorker{
 			id:          i,
 			cache:       pm.cache,
-			ipfsClient:  pm.ipfsClient,
+			backend:     pm.backend,
 			rateLimiter: rateLimiter,
 			metrics:     pm.metrics,
 			errors:      make(chan error, 10),
@@ -279,8 +279,12 @@ func (w *PrefetchWorker) prefetchBlock(ctx context.Context, blockInfo *Popularit
 		
 		start := time.Now()
 		
-		// Fetch from IPFS
-		block, err := w.ipfsClient.RetrieveBlock(blockInfo.BlockID)
+		// Fetch from storage backend
+		address := &storage.BlockAddress{
+			ID:          blockInfo.BlockID,
+			BackendType: storage.BackendTypeIPFS,
+		}
+		block, err := w.backend.Get(ctx, address)
 		if err != nil {
 			lastErr = err
 			continue
@@ -352,7 +356,7 @@ func (pm *PrefetchManager) Stop() {
 }
 
 // EnhancedPrefetchPopular replaces the simplified PrefetchPopular in CoverBlockCache
-func (cbc *CoverBlockCache) EnhancedPrefetchPopular(tracker *PopularBlockTracker, ipfsClient ipfs.BlockStore) {
+func (cbc *CoverBlockCache) EnhancedPrefetchPopular(tracker *PopularBlockTracker, backend storage.Backend) {
 	// Get popular blocks to prefetch
 	popularBlocks, err := tracker.GetRandomizedBlocks(cbc.config.PrefetchSize * 2)
 	if err != nil || len(popularBlocks) == 0 {
@@ -368,7 +372,7 @@ func (cbc *CoverBlockCache) EnhancedPrefetchPopular(tracker *PopularBlockTracker
 		BurstSize:      20,
 	}
 	
-	manager := NewPrefetchManager(cbc, ipfsClient, config)
+	manager := NewPrefetchManager(cbc, backend, config)
 	defer manager.Stop()
 	
 	// Filter blocks that need prefetching

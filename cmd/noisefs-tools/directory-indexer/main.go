@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -16,7 +17,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 func main() {
@@ -114,14 +115,26 @@ func main() {
 	logger.Info("Connecting to IPFS", map[string]interface{}{
 		"endpoint": cfg.IPFS.APIEndpoint,
 	})
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
-	if err != nil {
-		log.Fatalf("Failed to connect to IPFS: %v", err)
+	// Create storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
+	if err != nil {
+		log.Fatalf("Failed to create storage manager: %v", err)
+	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	// Create cache and client
 	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}

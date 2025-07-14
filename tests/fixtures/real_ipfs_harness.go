@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
@@ -29,7 +30,7 @@ type RealIPFSNode struct {
 	APIPort     int
 	P2PPort     int
 	APIAddress  string
-	ipfsClient  *ipfs.Client
+	ipfsClient  *storage.Manager
 	NoiseClient *noisefs.Client // Exported for test access
 	cache       cache.Cache
 }
@@ -122,12 +123,20 @@ func (h *RealIPFSTestHarness) StartNetwork() error {
 		fmt.Printf("Connecting to IPFS node %d at %s...\n", i+1, node.APIAddress)
 		
 		// Retry connection up to 3 times
-		var ipfsClient *ipfs.Client
+		var ipfsClient *storage.Manager
 		var err error
 		for attempt := 1; attempt <= 3; attempt++ {
-			ipfsClient, err = ipfs.NewClient(node.APIAddress)
+			config := storage.DefaultConfig()
+			if ipfsBackend, exists := config.Backends["ipfs"]; exists {
+				ipfsBackend.Connection.Endpoint = node.APIAddress
+			}
+			
+			ipfsClient, err = storage.NewManager(config)
 			if err == nil {
-				break
+				err = ipfsClient.Start(context.Background())
+				if err == nil {
+					break
+				}
 			}
 			fmt.Printf("  Attempt %d failed, retrying in 10s: %v\n", attempt, err)
 			time.Sleep(10 * time.Second)
@@ -253,7 +262,15 @@ func (h *RealIPFSTestHarness) verifyNetworkConnectivity() error {
 			fmt.Printf("Node %d not connected, attempting reconnection...\n", i+1)
 			
 			// Retry connection with timeout
-			ipfsClient, err := ipfs.NewClient(node.APIAddress)
+			config := storage.DefaultConfig()
+			if ipfsBackend, exists := config.Backends["ipfs"]; exists {
+				ipfsBackend.Connection.Endpoint = node.APIAddress
+			}
+			
+			ipfsClient, err := storage.NewManager(config)
+			if err == nil {
+				err = ipfsClient.Start(context.Background())
+			}
 			if err != nil {
 				fmt.Printf("Failed to connect to node %d at %s: %v\n", i+1, node.APIAddress, err)
 				continue
@@ -269,9 +286,12 @@ func (h *RealIPFSTestHarness) verifyNetworkConnectivity() error {
 			node.NoiseClient = noiseClient
 		}
 
-		// Test basic connectivity with a simple operation
-		peers := node.ipfsClient.GetConnectedPeers()
-		fmt.Printf("Node %d (%s) has %d connected peers\n", i+1, node.APIAddress, len(peers))
+		// Test basic connectivity by checking if storage manager is connected
+		if node.ipfsClient.IsConnected() {
+			fmt.Printf("Node %d (%s) connected successfully\n", i+1, node.APIAddress)
+		} else {
+			fmt.Printf("Node %d (%s) not properly connected\n", i+1, node.APIAddress)
+		}
 		
 		// Check if IPFS API is responsive
 		if node.ipfsClient != nil {

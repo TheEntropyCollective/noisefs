@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"flag"
 	"fmt"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	fixtures "github.com/TheEntropyCollective/noisefs/tests/fixtures"
 )
@@ -69,14 +70,25 @@ func runSingleNodeBenchmark(fileSize, numFiles int, verbose bool) {
 		os.Exit(1)
 	}
 
-	// Create client
-	ipfsClient, err := ipfs.NewClient(ipfsAPI)
-	if err != nil {
-		log.Fatalf("Failed to create IPFS client: %v", err)
+	// Create storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = ipfsAPI
 	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
+	if err != nil {
+		log.Fatalf("Failed to create storage manager: %v", err)
+	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	cache := cache.NewMemoryCache(100)
-	noiseClient, err := noisefs.NewClient(ipfsClient, cache)
+	noiseClient, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -104,14 +116,25 @@ func runHybridMultiNodeBenchmark(newNodeCount, fileSize, numFiles int, verbose b
 		os.Exit(1)
 	}
 
-	// Create client for existing IPFS
-	ipfsClient, err := ipfs.NewClient(ipfsAPI)
-	if err != nil {
-		log.Fatalf("Failed to create IPFS client: %v", err)
+	// Create storage manager for existing IPFS
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = ipfsAPI
 	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
+	if err != nil {
+		log.Fatalf("Failed to create storage manager: %v", err)
+	}
+	
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
 
 	existingCache := cache.NewMemoryCache(100)
-	existingClient, err := noisefs.NewClient(ipfsClient, existingCache)
+	existingClient, err := noisefs.NewClient(storageManager, existingCache)
 	if err != nil {
 		log.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -137,14 +160,26 @@ func runHybridMultiNodeBenchmark(newNodeCount, fileSize, numFiles int, verbose b
 	
 	fmt.Println("🔌 Creating NoiseFS clients for new nodes...")
 	for _, node := range nodeClients {
-		ipfsClient, err := ipfs.NewClient(node.APIAddress)
+		nodeConfig := storage.DefaultConfig()
+		if ipfsBackend, exists := nodeConfig.Backends["ipfs"]; exists {
+			ipfsBackend.Connection.Endpoint = node.APIAddress
+		}
+		
+		storageManager, err := storage.NewManager(nodeConfig)
 		if err != nil {
-			fmt.Printf("  ⚠️  Failed to connect to node %d: %v\n", node.ID, err)
+			fmt.Printf("  ⚠️  Failed to create storage manager for node %d: %v\n", node.ID, err)
 			continue
 		}
+		
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			fmt.Printf("  ⚠️  Failed to start storage manager for node %d: %v\n", node.ID, err)
+			continue
+		}
+		defer storageManager.Stop(context.Background())
 
 		nodeCache := cache.NewMemoryCache(100)
-		noiseClient, err := noisefs.NewClient(ipfsClient, nodeCache)
+		noiseClient, err := noisefs.NewClient(storageManager, nodeCache)
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to create NoiseFS client for node %d: %v\n", node.ID, err)
 			continue
@@ -210,14 +245,26 @@ func runMultiNodeBenchmark(nodeCount, fileSize, numFiles int, verbose bool) {
 	
 	fmt.Println("🔌 Creating NoiseFS clients...")
 	for _, node := range nodeClients {
-		ipfsClient, err := ipfs.NewClient(node.APIAddress)
+		nodeConfig := storage.DefaultConfig()
+		if ipfsBackend, exists := nodeConfig.Backends["ipfs"]; exists {
+			ipfsBackend.Connection.Endpoint = node.APIAddress
+		}
+		
+		storageManager, err := storage.NewManager(nodeConfig)
 		if err != nil {
-			fmt.Printf("  ⚠️  Failed to connect to node %d: %v\n", node.ID, err)
+			fmt.Printf("  ⚠️  Failed to create storage manager for node %d: %v\n", node.ID, err)
 			continue
 		}
+		
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			fmt.Printf("  ⚠️  Failed to start storage manager for node %d: %v\n", node.ID, err)
+			continue
+		}
+		defer storageManager.Stop(context.Background())
 
 		nodeCache := cache.NewMemoryCache(100)
-		noiseClient, err := noisefs.NewClient(ipfsClient, nodeCache)
+		noiseClient, err := noisefs.NewClient(storageManager, nodeCache)
 		if err != nil {
 			fmt.Printf("  ⚠️  Failed to create NoiseFS client for node %d: %v\n", node.ID, err)
 			continue
@@ -582,20 +629,30 @@ func printResultStats(results []TestResult, prefix string) {
 }
 
 func isIPFSRunning(apiAddr string) bool {
-	client, err := ipfs.NewClient(apiAddr)
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = apiAddr
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		return false
 	}
 	
-	// Try a simple operation
+	// Try a simple connection test
 	defer func() {
 		if r := recover(); r != nil {
 			// If any panic occurs, IPFS is not properly running
 		}
 	}()
 	
-	_ = client.GetConnectedPeers()
-	return true
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		return false
+	}
+	defer storageManager.Stop(context.Background())
+	
+	return storageManager.IsConnected()
 }
 
 func equalBytes(a, b []byte) bool {
