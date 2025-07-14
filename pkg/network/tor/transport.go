@@ -3,10 +3,10 @@ package tor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -216,9 +216,16 @@ func (t *IPFSTransport) BatchAdd(ctx context.Context, blocks [][]byte) ([]string
 	fmt.Printf("Uploading %d blocks via Tor (parallel circuits)...\n", len(blocks))
 	start := time.Now()
 	
-	err := t.torClient.SplitUpload(ctx, uploads)
-	if err != nil {
-		return nil, err
+	// For now, fall back to sequential uploads to get proper CID responses
+	// TODO: Implement SplitUploadWithResponses for true parallel upload with response collection
+	cids := make([]string, len(blocks))
+	var err error
+	
+	for i, block := range blocks {
+		cids[i], err = t.Add(ctx, block)
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload block %d: %w", i, err)
+		}
 	}
 	
 	uploadTime := time.Since(start)
@@ -230,12 +237,6 @@ func (t *IPFSTransport) BatchAdd(ctx context.Context, blocks [][]byte) ([]string
 	throughput := float64(totalSize) / uploadTime.Seconds()
 	fmt.Printf("Batch upload complete: %d blocks, %.1f KB in %v (%.1f KB/s)\n",
 		len(blocks), float64(totalSize)/1024, uploadTime, throughput/1024)
-	
-	// TODO: Parse CIDs from responses
-	cids := make([]string, len(blocks))
-	for i := range cids {
-		cids[i] = fmt.Sprintf("QmTorBlock%d", i) // Placeholder
-	}
 	
 	return cids, nil
 }
@@ -292,19 +293,25 @@ func (t *IPFSTransport) EstimateTransferTime(operation string, sizeBytes int64) 
 
 // Helper to parse CID from IPFS response
 func parseCIDFromResponse(body io.Reader) (string, error) {
-	// Simplified - actual implementation would parse JSON
 	data, err := io.ReadAll(body)
 	if err != nil {
 		return "", err
 	}
 	
-	// Look for CID in response
-	response := string(data)
-	if strings.Contains(response, "Hash") {
-		// Extract CID from JSON response
-		// ... (parsing logic)
-		return "QmExampleCID", nil
+	// IPFS add API returns JSON like: {"Name":"file","Hash":"QmXXX...","Size":"1234"}
+	var response struct {
+		Hash string `json:"Hash"`
+		Name string `json:"Name"`
+		Size string `json:"Size"`
 	}
 	
-	return "", fmt.Errorf("CID not found in response")
+	if err := json.Unmarshal(data, &response); err != nil {
+		return "", fmt.Errorf("failed to parse IPFS response: %w", err)
+	}
+	
+	if response.Hash == "" {
+		return "", fmt.Errorf("no CID found in IPFS response")
+	}
+	
+	return response.Hash, nil
 }

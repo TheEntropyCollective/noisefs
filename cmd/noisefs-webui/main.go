@@ -1294,18 +1294,31 @@ func (w *UnifiedWebUI) topicToView(node *announce.TopicNode) TopicView {
 	}
 	w.subMutex.RUnlock()
 	
-	// Extract name from path
+	// Extract name and parent from path
 	parts := strings.Split(node.Path, "/")
 	name := parts[len(parts)-1]
 	if name == "" && len(parts) > 1 {
 		name = parts[len(parts)-2]
 	}
 	
+	// Calculate parent path by removing the last segment
+	parent := ""
+	if len(parts) > 1 {
+		// Remove empty trailing segments and rebuild parent path
+		parentParts := parts[:len(parts)-1]
+		if len(parentParts) > 0 && parentParts[len(parentParts)-1] == "" {
+			parentParts = parentParts[:len(parentParts)-1]
+		}
+		if len(parentParts) > 0 {
+			parent = strings.Join(parentParts, "/")
+		}
+	}
+	
 	return TopicView{
 		Path:              node.Path,
 		Name:              name,
 		Hash:              hash,
-		Parent:            "", // TODO: get parent path from node
+		Parent:            parent,
 		Children:          childPaths,
 		Metadata:          node.Metadata,
 		Subscribed:        subscribed,

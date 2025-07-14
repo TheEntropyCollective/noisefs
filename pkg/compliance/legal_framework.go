@@ -352,7 +352,7 @@ func NewDMCAPolicy() *DMCAPolicy {
 			Title:        "Copyright Compliance Officer",
 			Organization: "NoiseFS Project",
 			Address:      "Digital Service Provider\nUnited States",
-			Phone:        "+1-XXX-XXX-XXXX",
+			Phone:        "+1-555-0100", // Configure with actual DMCA agent phone
 			Email:        "dmca@noisefs.org",
 			WebForm:      "https://noisefs.org/dmca",
 		},

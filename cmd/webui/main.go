@@ -228,11 +228,8 @@ func securityHeaders(next http.HandlerFunc) http.HandlerFunc {
 		// Prevent MIME type confusion
 		w.Header().Set("X-Download-Options", "noopen")
 		
-		// Feature Policy (deprecated but still useful for older browsers)
-		w.Header().Set("Feature-Policy", "geolocation 'none'; microphone 'none'; camera 'none'")
-		
-		// Permissions Policy (modern replacement for Feature Policy)
-		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=()")
+		// Permissions Policy (comprehensive permissions control for modern browsers)
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=(), fullscreen=(), autoplay=()")
 		
 		// Cross-Origin policies
 		w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")

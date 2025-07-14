@@ -378,9 +378,18 @@ func (ac *AdaptiveCache) predictInitialTier(cid string, metadata map[string]inte
 	}
 	
 	// Use ML predictor if available
-	if ac.predictor != nil {
-		// TODO: Implement PredictAccess method
-		// For now, use default tier assignment
+	if ac.predictor != nil && ac.predictor.engine != nil {
+		// Get prediction score from ML model
+		predictionScore := ac.predictor.engine.PredictAccess(cid, metadata)
+		
+		// Convert prediction score to tier assignment
+		// Higher scores indicate higher likelihood of access
+		if predictionScore >= 0.8 {
+			return AdaptiveHotTier
+		} else if predictionScore >= 0.5 {
+			return AdaptiveWarmTier
+		}
+		// Scores below 0.5 continue to default tier assignment
 	}
 	
 	return AdaptiveColdTier

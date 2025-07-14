@@ -1038,7 +1038,7 @@ func (generator *EnhancedLegalDocumentationGenerator) generateContactInformation
 	return &ContactInformation{
 		DMCAAgent: "NoiseFS DMCA Compliance Officer",
 		Email: "dmca@noisefs.org",
-		Phone: "+1-XXX-XXX-XXXX",
+		Phone: "+1-555-0100", // Configure with actual DMCA agent phone
 		Address: "NoiseFS Project\nDigital Service Provider\nUnited States",
 		WebForm: "https://noisefs.org/dmca",
 		BusinessHours: "24/7 automated processing, business hours for complex inquiries",

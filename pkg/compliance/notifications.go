@@ -275,7 +275,7 @@ func (manager *UserNotificationManager) NotifyTakedownAction(userID, descriptorC
 		ContactInformation: &LegalContactInfo{
 			DMCAAgent:      "dmca@noisefs.org",
 			LegalDepartment: "legal@noisefs.org",
-			Phone:         "+1-XXX-XXX-XXXX",
+			Phone:         "+1-555-0100", // Configure with actual DMCA agent phone
 			Address:       "NoiseFS Legal Department\nDigital Service Provider\nUnited States",
 		},
 	}
@@ -338,7 +338,7 @@ func (manager *UserNotificationManager) NotifyCounterNoticeReceived(userID, desc
 		ContactInformation: &LegalContactInfo{
 			DMCAAgent:      "dmca@noisefs.org",
 			LegalDepartment: "legal@noisefs.org",
-			Phone:         "+1-XXX-XXX-XXXX",
+			Phone:         "+1-555-0100", // Configure with actual DMCA agent phone
 		},
 	}
 	
@@ -394,7 +394,7 @@ func (manager *UserNotificationManager) NotifyReinstatement(userID, descriptorCI
 		ContactInformation: &LegalContactInfo{
 			DMCAAgent:      "dmca@noisefs.org",
 			LegalDepartment: "legal@noisefs.org",
-			Phone:         "+1-XXX-XXX-XXXX",
+			Phone:         "+1-555-0100", // Configure with actual DMCA agent phone
 		},
 	}
 	
@@ -474,7 +474,7 @@ func (manager *UserNotificationManager) NotifyAccountWarning(userID string, viol
 		ContactInformation: &LegalContactInfo{
 			LegalDepartment: "legal@noisefs.org",
 			UserSupport:     "support@noisefs.org",
-			Phone:          "+1-XXX-XXX-XXXX",
+			Phone:          "+1-555-0100", // Configure with actual DMCA agent phone
 		},
 	}
 	
