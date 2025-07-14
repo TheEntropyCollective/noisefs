@@ -44,6 +44,7 @@ func TestCLIAltruisticCache(t *testing.T) {
 		
 		// Run stats command
 		cmd := exec.Command("./noisefs", "-config", tmpConfig.Name(), "-stats", "-json")
+		cmd.Env = append(os.Environ(), "NOISEFS_SKIP_LEGAL_NOTICE=1")
 		output, err := cmd.Output()
 		if err != nil {
 			t.Fatalf("Command failed: %v\nOutput: %s", err, output)
@@ -107,6 +108,7 @@ func TestCLIAltruisticCache(t *testing.T) {
 			"-min-personal-cache", "200",
 			"-altruistic-bandwidth", "50",
 			"-stats")
+		cmd.Env = append(os.Environ(), "NOISEFS_SKIP_LEGAL_NOTICE=1")
 			
 		output, err := cmd.Output()
 		if err != nil {
@@ -152,6 +154,7 @@ func TestCLIAltruisticCache(t *testing.T) {
 			"-disable-altruistic",
 			"-stats",
 			"-json")
+		cmd.Env = append(os.Environ(), "NOISEFS_SKIP_LEGAL_NOTICE=1")
 			
 		output, err := cmd.Output()
 		if err == nil {

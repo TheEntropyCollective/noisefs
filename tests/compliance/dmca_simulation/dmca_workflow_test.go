@@ -363,7 +363,7 @@ func TestComplianceReportGeneration(t *testing.T) {
 
 func setupDMCATestSuite(t *testing.T) *DMCATestSuite {
 	// Load legal test configuration
-	testConfig, err := loadLegalTestConfig("../configs/legal-test.json")
+	testConfig, err := loadLegalTestConfig("../../configs/legal-test.json")
 	if err != nil {
 		t.Fatalf("Failed to load legal test config: %v", err)
 	}

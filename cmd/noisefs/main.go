@@ -23,7 +23,8 @@ import (
 
 func main() {
 	// Show legal disclaimer on first run or if not accepted recently
-	if !checkLegalDisclaimerAccepted() {
+	// Skip if running in test mode
+	if os.Getenv("NOISEFS_SKIP_LEGAL_NOTICE") != "1" && !checkLegalDisclaimerAccepted() {
 		showLegalDisclaimer()
 	}
 

@@ -2,19 +2,26 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 func TestMultiFileBlockReuse(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(50) // Large cache to see maximum reuse
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -106,9 +113,14 @@ func TestMultiFileBlockReuse(t *testing.T) {
 
 func TestMultiFileStorageEfficiency(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(100)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -160,9 +172,14 @@ func TestMultiFileStorageEfficiency(t *testing.T) {
 
 func TestMultiFileWithDifferentBlockSizes(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(200)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -242,9 +259,14 @@ func TestConcurrentMultiFileOperations(t *testing.T) {
 	// since our mock infrastructure isn't thread-safe
 
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(50)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -304,9 +326,14 @@ func TestConcurrentMultiFileOperations(t *testing.T) {
 
 func TestMultiFileWithCacheEviction(t *testing.T) {
 	// Setup with very limited cache to force eviction
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(8) // Very small cache
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}

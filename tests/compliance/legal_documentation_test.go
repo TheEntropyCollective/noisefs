@@ -201,7 +201,7 @@ func TestComplianceEvidenceGeneration(t *testing.T) {
 	}
 
 	for i, event := range events {
-		err := suite.complianceSystem.LogComplianceEvent(
+		err := suite.legalSystem.LogComplianceEvent(
 			event.eventType,
 			fmt.Sprintf("test_user_%03d", i),
 			event.descriptor,
