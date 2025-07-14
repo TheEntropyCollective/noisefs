@@ -120,10 +120,10 @@ func main() {
 	// 	os.Exit(1)
 	// }
 	
-	// For backward compatibility, we need the underlying IPFS client for descriptors
+	// Create IPFS client with peer awareness
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
 	if err != nil {
-		logger.Error("Failed to create IPFS client for descriptors", map[string]interface{}{
+		logger.Error("Failed to connect to IPFS", map[string]interface{}{
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})

@@ -91,6 +91,17 @@ func NewBlockHealthTracker(config *BlockHealthConfig) *BlockHealthTracker {
 		config = DefaultBlockHealthConfig()
 	}
 	
+	// Validate config values to prevent panics
+	if config.CleanupInterval <= 0 {
+		config.CleanupInterval = time.Hour
+	}
+	if config.ValueCacheTime <= 0 {
+		config.ValueCacheTime = 5 * time.Minute
+	}
+	if config.TemporalQuantum <= 0 {
+		config.TemporalQuantum = time.Hour
+	}
+	
 	tracker := &BlockHealthTracker{
 		blocks:          make(map[string]*BlockHealth),
 		privacyEpsilon:  config.PrivacyEpsilon,
@@ -346,6 +357,11 @@ func GetReplicationBucket(exactCount int) ReplicationBucket {
 
 // cleanupLoop periodically removes old entries
 func (bht *BlockHealthTracker) cleanupLoop(interval time.Duration) {
+	// Validate interval to prevent NewTicker panic
+	if interval <= 0 {
+		interval = time.Hour // Fallback to safe default
+	}
+	
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	
