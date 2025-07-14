@@ -51,12 +51,7 @@ func TestAltruisticCacheWithAdaptiveBase(t *testing.T) {
 		data := make([]byte, 100*1024) // 100KB blocks
 		block := &blocks.Block{Data: data}
 		
-		metadata := map[string]interface{}{
-			"is_randomizer": i%3 == 0,
-			"block_type":    "data",
-		}
-		
-		// The adaptive cache's Put method is called internally
+		// The adaptive cache's Store method is called internally
 		origin := cache.PersonalBlock
 		if i%3 == 0 {
 			origin = cache.AltruisticBlock

@@ -8,13 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // AdaptiveCacheItem represents a cached block with metadata for adaptive caching
 type AdaptiveCacheItem struct {
 	CID             string            `json:"cid"`
-	Data            []byte            `json:"-"`
+	Block           *blocks.Block     `json:"-"`
 	Size            int64             `json:"size"`
 	CreatedAt       time.Time         `json:"created_at"`
 	LastAccessed    time.Time         `json:"last_accessed"`
@@ -246,14 +247,14 @@ func NewAdaptiveCache(config *AdaptiveCacheConfig) *AdaptiveCache {
 }
 
 // Get retrieves an item from the cache
-func (ac *AdaptiveCache) Get(cid string) ([]byte, bool) {
+func (ac *AdaptiveCache) Get(cid string) (*blocks.Block, error) {
 	ac.mutex.RLock()
 	defer ac.mutex.RUnlock()
 	
 	item, exists := ac.items[cid]
 	if !exists {
 		ac.recordMiss(cid)
-		return nil, false
+		return nil, ErrNotFound
 	}
 	
 	// Update access metadata
@@ -271,11 +272,11 @@ func (ac *AdaptiveCache) Get(cid string) ([]byte, bool) {
 	// Promote tier if needed
 	ac.promoteIfNeeded(item)
 	
-	return item.Data, true
+	return item.Block, nil
 }
 
-// Put adds an item to the cache
-func (ac *AdaptiveCache) Put(cid string, data []byte, metadata map[string]interface{}) error {
+// Store adds a block to the cache
+func (ac *AdaptiveCache) Store(cid string, block *blocks.Block) error {
 	ac.mutex.Lock()
 	defer ac.mutex.Unlock()
 	
@@ -284,7 +285,7 @@ func (ac *AdaptiveCache) Put(cid string, data []byte, metadata map[string]interf
 		return nil // Already cached
 	}
 	
-	size := int64(len(data))
+	size := int64(len(block.Data))
 	
 	// Check if we need to make space
 	if ac.currentSize+size > ac.maxSize || len(ac.items) >= ac.maxItems {
@@ -294,13 +295,14 @@ func (ac *AdaptiveCache) Put(cid string, data []byte, metadata map[string]interf
 	}
 	
 	// Determine initial tier based on prediction
+	metadata := make(map[string]interface{})
 	tier := ac.predictInitialTier(cid, metadata)
 	
 	// Create cache item
 	now := time.Now()
 	item := &AdaptiveCacheItem{
 		CID:          cid,
-		Data:         data,
+		Block:        block,
 		Size:         size,
 		CreatedAt:    now,
 		LastAccessed: now,
@@ -667,8 +669,8 @@ func (ac *AdaptiveCache) exchangeCacheState() {
 	// 4. Implement cache warming based on peer recommendations
 }
 
-// GetStats returns current cache statistics
-func (ac *AdaptiveCache) GetStats() *AdaptiveCacheStats {
+// GetAdaptiveStats returns current adaptive cache statistics
+func (ac *AdaptiveCache) GetAdaptiveStats() *AdaptiveCacheStats {
 	ac.stats.mutex.RLock()
 	defer ac.stats.mutex.RUnlock()
 	
@@ -768,11 +770,8 @@ func (ac *AdaptiveCache) Preload(ctx context.Context, blockFetcher func(string) 
 		go func(pred *PredictionResult) {
 			data, err := blockFetcher(pred.CID)
 			if err == nil {
-				metadata := map[string]interface{}{
-					"preloaded": true,
-					"prediction_score": pred.Score,
-				}
-				ac.Put(pred.CID, data, metadata)
+				block, _ := blocks.NewBlock(data)
+				ac.Store(pred.CID, block)
 				preloaded++
 			} else {
 				errors++
@@ -1004,5 +1003,145 @@ func (ac *AdaptiveCache) updatePredictionAccuracy() {
 			}
 			ac.predictor.engine.AddTrainingExample(pattern, wasAccessed, metadata)
 		}
+	}
+}
+
+// Clear removes all items from the cache
+func (ac *AdaptiveCache) Clear() {
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+	
+	// Clear all cache items
+	ac.items = make(map[string]*AdaptiveCacheItem)
+	ac.accessHistory = make(map[string]*AdaptiveAccessPattern)
+	ac.currentSize = 0
+	
+	// Reset stats
+	ac.stats.mutex.Lock()
+	defer ac.stats.mutex.Unlock()
+	ac.stats.Hits = 0
+	ac.stats.Misses = 0
+	ac.stats.TotalRequests = 0
+	ac.stats.Evictions = 0
+	ac.stats.Insertions = 0
+	ac.stats.HotTierHits = 0
+	ac.stats.WarmTierHits = 0
+	ac.stats.ColdTierHits = 0
+	ac.stats.PredictionHits = 0
+	ac.stats.PredictionTotal = 0
+	ac.stats.PredictionAccuracy = 0
+}
+
+// Has checks if a block exists in the cache
+func (ac *AdaptiveCache) Has(cid string) bool {
+	ac.mutex.RLock()
+	defer ac.mutex.RUnlock()
+	
+	_, exists := ac.items[cid]
+	return exists
+}
+
+// Remove removes a block from the cache
+func (ac *AdaptiveCache) Remove(cid string) error {
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+	
+	item, exists := ac.items[cid]
+	if !exists {
+		return ErrNotFound
+	}
+	
+	// Remove from cache
+	delete(ac.items, cid)
+	ac.currentSize -= item.Size
+	
+	// Remove access history
+	delete(ac.accessHistory, cid)
+	
+	return nil
+}
+
+// GetRandomizers returns a list of popular blocks suitable as randomizers
+func (ac *AdaptiveCache) GetRandomizers(count int) ([]*BlockInfo, error) {
+	ac.mutex.RLock()
+	defer ac.mutex.RUnlock()
+	
+	// Sort items by popularity score
+	type scoredItem struct {
+		cid  string
+		item *AdaptiveCacheItem
+		score float64
+	}
+	
+	var scored []scoredItem
+	for cid, item := range ac.items {
+		if item.IsRandomizer || item.PopularityScore > 0 {
+			scored = append(scored, scoredItem{
+				cid:   cid,
+				item:  item,
+				score: item.PopularityScore,
+			})
+		}
+	}
+	
+	// Sort by score descending
+	for i := 0; i < len(scored); i++ {
+		for j := i + 1; j < len(scored); j++ {
+			if scored[j].score > scored[i].score {
+				scored[i], scored[j] = scored[j], scored[i]
+			}
+		}
+	}
+	
+	// Get top count items
+	result := make([]*BlockInfo, 0, count)
+	for i := 0; i < count && i < len(scored); i++ {
+		result = append(result, &BlockInfo{
+			CID:        scored[i].cid,
+			Block:      scored[i].item.Block,
+			Size:       int(scored[i].item.Size),
+			Popularity: int(scored[i].item.AccessCount),
+		})
+	}
+	
+	return result, nil
+}
+
+// IncrementPopularity increases the popularity score of a block
+func (ac *AdaptiveCache) IncrementPopularity(cid string) error {
+	ac.mutex.Lock()
+	defer ac.mutex.Unlock()
+	
+	item, exists := ac.items[cid]
+	if !exists {
+		return ErrNotFound
+	}
+	
+	item.mutex.Lock()
+	item.PopularityScore += 1.0
+	item.AccessCount++
+	item.mutex.Unlock()
+	
+	return nil
+}
+
+// Size returns the number of blocks in the cache
+func (ac *AdaptiveCache) Size() int {
+	ac.mutex.RLock()
+	defer ac.mutex.RUnlock()
+	
+	return len(ac.items)
+}
+
+// GetStats returns cache statistics implementing the Cache interface
+func (ac *AdaptiveCache) GetStats() *Stats {
+	ac.stats.mutex.RLock()
+	defer ac.stats.mutex.RUnlock()
+	
+	return &Stats{
+		Hits:      ac.stats.Hits,
+		Misses:    ac.stats.Misses,
+		Evictions: ac.stats.Evictions,
+		Size:      len(ac.items),
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
@@ -41,30 +42,30 @@ func BenchmarkCache_AltruisticEnabled(b *testing.B) {
 
 // benchmarkCacheOperations runs standard cache operations
 func benchmarkCacheOperations(b *testing.B, cache Cache, name string) {
-	blockSize := 128 * 1024 // 128KB blocks
+	blockSize := 128 * 1024 // 128KB testBlocks
 	
 	// Prepare test data
-	blocks := make([]*blocks.Block, 100)
+	testBlocks := make([]*blocks.Block, 100)
 	cids := make([]string, 100)
 	for i := 0; i < 100; i++ {
 		data := make([]byte, blockSize)
 		rand.Read(data)
-		blocks[i] = &blocks.Block{Data: data}
+		testBlocks[i], _ = blocks.NewBlock(data)
 		cids[i] = fmt.Sprintf("%s-block-%d", name, i)
 	}
 	
 	b.Run(name+"/Store", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			idx := i % len(blocks)
-			cache.Store(cids[idx], blocks[idx])
+			idx := i % len(testBlocks)
+			cache.Store(cids[idx], testBlocks[idx])
 		}
 	})
 	
 	b.Run(name+"/Get", func(b *testing.B) {
 		// Pre-populate cache
-		for i := 0; i < len(blocks); i++ {
-			cache.Store(cids[i], blocks[i])
+		for i := 0; i < len(testBlocks); i++ {
+			cache.Store(cids[i], testBlocks[i])
 		}
 		
 		b.ResetTimer()
@@ -77,9 +78,9 @@ func benchmarkCacheOperations(b *testing.B, cache Cache, name string) {
 	b.Run(name+"/Mixed", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			idx := i % len(blocks)
+			idx := i % len(testBlocks)
 			if i%3 == 0 {
-				cache.Store(cids[idx], blocks[idx])
+				cache.Store(cids[idx], testBlocks[idx])
 			} else {
 				cache.Get(cids[idx])
 			}
@@ -107,14 +108,14 @@ func BenchmarkEvictionStrategies(b *testing.B) {
 				cache.healthTracker = healthTracker
 			}
 			
-			blockSize := 512 * 1024 // 512KB blocks
+			blockSize := 512 * 1024 // 512KB testBlocks
 			
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				data := make([]byte, blockSize)
-				block := &blocks.Block{Data: data}
+				block, _ := blocks.NewBlock(data)
 				
-				// Mix of personal and altruistic blocks
+				// Mix of personal and altruistic testBlocks
 				origin := AltruisticBlock
 				if i%3 == 0 {
 					origin = PersonalBlock
@@ -127,7 +128,7 @@ func BenchmarkEvictionStrategies(b *testing.B) {
 				if strategy == "ValueBased" && origin == AltruisticBlock {
 					hint := BlockHint{
 						ReplicationBucket: ReplicationBucket(i % 3),
-						RequestCount:      i % 100,
+						NoisyRequestRate:      float64(i % 100),
 					}
 					cache.UpdateBlockHealth(cid, hint)
 				}
@@ -158,7 +159,7 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 			}
 			cache := NewAltruisticCache(baseCache, config, 1*1024*1024*1024)
 			
-			blockSize := 64 * 1024 // 64KB blocks
+			blockSize := 64 * 1024 // 64KB testBlocks
 			
 			b.ResetTimer()
 			
@@ -173,7 +174,7 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 					
 					for i := 0; i < workPerWorker; i++ {
 						data := make([]byte, blockSize)
-						block := &blocks.Block{Data: data}
+						block, _ := blocks.NewBlock(data)
 						
 						cid := fmt.Sprintf("worker%d-block%d", workerID, i)
 						
@@ -204,12 +205,12 @@ func BenchmarkMemoryOverhead(b *testing.B) {
 			runtime.ReadMemStats(&m1)
 			
 			cache := setupCache()
-			blockSize := 128 * 1024 // 128KB blocks
+			blockSize := 128 * 1024 // 128KB testBlocks
 			
-			// Store many blocks
+			// Store many testBlocks
 			for i := 0; i < 1000; i++ {
 				data := make([]byte, blockSize)
-				block := &blocks.Block{Data: data}
+				block, _ := blocks.NewBlock(data)
 				cache.Store(fmt.Sprintf("block-%d", i), block)
 			}
 			
@@ -253,7 +254,7 @@ func BenchmarkNetworkHealth(b *testing.B) {
 		for i := 0; i < 100; i++ {
 			healthTracker.UpdateBlockHealth(fmt.Sprintf("block-%d", i), BlockHint{
 				ReplicationBucket: ReplicationBucket(i % 3),
-				RequestCount:      i,
+				NoisyRequestRate:  float64(i),
 			})
 		}
 		
@@ -392,7 +393,7 @@ func BenchmarkScalability(b *testing.B) {
 			// Pre-populate cache
 			for i := 0; i < scale.numBlocks/2; i++ {
 				data := make([]byte, scale.blockSize)
-				block := &blocks.Block{Data: data}
+				block, _ := blocks.NewBlock(data)
 				cache.StoreWithOrigin(fmt.Sprintf("existing-%d", i), block, AltruisticBlock)
 			}
 			
@@ -406,7 +407,7 @@ func BenchmarkScalability(b *testing.B) {
 				switch op {
 				case 0, 1: // 50% stores
 					data := make([]byte, scale.blockSize)
-					block := &blocks.Block{Data: data}
+					block, _ := blocks.NewBlock(data)
 					origin := PersonalBlock
 					if i%3 != 0 {
 						origin = AltruisticBlock

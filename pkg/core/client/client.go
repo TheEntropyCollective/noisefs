@@ -418,7 +418,7 @@ func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string
 	
 	// Store in adaptive cache if enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-		c.adaptiveCache.Put(cid, block.Data, metadata)
+		c.adaptiveCache.Store(cid, block)
 	}
 }
 
@@ -431,12 +431,9 @@ func (c *Client) RetrieveBlockWithCache(cid string) (*blocks.Block, error) {
 func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
 	// Check adaptive cache first if enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-		if data, found := c.adaptiveCache.Get(cid); found {
-			block, err := blocks.NewBlock(data)
-			if err == nil {
-				c.metrics.RecordCacheHit()
-				return block, nil
-			}
+		if block, err := c.adaptiveCache.Get(cid); err == nil {
+			c.metrics.RecordCacheHit()
+			return block, nil
 		}
 	}
 	
@@ -447,11 +444,7 @@ func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []
 		
 		// Update adaptive cache with access
 		if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-			metadata := map[string]interface{}{
-				"block_type": "data",
-				"accessed_from_cache": true,
-			}
-			c.adaptiveCache.Put(cid, block.Data, metadata)
+			c.adaptiveCache.Store(cid, block)
 		}
 		
 		return block, nil
@@ -504,7 +497,7 @@ func (c *Client) RecordDownload() {
 // GetAdaptiveCacheStats returns adaptive cache statistics if enabled
 func (c *Client) GetAdaptiveCacheStats() *cache.AdaptiveCacheStats {
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
-		return c.adaptiveCache.GetStats()
+		return c.adaptiveCache.GetAdaptiveStats()
 	}
 	return nil
 }

@@ -23,10 +23,10 @@ func BenchmarkAltruisticCache_Store(b *testing.B) {
 			cache := NewAltruisticCache(baseCache, config, 100*1024*1024) // 100MB
 			
 			// Pre-generate blocks
-			blocks := make([]*blocks.Block, b.N)
+			testBlocks := make([]*blocks.Block, b.N)
 			for i := 0; i < b.N; i++ {
 				data := make([]byte, size)
-				blocks[i] = &blocks.Block{Data: data}
+				testBlocks[i], _ = blocks.NewBlock(data)
 			}
 			
 			b.ResetTimer()
@@ -37,7 +37,7 @@ func BenchmarkAltruisticCache_Store(b *testing.B) {
 				if i%3 == 0 {
 					origin = AltruisticBlock
 				}
-				cache.StoreWithOrigin(fmt.Sprintf("block-%d", i), blocks[i], origin)
+				cache.StoreWithOrigin(fmt.Sprintf("block-%d", i), testBlocks[i], origin)
 			}
 		})
 	}

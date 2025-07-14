@@ -3,7 +3,6 @@ package cache
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -406,4 +405,47 @@ func (bht *BlockHealthTracker) GetStats() map[string]interface{} {
 func CreateBlockID(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:16]) // First 16 bytes
+}
+
+// GetBlockValue returns the calculated value score for a block
+func (bht *BlockHealthTracker) GetBlockValue(cid string) float64 {
+	bht.mu.RLock()
+	defer bht.mu.RUnlock()
+	
+	health, exists := bht.blocks[cid]
+	if !exists {
+		return 0
+	}
+	
+	// Return cached value if still valid
+	if time.Since(health.LastUpdated) < bht.valueCacheTime {
+		return health.Value
+	}
+	
+	// Recalculate value
+	value := bht.CalculateBlockValue(cid, health.Hint)
+	health.Value = value
+	health.LastUpdated = time.Now()
+	
+	return value
+}
+
+// GetOpportunisticFetcher returns the opportunistic fetcher instance
+// This is a placeholder - the actual implementation should return the real fetcher
+func (bht *BlockHealthTracker) GetOpportunisticFetcher() interface{} {
+	// TODO: Implement proper opportunistic fetcher integration
+	return nil
+}
+
+// GetAllBlockHints returns all block hints for gossip protocol
+func (bht *BlockHealthTracker) GetAllBlockHints() map[string]BlockHint {
+	bht.mu.RLock()
+	defer bht.mu.RUnlock()
+	
+	hints := make(map[string]BlockHint)
+	for cid, health := range bht.blocks {
+		hints[cid] = health.Hint
+	}
+	
+	return hints
 }

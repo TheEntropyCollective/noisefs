@@ -18,12 +18,12 @@ func TestHealthGossiper_BasicOperation(t *testing.T) {
 	healthTracker.UpdateBlockHealth("block1", BlockHint{
 		ReplicationBucket: ReplicationLow,
 		HighEntropy:       true,
-		RequestCount:      10,
+		NoisyRequestRate:      10,
 	})
 	healthTracker.UpdateBlockHealth("block2", BlockHint{
 		ReplicationBucket: ReplicationHigh,
 		HighEntropy:       false,
-		RequestCount:      5,
+		NoisyRequestRate:      5,
 	})
 	
 	// Create gossiper
@@ -222,7 +222,7 @@ func TestNetworkHealthManager_Integration(t *testing.T) {
 		cache.UpdateBlockHealth(string(rune('a'+i)), BlockHint{
 			ReplicationBucket: ReplicationBucket(i % 3),
 			HighEntropy:       i%2 == 0,
-			RequestCount:      i * 10,
+			NoisyRequestRate:      float64(i * 10),
 		})
 	}
 	

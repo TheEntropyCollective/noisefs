@@ -21,6 +21,7 @@ type BlockStore interface {
 	RetrieveBlock(cid string) (*blocks.Block, error)
 	RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error)
 	StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error)
+	HasBlock(cid string) (bool, error)
 }
 
 // PeerAwareIPFSClient extends the basic IPFS client with peer selection capabilities
@@ -415,4 +416,17 @@ func (c *Client) GetPeerMetrics() map[peer.ID]*RequestMetrics {
 	}
 
 	return copy
+}
+
+// HasBlock checks if a block exists in IPFS
+func (c *Client) HasBlock(cid string) (bool, error) {
+	// Use ObjectStat to check if the block exists without downloading it
+	_, err := c.shell.ObjectStat(cid)
+	if err != nil {
+		if err.Error() == "merkledag: not found" {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check block existence: %w", err)
+	}
+	return true, nil
 }

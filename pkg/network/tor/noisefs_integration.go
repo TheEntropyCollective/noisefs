@@ -1,10 +1,8 @@
 package tor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"time"
 	
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
@@ -110,10 +108,14 @@ func (c *TorEnabledClient) StoreBlock(block *blocks.Block) (string, error) {
 }
 
 // RetrieveBlock retrieves a block, using Tor if configured
-func (c *TorEnabledClient) RetrieveBlock(cid string) ([]byte, error) {
+func (c *TorEnabledClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	// PERFORMANCE DECISION: Use Tor for downloads?
 	if c.shouldUseTorForDownload() {
-		return c.retrieveBlockViaTor(context.Background(), cid)
+		data, err := c.retrieveBlockViaTor(context.Background(), cid)
+		if err != nil {
+			return nil, err
+		}
+		return blocks.NewBlock(data)
 	}
 	
 	// Direct download (faster)

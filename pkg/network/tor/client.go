@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 	
@@ -252,7 +251,7 @@ func (c *Client) SplitUpload(ctx context.Context, uploads []UploadRequest) error
 			defer wg.Done()
 			
 			// Get unique circuit from pool
-			circuitID := fmt.Sprintf("upload-%d", circuitNum)
+			_ = fmt.Sprintf("upload-%d", circuitNum) // Circuit ID for future use
 			
 			for upload := range uploadChan {
 				// PERFORMANCE: Each circuit handles multiple uploads

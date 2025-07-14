@@ -10,8 +10,8 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
 )
 
-// BlockFetcher defines the interface for fetching blocks
-type BlockFetcher interface {
+// BlockRetriever defines the interface for fetching blocks
+type BlockRetriever interface {
 	RetrieveBlock(cid string) (*blocks.Block, error)
 }
 
@@ -183,13 +183,13 @@ func (sat *SequentialAccessTracker) cleanupOldestPattern() {
 // EnhancedReadAheadWorker handles prefetching with real block fetching
 type EnhancedReadAheadWorker struct {
 	cache       Cache
-	fetcher     BlockFetcher
+	fetcher     BlockRetriever
 	tracker     *SequentialAccessTracker
 	prefetchMap sync.Map // Track what's being prefetched to avoid duplicates
 }
 
 // NewEnhancedReadAheadWorker creates a new enhanced read-ahead worker
-func NewEnhancedReadAheadWorker(cache Cache, fetcher BlockFetcher) *EnhancedReadAheadWorker {
+func NewEnhancedReadAheadWorker(cache Cache, fetcher BlockRetriever) *EnhancedReadAheadWorker {
 	return &EnhancedReadAheadWorker{
 		cache:   cache,
 		fetcher: fetcher,

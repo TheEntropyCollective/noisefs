@@ -129,9 +129,8 @@ func TestAdaptiveEvictionStrategy(t *testing.T) {
 	
 	for i := 0; i < 100; i++ {
 		blocks[string(rune('a'+i%26))+string(rune('0'+i/26))] = &BlockMetadata{
-			BlockInfo:    &BlockInfo{CID: string(rune('a'+i%26)) + string(rune('0'+i/26)), Size: 1024},
+			BlockInfo:    &BlockInfo{CID: string(rune('a'+i%26)) + string(rune('0'+i/26)), Size: 1024, Popularity: i % 10},
 			LastAccessed: now.Add(-time.Duration(i) * time.Minute),
-			Popularity:   i % 10,
 			CachedAt:     now.Add(-24 * time.Hour),
 		}
 	}

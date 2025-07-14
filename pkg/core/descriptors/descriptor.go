@@ -125,6 +125,11 @@ func (d *Descriptor) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(d, "", "  ")
 }
 
+// Marshal serializes the descriptor to JSON (alias for ToJSON)
+func (d *Descriptor) Marshal() ([]byte, error) {
+	return d.ToJSON()
+}
+
 // FromJSON deserializes a descriptor from JSON
 func FromJSON(data []byte) (*Descriptor, error) {
 	if len(data) == 0 {

@@ -3,6 +3,8 @@ package cache
 import (
 	"testing"
 	"time"
+	
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 func TestPredictiveEvictor_AccessPrediction(t *testing.T) {
@@ -181,7 +183,7 @@ func TestPredictiveEvictionIntegration(t *testing.T) {
 	// Fill cache to 70%
 	for i := 0; i < 7; i++ {
 		data := make([]byte, 1024)
-		block := &blocks.Block{Data: data}
+		block, _ := blocks.NewBlock(data)
 		cache.StoreWithOrigin(string(rune('a'+i)), block, AltruisticBlock)
 	}
 	

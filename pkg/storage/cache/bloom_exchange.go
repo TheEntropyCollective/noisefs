@@ -191,7 +191,7 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 	defer be.mu.Unlock()
 	
 	// Get cache statistics
-	stats := be.cache.GetAltruisticStats()
+	_ = be.cache.GetAltruisticStats()
 	
 	// Clear and rebuild filters
 	for category := range be.localFilters {
@@ -201,7 +201,7 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 	// Update valuable blocks filter
 	if filter, exists := be.localFilters["valuable_blocks"]; exists {
 		be.cache.mu.RLock()
-		for blockID, metadata := range be.cache.altruisticBlocks {
+		for blockID, _ := range be.cache.altruisticBlocks {
 			// Check if block is valuable based on health
 			healthScore := be.cache.healthTracker.GetBlockValue(blockID)
 			if healthScore > 0.7 {
@@ -284,9 +284,9 @@ func (be *BloomExchanger) sendExchange() error {
 		
 		msg.Filters[category] = &SerializedBloomFilter{
 			Data:         data,
-			ElementCount: filter.ApproximatedSize(),
+			ElementCount: uint(filter.ApproximatedSize()),
 			Capacity:     filter.Cap(),
-			FillRatio:    filter.FillRatio(),
+			FillRatio:    float64(filter.ApproximatedSize()) / float64(filter.Cap()),
 		}
 	}
 	
@@ -406,15 +406,21 @@ func (be *BloomExchanger) processCoordinationHints(hints *CoordinationHints) {
 	
 	// Queue suggested blocks for opportunistic fetching
 	if be.cache.config.EnableAltruistic {
-		fetcher := be.cache.GetHealthTracker().GetOpportunisticFetcher()
-		if fetcher != nil {
-			for _, blockID := range hints.SuggestedBlocks {
-				// Only queue if we don't already have it
-				if !be.cache.Has(blockID) {
-					fetcher.QueueBlock(blockID, BlockHint{
-						ReplicationBucket: ReplicationLow,
-						HighEntropy:       true,
-					})
+		fetcherInterface := be.cache.GetHealthTracker().GetOpportunisticFetcher()
+		if fetcherInterface != nil {
+			// Type assert to OpportunisticFetcher if available
+			if fetcher, ok := fetcherInterface.(*OpportunisticFetcher); ok {
+				for _, blockID := range hints.SuggestedBlocks {
+					// Only queue if we don't already have it
+					if !be.cache.Has(blockID) {
+						// Queue block for fetching
+						select {
+						case fetcher.fetchQueue <- blockID:
+							// Queued successfully
+						default:
+							// Queue is full, skip this block
+						}
+					}
 				}
 			}
 		}
@@ -483,7 +489,7 @@ func (be *BloomExchanger) GetPeerCoordination() *PeerCoordinationStats {
 	// Calculate overlap statistics by category
 	for category, localFilter := range be.localFilters {
 		catStats := &CategoryStats{
-			LocalSize: localFilter.ApproximatedSize(),
+			LocalSize: uint(localFilter.ApproximatedSize()),
 		}
 		
 		// Calculate average overlap with peers
@@ -533,8 +539,8 @@ func (be *BloomExchanger) generatePeerID() string {
 func estimateBloomOverlap(f1, f2 *bloom.BloomFilter) uint {
 	// This is a rough estimate based on fill ratios
 	// In practice, you'd need to implement proper overlap estimation
-	fillRatio1 := f1.FillRatio()
-	fillRatio2 := f2.FillRatio()
+	fillRatio1 := float64(f1.ApproximatedSize()) / float64(f1.Cap())
+	fillRatio2 := float64(f2.ApproximatedSize()) / float64(f2.Cap())
 	
 	// Estimate overlap based on fill ratios
 	overlapRatio := fillRatio1 * fillRatio2

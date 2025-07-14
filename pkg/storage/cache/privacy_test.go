@@ -3,6 +3,8 @@ package cache
 import (
 	"testing"
 	"time"
+
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 func TestDifferentialPrivacy(t *testing.T) {
@@ -93,11 +95,10 @@ func TestBloomFilterCacheHint(t *testing.T) {
 	cache := NewAdaptiveCache(config)
 	
 	// Add some items to cache
-	for i, item := range testItems {
+	for _, item := range testItems {
 		data := []byte("test data")
-		cache.Put(item, data, map[string]interface{}{
-			"test": i,
-		})
+		block, _ := blocks.NewBlock(data)
+		cache.Store(item, block)
 	}
 	
 	// Create cache hint
@@ -125,7 +126,8 @@ func TestDummyAccessInjection(t *testing.T) {
 	
 	// Add an item to cache
 	testData := []byte("test data")
-	cache.Put("test_cid", testData, map[string]interface{}{})
+	block, _ := blocks.NewBlock(testData)
+	cache.Store("test_cid", block)
 	
 	// Get initial access count
 	cache.mutex.RLock()

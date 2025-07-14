@@ -21,7 +21,7 @@ type ReadAheadCache struct {
 	readAheadQueue  chan readAheadRequest
 	stopChan        chan struct{}
 	wg              sync.WaitGroup
-	accessPattern   map[string]*AccessPattern
+	accessPattern   map[string]*ReadAheadPattern
 	
 	// Statistics
 	stats ReadAheadStats
@@ -40,8 +40,8 @@ type ReadAheadStats struct {
 	TotalReadAheadLatency time.Duration
 }
 
-// AccessPattern tracks sequential access patterns for read-ahead
-type AccessPattern struct {
+// ReadAheadPattern tracks sequential access patterns for read-ahead
+type ReadAheadPattern struct {
 	LastAccess    time.Time
 	AccessCount   int
 	LastCID       string
@@ -87,7 +87,7 @@ func NewReadAheadCache(underlying Cache, config ReadAheadConfig, logger *logging
 		logger:          logger,
 		readAheadQueue:  make(chan readAheadRequest, 100),
 		stopChan:        make(chan struct{}),
-		accessPattern:   make(map[string]*AccessPattern),
+		accessPattern:   make(map[string]*ReadAheadPattern),
 	}
 
 	// Start read-ahead workers
@@ -169,7 +169,7 @@ func (c *ReadAheadCache) Clear() {
 	c.underlying.Clear()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.accessPattern = make(map[string]*AccessPattern)
+	c.accessPattern = make(map[string]*ReadAheadPattern)
 }
 
 // Close shuts down the read-ahead cache
@@ -194,7 +194,7 @@ func (c *ReadAheadCache) updateAccessPattern(cid string) {
 	now := time.Now()
 	pattern, exists := c.accessPattern[cid]
 	if !exists {
-		c.accessPattern[cid] = &AccessPattern{
+		c.accessPattern[cid] = &ReadAheadPattern{
 			LastAccess:   now,
 			AccessCount:  1,
 			LastCID:      cid,

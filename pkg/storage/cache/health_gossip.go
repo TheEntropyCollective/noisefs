@@ -222,11 +222,22 @@ func (hg *HealthGossiper) sendGossip() error {
 	// Populate filters and calculate stats
 	stats := hg.calculateAggregateStats(blockHints, lowRepFilter, highEntropyFilter)
 	
+	// Marshal bloom filters
+	lowRepData, err := lowRepFilter.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal low rep filter: %w", err)
+	}
+	
+	highEntropyData, err := highEntropyFilter.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal high entropy filter: %w", err)
+	}
+	
 	// Create gossip message
 	msg := &HealthGossipMessage{
 		Timestamp:            time.Now(),
-		LowReplicationFilter: lowRepFilter.MarshalBinary(),
-		HighEntropyFilter:    highEntropyFilter.MarshalBinary(),
+		LowReplicationFilter: lowRepData,
+		HighEntropyFilter:    highEntropyData,
 		AggregateStats:       stats,
 		PeerID:              hg.anonymizePeerID(),
 		Version:             1,
@@ -279,14 +290,23 @@ func (hg *HealthGossiper) calculateAggregateStats(
 		}
 		
 		// Accumulate metrics
-		totalPopularity += float64(hint.RequestCount)
+		totalPopularity += hint.NoisyRequestRate
 		if hint.HighEntropy {
 			totalEntropy += 1.0
 		}
 		
 		// Count regions (anonymized)
-		for _, region := range hint.MissingRegions {
-			regionBucket := hg.anonymizeRegion(region)
+		// MissingRegions is an int representing count, not a slice
+		if hint.MissingRegions > 0 {
+			// Group by region count buckets for privacy
+			regionBucket := "unknown"
+			if hint.MissingRegions <= 2 {
+				regionBucket = "low"
+			} else if hint.MissingRegions <= 5 {
+				regionBucket = "medium"
+			} else {
+				regionBucket = "high"
+			}
 			stats.RegionCounts[regionBucket]++
 		}
 	}

@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -26,19 +25,19 @@ func TestHealthGossiper_MessageCreation(t *testing.T) {
 	healthTracker.UpdateBlockHealth("block1", BlockHint{
 		ReplicationBucket: ReplicationLow,
 		HighEntropy:       true,
-		RequestCount:      10,
+		NoisyRequestRate:      10,
 		MissingRegions:    3,
 	})
 	healthTracker.UpdateBlockHealth("block2", BlockHint{
 		ReplicationBucket: ReplicationMedium,
 		HighEntropy:       false,
-		RequestCount:      20,
+		NoisyRequestRate:      20,
 		MissingRegions:    1,
 	})
 	healthTracker.UpdateBlockHealth("block3", BlockHint{
 		ReplicationBucket: ReplicationHigh,
 		HighEntropy:       true,
-		RequestCount:      5,
+		NoisyRequestRate:      5,
 	})
 	
 	// Test aggregate stats calculation
@@ -97,7 +96,7 @@ func TestHealthGossiper_DifferentialPrivacy(t *testing.T) {
 	// Add test block
 	healthTracker.UpdateBlockHealth("block1", BlockHint{
 		ReplicationBucket: ReplicationLow,
-		RequestCount:      100,
+		NoisyRequestRate:      100,
 	})
 	
 	// Run multiple times to verify noise is added

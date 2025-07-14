@@ -114,7 +114,7 @@ func TestSpaceManagement_FlexPoolDynamics(t *testing.T) {
 		cache.UpdateBlockHealth(cid, BlockHint{
 			ReplicationBucket: ReplicationLow,
 			HighEntropy:       true,
-			RequestCount:      100,
+			NoisyRequestRate:      100,
 		})
 	}
 	
@@ -129,7 +129,7 @@ func TestSpaceManagement_FlexPoolDynamics(t *testing.T) {
 		cache.UpdateBlockHealth(cid, BlockHint{
 			ReplicationBucket: ReplicationHigh,
 			HighEntropy:       false,
-			RequestCount:      5,
+			NoisyRequestRate:      5,
 		})
 	}
 	
@@ -161,7 +161,7 @@ func TestSpaceManagement_FlexPoolDynamics(t *testing.T) {
 	}
 	
 	// Phase 3: Verify value-based eviction worked
-	finalStats := cache.GetAltruisticStats()
+	_ = cache.GetAltruisticStats()
 	
 	// Check that some valuable blocks were preserved
 	preservedValuable := 0
@@ -462,26 +462,26 @@ func TestSpaceManagement_NetworkHealthIntegration(t *testing.T) {
 			hint = BlockHint{
 				ReplicationBucket: ReplicationLow,
 				HighEntropy:       true,
-				RequestCount:      100,
+				NoisyRequestRate:      100,
 				MissingRegions:    5,
 			}
 		case 1: // Somewhat valuable
 			hint = BlockHint{
 				ReplicationBucket: ReplicationMedium,
 				HighEntropy:       true,
-				RequestCount:      50,
+				NoisyRequestRate:      50,
 			}
 		case 2: // Low value
 			hint = BlockHint{
 				ReplicationBucket: ReplicationHigh,
 				HighEntropy:       false,
-				RequestCount:      10,
+				NoisyRequestRate:      10,
 			}
 		default: // Very low value
 			hint = BlockHint{
 				ReplicationBucket: ReplicationHigh,
 				HighEntropy:       false,
-				RequestCount:      1,
+				NoisyRequestRate:      1,
 			}
 		}
 		

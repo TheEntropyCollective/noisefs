@@ -72,7 +72,7 @@ func (ce *CoordinationEngine) analyzeValuableBlocks(
 	
 	// Collect all blocks that peers consider valuable
 	for peerID, filterSet := range peerFilters {
-		if valuableFilter, exists := filterSet.Filters["valuable_blocks"]; exists {
+		if _, exists := filterSet.Filters["valuable_blocks"]; exists {
 			// Since we can't iterate Bloom filter contents,
 			// we use coordination hints from peers
 			if filterSet.Hints != nil && filterSet.Hints.HighDemandBlocks != nil {
@@ -260,8 +260,8 @@ func (ce *CoordinationEngine) calculateCoordinationScore(
 // estimateFilterOverlap estimates overlap between two Bloom filters
 func (ce *CoordinationEngine) estimateFilterOverlap(f1, f2 *bloom.BloomFilter) float64 {
 	// Get fill ratios
-	fill1 := f1.FillRatio()
-	fill2 := f2.FillRatio()
+	fill1 := float64(f1.ApproximatedSize()) / float64(f1.Cap())
+	fill2 := float64(f2.ApproximatedSize()) / float64(f2.Cap())
 	
 	// Estimate overlap using probability theory
 	// P(bit set in both) ≈ P(bit set in f1) * P(bit set in f2)

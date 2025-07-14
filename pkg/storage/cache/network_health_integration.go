@@ -187,11 +187,12 @@ func (bht *BlockHealthTracker) GetHealthSummary() *HealthSummary {
 	defer bht.mu.RUnlock()
 	
 	summary := &HealthSummary{
-		TrackedBlocks: len(bht.blockHints),
+		TrackedBlocks: len(bht.blocks),
 	}
 	
 	totalValue := 0.0
-	for _, hint := range bht.blockHints {
+	for _, health := range bht.blocks {
+		hint := health.Hint
 		if hint.ReplicationBucket == ReplicationLow {
 			summary.LowReplication++
 		}
@@ -205,9 +206,8 @@ func (bht *BlockHealthTracker) GetHealthSummary() *HealthSummary {
 		summary.AverageValue = totalValue / float64(summary.TrackedBlocks)
 	}
 	
-	if bht.opportunisticFetcher != nil {
-		summary.OpportunisticQueue = bht.opportunisticFetcher.GetQueueSize()
-	}
+	// TODO: Integrate with opportunistic fetcher when available
+	summary.OpportunisticQueue = 0
 	
 	return summary
 }
