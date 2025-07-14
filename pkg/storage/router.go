@@ -488,15 +488,6 @@ func (s *SmartDistributionStrategy) Put(ctx context.Context, router *Router, blo
 	return single.Put(ctx, router, block)
 }
 
-// Selection criteria for backend selection
-type SelectionCriteria struct {
-	RequiredCapabilities  []string
-	PreferredCapabilities []string
-	MaxLatency           time.Duration
-	MinReliability       float64
-	PreferLocal          bool
-}
-
 // LoadBalancer handles backend selection for optimal performance
 type LoadBalancer struct {
 	config    *LoadBalancingConfig
@@ -651,9 +642,12 @@ func (lb *LoadBalancer) calculatePerformanceScore(metrics *BackendMetrics, crite
 	score += metrics.SuccessRate * 0.5
 	
 	// Latency component (0-0.3)
-	if criteria.MaxLatency > 0 && metrics.AverageLatency <= criteria.MaxLatency {
-		latencyScore := 1.0 - float64(metrics.AverageLatency)/float64(criteria.MaxLatency)
-		score += latencyScore * 0.3
+	if criteria.MaxLatency > 0 {
+		maxLatencyDuration := time.Duration(criteria.MaxLatency * float64(time.Millisecond))
+		if metrics.AverageLatency <= maxLatencyDuration {
+			latencyScore := 1.0 - float64(metrics.AverageLatency)/float64(maxLatencyDuration)
+			score += latencyScore * 0.3
+		}
 	}
 	
 	// Recency component (0-0.2) - prefer less recently used backends

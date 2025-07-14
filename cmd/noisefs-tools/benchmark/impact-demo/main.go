@@ -66,8 +66,8 @@ func testPeerSelectionImpact() {
 	}
 
 	fmt.Printf("\n💡 Key Insight: Hybrid strategy achieves optimal balance\n")
-	fmt.Printf("   • 33% latency improvement over random selection\n")
-	fmt.Printf("   • 14% success rate improvement\n")
+	fmt.Printf("   • 33%% latency improvement over random selection\n")
+	fmt.Printf("   • 14%% success rate improvement\n")
 	fmt.Printf("   • Context-aware optimization for different scenarios\n")
 }
 
@@ -117,8 +117,8 @@ func testAdaptiveCachingImpact() {
 	}
 
 	fmt.Printf("\n💡 Key Insight: ML-based caching dramatically improves efficiency\n")
-	fmt.Printf("   • 50% hit rate improvement over basic LRU\n")
-	fmt.Printf("   • 64% reduction in cache evictions\n")
+	fmt.Printf("   • 50%% hit rate improvement over basic LRU\n")
+	fmt.Printf("   • 64%% reduction in cache evictions\n")
 	fmt.Printf("   • Multi-tier architecture optimizes for access patterns\n")
 }
 
@@ -175,9 +175,9 @@ func testStorageOptimizationImpact() {
 			name, overhead, metrics.reuseRate*100, efficiency, metrics.description)
 	}
 
-	fmt.Printf("\n💡 Key Insight: Milestone 4 achieves <200%% storage overhead target\n")
-	fmt.Printf("   • 49%% reduction from unoptimized baseline\n")
-	fmt.Printf("   • 467%% improvement in randomizer reuse efficiency\n")
+	fmt.Printf("\n💡 Key Insight: Milestone 4 achieves <200%%%% storage overhead target\n")
+	fmt.Printf("   • 49%%%% reduction from unoptimized baseline\n")
+	fmt.Printf("   • 467%%%% improvement in randomizer reuse efficiency\n")
 	fmt.Printf("   • Meets enterprise storage efficiency requirements\n")
 }
 

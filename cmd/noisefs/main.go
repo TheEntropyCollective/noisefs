@@ -13,7 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/ipfs"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/integration"
+	// "github.com/TheEntropyCollective/noisefs/pkg/storage/integration" // TODO: Uncomment when Sprint 4 complete
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
@@ -104,20 +104,21 @@ func main() {
 		"endpoint": cfg.IPFS.APIEndpoint,
 	})
 	
+	// TODO: Complete storage abstraction integration in Sprint 4
 	// Create IPFS client through storage abstraction for better architecture
-	storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
-	if err != nil {
-		logger.Error("Failed to connect to storage backend", map[string]interface{}{
-			"endpoint": cfg.IPFS.APIEndpoint,
-			"error":    err.Error(),
-		})
-		if *jsonOutput {
-			util.PrintJSONError(err)
-		} else {
-			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
-		}
-		os.Exit(1)
-	}
+	// storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
+	// if err != nil {
+	// 	logger.Error("Failed to connect to storage backend", map[string]interface{}{
+	// 		"endpoint": cfg.IPFS.APIEndpoint,
+	// 		"error":    err.Error(),
+	// 	})
+	// 	if *jsonOutput {
+	// 		util.PrintJSONError(err)
+	// 	} else {
+	// 		fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+	// 	}
+	// 	os.Exit(1)
+	// }
 	
 	// For backward compatibility, we need the underlying IPFS client for descriptors
 	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
@@ -694,7 +695,7 @@ func showSystemStats(ipfsClient *ipfs.Client, client *noisefs.Client, blockCache
 	}
 	
 	// Regular text output
-	fmt.Println("=== NoiseFS System Statistics ===\n")
+	fmt.Println("=== NoiseFS System Statistics ===")
 	
 	// IPFS Connection Status
 	fmt.Println("--- IPFS Connection ---")

@@ -53,7 +53,7 @@ func main() {
 }
 
 func runDemo() error {
-	fmt.Println("=== NoiseFS Core Functionality Demo ===\n")
+	fmt.Println("=== NoiseFS Core Functionality Demo ===")
 
 	// Load configuration
 	cfg := config.DefaultConfig()
@@ -325,7 +325,7 @@ func downloadFileDemo(ipfsClient *ipfs.Client, client *noisefs.Client, descripto
 }
 
 func runDemoReuse() error {
-	fmt.Println("=== NoiseFS Block Reuse Demo ===\n")
+	fmt.Println("=== NoiseFS Block Reuse Demo ===")
 
 	// Load configuration
 	cfg := config.DefaultConfig()
@@ -368,7 +368,7 @@ func runDemoReuse() error {
 	var descriptorCIDs []string
 	blockUsage := make(map[string]int) // Track block CID usage
 
-	fmt.Println("Uploading files and tracking block usage...\n")
+	fmt.Println("Uploading files and tracking block usage...")
 
 	for _, file := range files {
 		fmt.Printf("Uploading %s (%d bytes)...\n", file.name, len(file.content))

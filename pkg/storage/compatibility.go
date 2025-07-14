@@ -382,3 +382,121 @@ func (helper *MigrationHelper) BatchMigrateOperation(cids []string) ([]*blocks.B
 	addresses := helper.converter.ConvertBatch(cids, BackendTypeIPFS)
 	return helper.newBackend.GetMany(ctx, addresses)
 }
+
+// Additional BackendFactory methods from factory.go
+
+// GetSupportedBackendTypes returns all registered backend types
+func (factory *BackendFactory) GetSupportedBackendTypes() []string {
+	return GetRegisteredBackends()
+}
+
+// ValidateConfig validates that all configured backend types are supported
+func (factory *BackendFactory) ValidateConfig() error {
+	supported := GetRegisteredBackends()
+	supportedMap := make(map[string]bool)
+	for _, backendType := range supported {
+		supportedMap[backendType] = true
+	}
+	
+	for name, config := range factory.config.Backends {
+		if !supportedMap[config.Type] {
+			return fmt.Errorf("backend '%s' uses unsupported type '%s'. Supported types: %v", 
+				name, config.Type, supported)
+		}
+	}
+	
+	return nil
+}
+
+// UpdateConfig updates the factory configuration
+func (factory *BackendFactory) UpdateConfig(newConfig *Config) error {
+	if err := newConfig.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	
+	factory.config = newConfig
+	return nil
+}
+
+// CreateManagerFromConfig creates a complete storage manager from configuration
+func CreateManagerFromConfig(config *Config) (*Manager, error) {
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	
+	factory := NewBackendFactory(config)
+	if err := factory.ValidateConfig(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+	
+	manager, err := NewManager(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create manager: %w", err)
+	}
+	
+	return manager, nil
+}
+
+// CreateManagerWithIPFS creates a storage manager configured for IPFS
+func CreateManagerWithIPFS(endpoint string) (*Manager, error) {
+	config := &Config{
+		DefaultBackend: "ipfs",
+		Backends: map[string]*BackendConfig{
+			"ipfs": {
+				Type:     BackendTypeIPFS,
+				Enabled:  true,
+				Priority: 100,
+				Connection: &ConnectionConfig{
+					Endpoint: endpoint,
+				},
+			},
+		},
+		Distribution: &DistributionConfig{
+			Strategy: "single",
+		},
+		HealthCheck: &HealthCheckConfig{
+			Enabled: true,
+		},
+	}
+	
+	return CreateManagerFromConfig(config)
+}
+
+// SelectionCriteria defines criteria for backend selection
+type SelectionCriteria struct {
+	// Required capabilities
+	RequiredCapabilities []string
+	
+	// Preferred capabilities (nice to have)
+	PreferredCapabilities []string
+	
+	// Performance requirements
+	MaxLatency   float64 // milliseconds
+	MinThroughput float64 // bytes per second
+	MaxErrorRate  float64 // percentage (0.0-1.0)
+	
+	// Backend type restrictions
+	AllowedTypes    []string
+	DisallowedTypes []string
+	
+	// Health requirements
+	RequireHealthy bool
+	
+	// Priority weighting
+	PreferHighPriority bool
+	
+	// Load balancing
+	LoadBalance bool
+}
+
+// DefaultSelectionCriteria returns sensible default selection criteria
+func DefaultSelectionCriteria() SelectionCriteria {
+	return SelectionCriteria{
+		RequiredCapabilities: []string{CapabilityContentAddress},
+		MaxLatency:          5000, // 5 seconds
+		MaxErrorRate:        0.1,  // 10%
+		RequireHealthy:      true,
+		PreferHighPriority:  true,
+		LoadBalance:         false,
+	}
+}
