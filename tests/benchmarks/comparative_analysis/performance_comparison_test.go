@@ -605,3 +605,8 @@ func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []
 func (m *MockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	return m.StoreBlock(block)
 }
+
+func (m *MockBlockStore) HasBlock(cid string) (bool, error) {
+	_, exists := m.blocks[cid]
+	return exists, nil
+}

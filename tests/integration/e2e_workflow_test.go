@@ -66,6 +66,11 @@ func (m *MockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy st
 	return m.StoreBlock(block)
 }
 
+func (m *MockBlockStore) HasBlock(cid string) (bool, error) {
+	_, exists := m.blocks[cid]
+	return exists, nil
+}
+
 // PeerAwareIPFSClient interface methods
 func (m *MockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
 	m.peerManager = manager
@@ -544,6 +549,18 @@ func (c *CorruptedMockBlockStore) RetrieveBlockWithPeerHint(cid string, preferre
 
 func (c *CorruptedMockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	return c.StoreBlock(block)
+}
+
+func (c *CorruptedMockBlockStore) HasBlock(cid string) (bool, error) {
+	c.operationCount++
+
+	// Simulate intermittent failures
+	if float64(c.operationCount%10) < c.failureRate*10 {
+		return false, errors.New("simulated block existence check failure")
+	}
+
+	_, exists := c.blocks[cid]
+	return exists, nil
 }
 
 // PeerAwareIPFSClient interface methods

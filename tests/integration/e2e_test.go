@@ -60,6 +60,11 @@ func (m *mockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy st
 	return m.StoreBlock(block)
 }
 
+func (m *mockBlockStore) HasBlock(cid string) (bool, error) {
+	_, exists := m.blocks[cid]
+	return exists, nil
+}
+
 // PeerAwareIPFSClient interface methods
 func (m *mockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
 	m.peerManager = manager

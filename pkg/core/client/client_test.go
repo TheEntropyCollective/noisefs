@@ -41,6 +41,11 @@ func (m *mockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy st
 	return m.StoreBlock(block)
 }
 
+func (m *mockIPFSClient) HasBlock(cid string) (bool, error) {
+	// Mock implementation - return true for any CID
+	return true, nil
+}
+
 // Additional methods to implement PeerAwareIPFSClient
 func (m *mockIPFSClient) SetPeerManager(manager *p2p.PeerManager) {
 	// Mock implementation - no-op

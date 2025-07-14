@@ -56,6 +56,11 @@ func (m *mockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy st
 	return m.StoreBlock(block)
 }
 
+func (m *mockBlockStore) HasBlock(cid string) (bool, error) {
+	_, exists := m.blocks[cid]
+	return exists, nil
+}
+
 // simulateUpload simulates the complete file upload process
 func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descriptors.Descriptor, error) {
 	// Create descriptor
