@@ -1,8 +1,10 @@
 package blocks
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -27,6 +29,23 @@ func NewBlock(data []byte) (*Block, error) {
 	
 	return &Block{
 		ID:   generateBlockID(data),
+		Data: data,
+	}, nil
+}
+
+// NewBlockWithHMAC creates a new block with HMAC-based ID generation
+// This provides additional security by requiring a secret key for ID generation
+func NewBlockWithHMAC(data []byte, key []byte) (*Block, error) {
+	if len(data) == 0 {
+		return nil, errors.New("block data cannot be empty")
+	}
+	
+	if len(key) == 0 {
+		return nil, errors.New("HMAC key cannot be empty")
+	}
+	
+	return &Block{
+		ID:   generateBlockIDHMAC(data, key),
 		Data: data,
 	}, nil
 }
@@ -83,13 +102,60 @@ func (b *Block) Size() int {
 }
 
 // VerifyIntegrity checks if the block ID matches the content hash
+// Uses constant-time comparison to prevent timing attacks
 func (b *Block) VerifyIntegrity() bool {
 	expectedID := generateBlockID(b.Data)
-	return b.ID == expectedID
+	
+	// Convert strings to byte slices for constant-time comparison
+	expected, err := hex.DecodeString(expectedID)
+	if err != nil {
+		return false
+	}
+	
+	actual, err := hex.DecodeString(b.ID)
+	if err != nil {
+		return false
+	}
+	
+	// Ensure both slices are the same length
+	if len(expected) != len(actual) {
+		return false
+	}
+	
+	// Use constant-time comparison to prevent timing attacks
+	return subtle.ConstantTimeCompare(expected, actual) == 1
+}
+
+// VerifyIntegrityHMAC verifies block integrity using HMAC for additional security
+// The key parameter should be a secret key known only to authorized parties
+func (b *Block) VerifyIntegrityHMAC(key []byte) bool {
+	expectedID := generateBlockIDHMAC(b.Data, key)
+	
+	// Convert strings to byte slices for constant-time comparison
+	expected, err := hex.DecodeString(expectedID)
+	if err != nil {
+		return false
+	}
+	
+	actual, err := hex.DecodeString(b.ID)
+	if err != nil {
+		return false
+	}
+	
+	// Use HMAC equal for constant-time comparison
+	return hmac.Equal(expected, actual)
 }
 
 // generateBlockID generates a content-addressed identifier for a block
 func generateBlockID(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
+}
+
+// generateBlockIDHMAC generates an HMAC-based identifier for a block
+// This provides additional security by requiring a secret key
+func generateBlockIDHMAC(data []byte, key []byte) string {
+	h := hmac.New(sha256.New, key)
+	h.Write(data)
+	return hex.EncodeToString(h.Sum(nil))
 }

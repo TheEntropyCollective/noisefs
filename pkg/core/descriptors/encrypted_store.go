@@ -19,22 +19,51 @@ type EncryptedDescriptor struct {
 	IsEncrypted bool   `json:"is_encrypted"`
 }
 
+// PasswordProvider is a function that provides the password when needed
+// The returned password should be cleared from memory after use
+// 
+// Example of secure usage:
+//   provider := func() (string, error) {
+//       // Prompt user for password (e.g., from terminal, secure dialog, etc.)
+//       password := getPasswordFromUser()
+//       return password, nil
+//   }
+//   store, err := NewEncryptedStore(ipfsClient, provider)
+type PasswordProvider func() (string, error)
+
 // EncryptedStore handles encrypted descriptor storage and retrieval
 type EncryptedStore struct {
-	ipfsClient *ipfs.Client
-	password   string
+	ipfsClient       *ipfs.Client
+	passwordProvider PasswordProvider
 }
 
 // NewEncryptedStore creates a new encrypted descriptor store
-func NewEncryptedStore(ipfsClient *ipfs.Client, password string) (*EncryptedStore, error) {
+func NewEncryptedStore(ipfsClient *ipfs.Client, passwordProvider PasswordProvider) (*EncryptedStore, error) {
 	if ipfsClient == nil {
 		return nil, errors.New("IPFS client is required")
 	}
 	
 	return &EncryptedStore{
-		ipfsClient: ipfsClient,
-		password:   password,
+		ipfsClient:       ipfsClient,
+		passwordProvider: passwordProvider,
 	}, nil
+}
+
+// NewEncryptedStoreWithPassword creates a new encrypted descriptor store with a static password
+// WARNING: This is a convenience function. For better security, use NewEncryptedStore with a custom PasswordProvider
+func NewEncryptedStoreWithPassword(ipfsClient *ipfs.Client, password string) (*EncryptedStore, error) {
+	// Create a copy of the password to avoid external modifications
+	passwordCopy := password
+	
+	// Create a password provider that returns the password
+	provider := func() (string, error) {
+		if passwordCopy == "" {
+			return "", nil
+		}
+		return passwordCopy, nil
+	}
+	
+	return NewEncryptedStore(ipfsClient, provider)
 }
 
 // Save stores a descriptor in IPFS with encryption
@@ -46,9 +75,19 @@ func (s *EncryptedStore) Save(descriptor *Descriptor) (string, error) {
 	var data []byte
 	var err error
 
-	if s.password != "" {
+	// Get password from provider
+	password, err := s.passwordProvider()
+	if err != nil {
+		return "", fmt.Errorf("failed to get password: %w", err)
+	}
+	
+	// Convert password to byte slice for SecureZero
+	passwordBytes := []byte(password)
+	defer crypto.SecureZero(passwordBytes)
+
+	if password != "" {
 		// Encrypt the descriptor
-		data, err = s.encryptDescriptor(descriptor)
+		data, err = s.encryptDescriptor(descriptor, password)
 		if err != nil {
 			return "", fmt.Errorf("failed to encrypt descriptor: %w", err)
 		}
@@ -129,18 +168,18 @@ func (s *EncryptedStore) Load(cid string) (*Descriptor, error) {
 
 // SaveUnencrypted stores a descriptor without encryption (for public content)
 func (s *EncryptedStore) SaveUnencrypted(descriptor *Descriptor) (string, error) {
-	// Temporarily disable password for this save
-	oldPassword := s.password
-	s.password = ""
-	defer func() { s.password = oldPassword }()
+	// Temporarily use a password provider that returns empty password
+	oldProvider := s.passwordProvider
+	s.passwordProvider = func() (string, error) { return "", nil }
+	defer func() { s.passwordProvider = oldProvider }()
 
 	return s.Save(descriptor)
 }
 
 // encryptDescriptor encrypts a descriptor
-func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor) ([]byte, error) {
+func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor, password string) ([]byte, error) {
 	// Generate encryption key from password
-	encKey, err := crypto.GenerateKey(s.password)
+	encKey, err := crypto.GenerateKey(password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
 	}
@@ -180,12 +219,22 @@ func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor) ([]byte, erro
 
 // decryptDescriptor decrypts an encrypted descriptor
 func (s *EncryptedStore) decryptDescriptor(encDesc *EncryptedDescriptor) (*Descriptor, error) {
-	if s.password == "" {
+	// Get password from provider
+	password, err := s.passwordProvider()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get password: %w", err)
+	}
+	
+	// Convert password to byte slice for SecureZero
+	passwordBytes := []byte(password)
+	defer crypto.SecureZero(passwordBytes)
+	
+	if password == "" {
 		return nil, errors.New("password required to decrypt descriptor")
 	}
 
 	// Derive encryption key from password and salt
-	encKey, err := crypto.DeriveKey(s.password, encDesc.Salt)
+	encKey, err := crypto.DeriveKey(password, encDesc.Salt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive encryption key: %w", err)
 	}

@@ -4,11 +4,11 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
 	"io"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // EncryptionKey represents an encryption key with metadata
@@ -107,15 +107,24 @@ func Decrypt(ciphertext []byte, key *EncryptionKey) ([]byte, error) {
 	return plaintext, nil
 }
 
-// HashPassword creates a SHA256 hash of a password for verification
+// HashPassword creates a bcrypt hash of a password for verification
+// Uses a cost factor of 12 for good security vs performance balance
 func HashPassword(password string) string {
-	hash := sha256.Sum256([]byte(password))
-	return fmt.Sprintf("%x", hash)
+	// Use cost factor of 12 as specified
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		// In case of error, return empty string to maintain interface
+		// The caller should check for empty string
+		return ""
+	}
+	return string(hash)
 }
 
-// VerifyPassword verifies a password against its hash
+// VerifyPassword verifies a password against its bcrypt hash
 func VerifyPassword(password, hash string) bool {
-	return HashPassword(password) == hash
+	// CompareHashAndPassword returns nil on success
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }
 
 // SecureRandom generates cryptographically secure random bytes

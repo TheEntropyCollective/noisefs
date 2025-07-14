@@ -668,7 +668,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 	
 	if useEncryption {
 		// Use encrypted store
-		encStore, storeErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		encStore, storeErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
 		if storeErr != nil {
 			return "", storeErr
 		}
@@ -707,7 +707,7 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 	
 	if password != "" {
 		// Try encrypted store first
-		encStore, encErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
 		if encErr == nil {
 			descriptor, loadErr = encStore.Load(descriptorCID)
 			if loadErr == nil {
@@ -837,7 +837,7 @@ func (w *WebUI) loadStreamingFile(descriptorCID string, password string) (*Strea
 	var loadErr error
 	
 	if password != "" {
-		encStore, encErr := descriptors.NewEncryptedStore(w.ipfsClient, password)
+		encStore, encErr := descriptors.NewEncryptedStoreWithPassword(w.ipfsClient, password)
 		if encErr == nil {
 			descriptor, loadErr = encStore.Load(descriptorCID)
 			if loadErr != nil {

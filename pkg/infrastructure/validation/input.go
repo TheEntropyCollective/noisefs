@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -180,7 +181,7 @@ func (v *Validator) ValidateCID(cid string) error {
 	return nil
 }
 
-// ValidatePassword validates password strength
+// ValidatePassword validates password strength with comprehensive checks
 func (v *Validator) ValidatePassword(password string) error {
 	if len(password) < 8 {
 		return ValidationError{
@@ -203,6 +204,90 @@ func (v *Validator) ValidatePassword(password string) error {
 		return ValidationError{
 			Field:   "password",
 			Message: "password contains null bytes",
+			Value:   "[redacted]",
+		}
+	}
+	
+	// Check complexity requirements
+	var hasUpper, hasLower, hasNumber, hasSpecial bool
+	for _, char := range password {
+		switch {
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsNumber(char):
+			hasNumber = true
+		case !unicode.IsLetter(char) && !unicode.IsNumber(char):
+			hasSpecial = true
+		}
+	}
+	
+	if !hasUpper {
+		return ValidationError{
+			Field:   "password",
+			Message: "password must contain at least one uppercase letter",
+			Value:   "[redacted]",
+		}
+	}
+	
+	if !hasLower {
+		return ValidationError{
+			Field:   "password",
+			Message: "password must contain at least one lowercase letter",
+			Value:   "[redacted]",
+		}
+	}
+	
+	if !hasNumber {
+		return ValidationError{
+			Field:   "password",
+			Message: "password must contain at least one number",
+			Value:   "[redacted]",
+		}
+	}
+	
+	if !hasSpecial {
+		return ValidationError{
+			Field:   "password",
+			Message: "password must contain at least one special character",
+			Value:   "[redacted]",
+		}
+	}
+	
+	// Check for common passwords
+	if v.isCommonPassword(strings.ToLower(password)) {
+		return ValidationError{
+			Field:   "password",
+			Message: "password is too common, please choose a more unique password",
+			Value:   "[redacted]",
+		}
+	}
+	
+	// Check entropy (minimum 40 bits recommended)
+	entropy := v.calculatePasswordEntropy(password)
+	if entropy < 40 {
+		return ValidationError{
+			Field:   "password",
+			Message: "password is too predictable, please use a more complex password",
+			Value:   "[redacted]",
+		}
+	}
+	
+	// Check for repeated characters
+	if v.hasExcessiveRepeatedChars(password) {
+		return ValidationError{
+			Field:   "password",
+			Message: "password contains too many repeated characters",
+			Value:   "[redacted]",
+		}
+	}
+	
+	// Check for sequential characters
+	if v.hasSequentialChars(password) {
+		return ValidationError{
+			Field:   "password",
+			Message: "password contains sequential characters (e.g., 123, abc)",
 			Value:   "[redacted]",
 		}
 	}
@@ -374,4 +459,186 @@ func (v *Validator) ValidateDownloadRequest(cid, password string) []ValidationEr
 	}
 	
 	return errors
+}
+
+// PasswordStrength represents the strength level of a password
+type PasswordStrength int
+
+const (
+	PasswordStrengthVeryWeak PasswordStrength = iota
+	PasswordStrengthWeak
+	PasswordStrengthFair
+	PasswordStrengthStrong
+	PasswordStrengthVeryStrong
+)
+
+// String returns the string representation of password strength
+func (ps PasswordStrength) String() string {
+	switch ps {
+	case PasswordStrengthVeryWeak:
+		return "Very Weak"
+	case PasswordStrengthWeak:
+		return "Weak"
+	case PasswordStrengthFair:
+		return "Fair"
+	case PasswordStrengthStrong:
+		return "Strong"
+	case PasswordStrengthVeryStrong:
+		return "Very Strong"
+	default:
+		return "Unknown"
+	}
+}
+
+// GetPasswordStrength analyzes password and returns its strength level
+func (v *Validator) GetPasswordStrength(password string) (PasswordStrength, float64) {
+	if password == "" {
+		return PasswordStrengthVeryWeak, 0
+	}
+	
+	entropy := v.calculatePasswordEntropy(password)
+	
+	// Determine strength based on entropy bits
+	switch {
+	case entropy < 20:
+		return PasswordStrengthVeryWeak, entropy
+	case entropy < 35:
+		return PasswordStrengthWeak, entropy
+	case entropy < 50:
+		return PasswordStrengthFair, entropy
+	case entropy < 65:
+		return PasswordStrengthStrong, entropy
+	default:
+		return PasswordStrengthVeryStrong, entropy
+	}
+}
+
+// calculatePasswordEntropy calculates the entropy of a password in bits
+func (v *Validator) calculatePasswordEntropy(password string) float64 {
+	if password == "" {
+		return 0
+	}
+	
+	// Character set size
+	var charSetSize int
+	var hasLower, hasUpper, hasDigit, hasSpecial bool
+	
+	for _, char := range password {
+		switch {
+		case unicode.IsLower(char):
+			hasLower = true
+		case unicode.IsUpper(char):
+			hasUpper = true
+		case unicode.IsDigit(char):
+			hasDigit = true
+		case !unicode.IsLetter(char) && !unicode.IsNumber(char):
+			hasSpecial = true
+		}
+	}
+	
+	if hasLower {
+		charSetSize += 26
+	}
+	if hasUpper {
+		charSetSize += 26
+	}
+	if hasDigit {
+		charSetSize += 10
+	}
+	if hasSpecial {
+		charSetSize += 32 // Common special characters
+	}
+	
+	if charSetSize == 0 {
+		return 0
+	}
+	
+	// Calculate entropy: length * log2(charset_size)
+	return float64(len(password)) * math.Log2(float64(charSetSize))
+}
+
+// isCommonPassword checks if password is in the common passwords list
+func (v *Validator) isCommonPassword(password string) bool {
+	// Top 100 most common passwords (lowercase)
+	commonPasswords := map[string]bool{
+		"password": true, "123456": true, "password123": true, "12345678": true,
+		"qwerty": true, "abc123": true, "123456789": true, "111111": true,
+		"1234567": true, "iloveyou": true, "adobe123": true, "welcome": true,
+		"admin": true, "letmein": true, "monkey": true, "1234567890": true,
+		"photoshop": true, "1234": true, "sunshine": true, "12345": true,
+		"password1": true, "princess": true, "azerty": true, "trustno1": true,
+		"000000": true, "access": true, "baseball": true, "batman": true,
+		"dragon": true, "football": true, "freedom": true, "hello": true,
+		"login": true, "master": true, "michael": true, "mustang": true,
+		"ninja": true, "passw0rd": true, "password2": true, "qazwsx": true,
+		"qwertyuiop": true, "shadow": true, "superman": true, "welcome123": true,
+		"zaq1zaq1": true, "1q2w3e4r": true, "1qaz2wsx": true, "aa123456": true,
+		"donald": true, "hottie": true, "loveme": true, "whatever": true,
+		"666666": true, "7777777": true, "888888": true, "987654321": true,
+		"jordan": true, "michelle": true, "nicole": true, "hunter": true,
+		"test": true, "test123": true, "testing": true, "changeme": true,
+		"summer": true, "winter": true, "spring": true, "autumn": true,
+		"secret": true, "god": true, "love": true, "hello123": true,
+		"123": true, "1111": true, "12341234": true, "123123": true,
+		"guest": true, "default": true, "user": true, "demo": true,
+		"oracle": true, "root": true, "toor": true, "pass": true,
+		"mysql": true, "web": true, "cisco": true, "internet": true,
+		"administrator": true, "adminadmin": true, "system": true, "server": true,
+		"computer": true, "test1234": true, "database": true, "security": true,
+		"finance": true, "sales": true, "support": true, "development": true,
+	}
+	
+	return commonPasswords[password]
+}
+
+// hasExcessiveRepeatedChars checks for excessive character repetition
+func (v *Validator) hasExcessiveRepeatedChars(password string) bool {
+	if len(password) < 3 {
+		return false
+	}
+	
+	// Check for 3 or more consecutive identical characters
+	count := 1
+	for i := 1; i < len(password); i++ {
+		if password[i] == password[i-1] {
+			count++
+			if count >= 3 {
+				return true
+			}
+		} else {
+			count = 1
+		}
+	}
+	
+	return false
+}
+
+// hasSequentialChars checks for sequential characters
+func (v *Validator) hasSequentialChars(password string) bool {
+	if len(password) < 3 {
+		return false
+	}
+	
+	lowerPass := strings.ToLower(password)
+	
+	// Common sequences to check
+	sequences := []string{
+		"123", "234", "345", "456", "567", "678", "789", "890",
+		"098", "987", "876", "765", "654", "543", "432", "321", "210",
+		"abc", "bcd", "cde", "def", "efg", "fgh", "ghi", "hij", "ijk",
+		"jkl", "klm", "lmn", "mno", "nop", "opq", "pqr", "qrs", "rst",
+		"stu", "tuv", "uvw", "vwx", "wxy", "xyz",
+		"zyx", "yxw", "xwv", "wvu", "vut", "uts", "tsr", "srq", "rqp",
+		"qpo", "pon", "onm", "nml", "mlk", "lkj", "kji", "jih", "ihg",
+		"hgf", "gfe", "fed", "edc", "dcb", "cba",
+		"qwerty", "asdf", "zxcv", "qazwsx", "qwertyuiop",
+	}
+	
+	for _, seq := range sequences {
+		if strings.Contains(lowerPass, seq) {
+			return true
+		}
+	}
+	
+	return false
 }

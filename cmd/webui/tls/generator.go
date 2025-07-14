@@ -34,8 +34,8 @@ func (g *CertificateGenerator) GenerateSelfSignedCertificate(hostnames []string)
 		return "", "", fmt.Errorf("failed to create certificate directory: %w", err)
 	}
 
-	// Generate private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Generate private key with 4096-bit RSA for enhanced security
+	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to generate private key: %w", err)
 	}
@@ -52,7 +52,7 @@ func (g *CertificateGenerator) GenerateSelfSignedCertificate(hostnames []string)
 			PostalCode:    []string{""},
 		},
 		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(365 * 24 * time.Hour), // 1 year
+		NotAfter:     time.Now().Add(3 * 365 * 24 * time.Hour), // 3 years
 		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		IPAddresses:  []net.IP{},

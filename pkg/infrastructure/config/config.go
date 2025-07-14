@@ -88,17 +88,44 @@ type WebUIConfig struct {
 	TLSKeyFile   string   `json:"tls_key_file"`
 	TLSAutoGen   bool     `json:"tls_auto_gen"`
 	TLSHostnames []string `json:"tls_hostnames"`
+	TLSMinVersion string  `json:"tls_min_version"` // Minimum TLS version (e.g., "1.2", "1.3")
 }
 
 // SecurityConfig holds security-related configuration
+// WARNING: Disabling security features may expose sensitive data.
+// Only disable security features if you fully understand the implications.
 type SecurityConfig struct {
+	// EncryptDescriptors controls whether file descriptors are encrypted.
+	// When true, descriptors are encrypted to prevent metadata leakage.
 	EncryptDescriptors bool `json:"encrypt_descriptors"`
+	
+	// DefaultEncrypted determines if files are encrypted by default.
+	// When true, all new files are automatically encrypted.
 	DefaultEncrypted   bool `json:"default_encrypted"`
+	
+	// RequirePassword enforces password protection for all operations.
+	// When true, a password must be provided to access any files.
 	RequirePassword    bool `json:"require_password"`
+	
+	// PasswordPrompt enables interactive password prompting.
+	// When true, the system will prompt for passwords when needed.
 	PasswordPrompt     bool `json:"password_prompt"`
+	
+	// EncryptLocalIndex encrypts the local file index.
+	// When true, the file index is encrypted to protect file metadata.
 	EncryptLocalIndex  bool `json:"encrypt_local_index"`
+	
+	// SecureMemory enables secure memory handling to prevent swapping.
+	// When true, sensitive data is locked in memory and cleared after use.
 	SecureMemory       bool `json:"secure_memory"`
+	
+	// AntiForensics enables additional anti-forensic measures.
+	// When true, additional steps are taken to make forensic analysis harder.
 	AntiForensics      bool `json:"anti_forensics"`
+	
+	// EnableEncryption is the master switch for all encryption features.
+	// When false, NO encryption is performed regardless of other settings.
+	EnableEncryption   bool `json:"enable_encryption"`
 }
 
 // TorConfig holds Tor-related configuration
@@ -163,15 +190,18 @@ func DefaultConfig() *Config {
 			TLSKeyFile:   "",
 			TLSAutoGen:   true,
 			TLSHostnames: []string{"localhost"},
+			TLSMinVersion: "1.2", // Minimum TLS 1.2 for security
 		},
 		Security: SecurityConfig{
-			EncryptDescriptors: true,
-			DefaultEncrypted:   true,
-			RequirePassword:    false,
-			PasswordPrompt:     true,
-			EncryptLocalIndex:  false, // Disabled by default for backward compatibility
-			SecureMemory:       true,  // Enable secure memory handling
-			AntiForensics:      false, // Disabled by default (user choice)
+			// SECURE BY DEFAULT: All encryption features are enabled
+			EnableEncryption:   true,  // Master encryption switch
+			EncryptDescriptors: true,  // Encrypt file metadata
+			DefaultEncrypted:   true,  // All files encrypted by default
+			RequirePassword:    true,  // Password required for all operations
+			PasswordPrompt:     true,  // Interactive password prompting
+			EncryptLocalIndex:  true,  // Encrypt local file index
+			SecureMemory:       true,  // Prevent memory swapping
+			AntiForensics:      false, // Optional: user choice
 		},
 		Tor: TorConfig{
 			Enabled:         true,
@@ -204,6 +234,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	
+	// Log security warnings if insecure settings are detected
+	config.logSecurityWarnings()
 
 	return config, nil
 }
@@ -333,6 +366,23 @@ func (c *Config) applyEnvironmentOverrides() {
 	if val := os.Getenv("NOISEFS_PASSWORD_PROMPT"); val != "" {
 		c.Security.PasswordPrompt = strings.ToLower(val) == "true"
 	}
+	if val := os.Getenv("NOISEFS_ENCRYPT_LOCAL_INDEX"); val != "" {
+		c.Security.EncryptLocalIndex = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_SECURE_MEMORY"); val != "" {
+		c.Security.SecureMemory = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_ANTI_FORENSICS"); val != "" {
+		c.Security.AntiForensics = strings.ToLower(val) == "true"
+	}
+	if val := os.Getenv("NOISEFS_ENABLE_ENCRYPTION"); val != "" {
+		c.Security.EnableEncryption = strings.ToLower(val) == "true"
+	}
+	
+	// WebUI TLS overrides
+	if val := os.Getenv("NOISEFS_WEBUI_TLS_MIN_VERSION"); val != "" {
+		c.WebUI.TLSMinVersion = val
+	}
 }
 
 // Validate validates the configuration
@@ -395,6 +445,25 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("TLS cert and key files required when TLS enabled and auto-generation disabled")
 		}
 	}
+	
+	// Validate TLS configuration
+	if c.WebUI.TLSEnabled {
+		validTLSVersions := map[string]bool{
+			"1.0": true, "1.1": true, "1.2": true, "1.3": true,
+		}
+		if !validTLSVersions[c.WebUI.TLSMinVersion] {
+			return fmt.Errorf("invalid TLS minimum version: %s", c.WebUI.TLSMinVersion)
+		}
+		// Warn about insecure TLS versions
+		if c.WebUI.TLSMinVersion == "1.0" || c.WebUI.TLSMinVersion == "1.1" {
+			return fmt.Errorf("TLS versions 1.0 and 1.1 are insecure and not allowed")
+		}
+	}
+	
+	// Validate security configuration
+	if err := c.ValidateSecuritySettings(); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
 
 	return nil
 }
@@ -425,4 +494,80 @@ func GetDefaultConfigPath() (string, error) {
 	}
 
 	return filepath.Join(homeDir, ".noisefs", "config.json"), nil
+}
+
+// ValidateSecuritySettings performs comprehensive security validation
+func (c *Config) ValidateSecuritySettings() error {
+	// If encryption is disabled, warn about all the implications
+	if !c.Security.EnableEncryption {
+		// This is a critical security issue - should we allow it at all?
+		if c.Security.RequirePassword {
+			return fmt.Errorf("cannot require password when encryption is disabled")
+		}
+		if c.Security.EncryptDescriptors || c.Security.EncryptLocalIndex {
+			return fmt.Errorf("cannot encrypt descriptors or index when encryption is disabled")
+		}
+	}
+	
+	// If password is required, ensure password prompting is enabled
+	if c.Security.RequirePassword && !c.Security.PasswordPrompt {
+		// This might be okay if password is provided via environment or API
+		// But we should warn about it
+	}
+	
+	// Validate Tor configuration if enabled
+	if c.Tor.Enabled {
+		if c.Tor.UploadJitterMin < 0 || c.Tor.UploadJitterMax < 0 {
+			return fmt.Errorf("Tor jitter values must be non-negative")
+		}
+		if c.Tor.UploadJitterMin > c.Tor.UploadJitterMax {
+			return fmt.Errorf("Tor upload jitter min must be <= max")
+		}
+	}
+	
+	return nil
+}
+
+// logSecurityWarnings logs warnings about insecure configuration settings
+func (c *Config) logSecurityWarnings() {
+	warnings := []string{}
+	
+	// Check for disabled security features
+	if !c.Security.EnableEncryption {
+		warnings = append(warnings, "CRITICAL: Encryption is DISABLED - all data will be stored in plaintext")
+	}
+	if !c.Security.RequirePassword {
+		warnings = append(warnings, "WARNING: Password protection is disabled - anyone can access your files")
+	}
+	if !c.Security.EncryptDescriptors {
+		warnings = append(warnings, "WARNING: Descriptor encryption is disabled - file metadata may be exposed")
+	}
+	if !c.Security.EncryptLocalIndex {
+		warnings = append(warnings, "WARNING: Local index encryption is disabled - file listings may be exposed")
+	}
+	if !c.Security.SecureMemory {
+		warnings = append(warnings, "WARNING: Secure memory is disabled - sensitive data may be swapped to disk")
+	}
+	
+	// Check WebUI security
+	if !c.WebUI.TLSEnabled {
+		warnings = append(warnings, "WARNING: TLS is disabled for WebUI - connections are not encrypted")
+	}
+	if c.WebUI.Host != "localhost" && c.WebUI.Host != "127.0.0.1" {
+		warnings = append(warnings, "WARNING: WebUI is accessible from external hosts - ensure proper network security")
+	}
+	
+	// Check Tor configuration
+	if !c.Tor.Enabled {
+		warnings = append(warnings, "INFO: Tor is disabled - network traffic is not anonymized")
+	} else if !c.Tor.UploadEnabled {
+		warnings = append(warnings, "WARNING: Tor uploads disabled - upload patterns may reveal identity")
+	}
+	
+	// Log all warnings
+	for _, warning := range warnings {
+		// In a real implementation, this would use the actual logger
+		// For now, we'll just print to stderr
+		fmt.Fprintf(os.Stderr, "[SECURITY] %s\n", warning)
+	}
 }
