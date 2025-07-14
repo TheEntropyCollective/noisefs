@@ -377,6 +377,11 @@ func (m *MockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy st
 	return m.StoreBlock(block)
 }
 
+func (m *MockIPFSClient) HasBlock(cid string) (bool, error) {
+	_, exists := m.blocks[cid]
+	return exists, nil
+}
+
 func setupAnonymizationTest(t *testing.T) *AnonymizationTestSuite {
 	// Create cache
 	memoryCache := cache.NewMemoryCache(100 * 1024 * 1024) // 100MB cache
