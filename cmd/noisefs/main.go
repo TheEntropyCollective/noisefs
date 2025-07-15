@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
@@ -480,7 +482,10 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	return nil
 }
 
-func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, _ *logging.Logger) error {
+func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
+	// Track download start time
+	downloadStartTime := time.Now()
+	
 	// Create descriptor store
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
@@ -501,94 +506,137 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		fmt.Printf("Blocks to retrieve: %d\n", len(descriptor.Blocks))
 	}
 
-	// Retrieve all data blocks
-	dataCIDs := make([]string, len(descriptor.Blocks))
-	randomizer1CIDs := make([]string, len(descriptor.Blocks))
-	randomizer2CIDs := make([]string, len(descriptor.Blocks))
-
+	// Create worker pool for parallel operations
+	poolConfig := workers.Config{
+		WorkerCount: runtime.NumCPU() * 2, // Double CPU count for I/O bound operations
+		BufferSize:  runtime.NumCPU() * 4,
+		ShutdownTimeout: 30 * time.Second,
+	}
+	
+	if !quiet {
+		// Add progress reporter
+		poolConfig.ProgressReporter = func(completed, total int64) {
+			// Progress is tracked via progress bars below
+		}
+	}
+	
+	pool := workers.NewPool(poolConfig)
+	if err := pool.Start(); err != nil {
+		return fmt.Errorf("failed to start worker pool: %w", err)
+	}
+	defer pool.Shutdown()
+	
+	// Create batch processor for block operations
+	batchProcessor := workers.NewBlockOperationBatch(pool)
+	
+	// Prepare addresses for parallel retrieval
+	dataAddresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
+	randomizer1Addresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
+	randomizer2Addresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
+	
 	for i, block := range descriptor.Blocks {
-		dataCIDs[i] = block.DataCID
-		randomizer1CIDs[i] = block.RandomizerCID1
-		randomizer2CIDs[i] = block.RandomizerCID2
+		dataAddresses[i] = &storage.BlockAddress{ID: block.DataCID}
+		randomizer1Addresses[i] = &storage.BlockAddress{ID: block.RandomizerCID1}
+		randomizer2Addresses[i] = &storage.BlockAddress{ID: block.RandomizerCID2}
 	}
-
-	// Retrieve anonymized data blocks
-	var downloadProgress *util.ProgressBar
+	
+	ctx := context.Background()
+	
+	// Track retrieval timings
+	retrievalStartTime := time.Now()
+	
+	// Parallel retrieval of all blocks
+	var dataBlocks, randomizer1Blocks, randomizer2Blocks []*blocks.Block
+	var retrievalErr error
+	
+	// Use wait group to retrieve all block types in parallel
+	var wg sync.WaitGroup
+	wg.Add(3)
+	
+	// Channel for collecting errors
+	errChan := make(chan error, 3)
+	
+	// Retrieve data blocks
+	go func() {
+		defer wg.Done()
+		if !quiet {
+			fmt.Println("Retrieving data blocks in parallel...")
+		}
+		blocks, err := batchProcessor.ParallelRetrieval(ctx, dataAddresses, storageManager)
+		if err != nil {
+			errChan <- fmt.Errorf("data blocks retrieval failed: %w", err)
+			return
+		}
+		dataBlocks = blocks
+	}()
+	
+	// Retrieve randomizer1 blocks
+	go func() {
+		defer wg.Done()
+		if !quiet {
+			fmt.Println("Retrieving randomizer1 blocks in parallel...")
+		}
+		blocks, err := batchProcessor.ParallelRetrieval(ctx, randomizer1Addresses, storageManager)
+		if err != nil {
+			errChan <- fmt.Errorf("randomizer1 blocks retrieval failed: %w", err)
+			return
+		}
+		randomizer1Blocks = blocks
+	}()
+	
+	// Retrieve randomizer2 blocks
+	go func() {
+		defer wg.Done()
+		if !quiet {
+			fmt.Println("Retrieving randomizer2 blocks in parallel...")
+		}
+		blocks, err := batchProcessor.ParallelRetrieval(ctx, randomizer2Addresses, storageManager)
+		if err != nil {
+			errChan <- fmt.Errorf("randomizer2 blocks retrieval failed: %w", err)
+			return
+		}
+		randomizer2Blocks = blocks
+	}()
+	
+	// Wait for all retrievals to complete
+	wg.Wait()
+	close(errChan)
+	
+	// Check for errors
+	for err := range errChan {
+		if err != nil {
+			retrievalErr = err
+			break
+		}
+	}
+	
+	if retrievalErr != nil {
+		return retrievalErr
+	}
+	
+	retrievalDuration := time.Since(retrievalStartTime)
+	
+	// Validate all blocks were retrieved
+	if len(dataBlocks) != len(descriptor.Blocks) || 
+	   len(randomizer1Blocks) != len(descriptor.Blocks) || 
+	   len(randomizer2Blocks) != len(descriptor.Blocks) {
+		return fmt.Errorf("incomplete block retrieval: expected %d blocks, got data=%d, r1=%d, r2=%d",
+			len(descriptor.Blocks), len(dataBlocks), len(randomizer1Blocks), len(randomizer2Blocks))
+	}
+	
+	// Parallel XOR reconstruction
+	xorStartTime := time.Now()
 	if !quiet {
-		downloadProgress = util.NewProgressBar(int64(len(dataCIDs)), "Downloading blocks", os.Stdout)
+		fmt.Println("Reconstructing original blocks in parallel...")
 	}
-
-	dataBlocks := make([]*blocks.Block, len(dataCIDs))
-	for i, cid := range dataCIDs {
-		address := &storage.BlockAddress{ID: cid}
-		block, err := storageManager.Get(context.Background(), address)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve data block %d: %w", i, err)
-		}
-		dataBlocks[i] = block
-		if downloadProgress != nil {
-			downloadProgress.Add(1)
-		}
+	
+	originalBlocks, err := batchProcessor.ParallelXOR(ctx, dataBlocks, randomizer1Blocks, randomizer2Blocks)
+	if err != nil {
+		return fmt.Errorf("parallel XOR reconstruction failed: %w", err)
 	}
-	if downloadProgress != nil {
-		downloadProgress.Finish()
-	}
-
-	// Retrieve first randomizer blocks
-	var randomizerProgress *util.ProgressBar
-	if !quiet {
-		randomizerProgress = util.NewProgressBar(int64(len(randomizer1CIDs)), "Retrieving randomizers", os.Stdout)
-	}
-
-	randomizer1Blocks := make([]*blocks.Block, len(randomizer1CIDs))
-	for i, cid := range randomizer1CIDs {
-		address := &storage.BlockAddress{ID: cid}
-		block, err := storageManager.Get(context.Background(), address)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
-		}
-		randomizer1Blocks[i] = block
-		if randomizerProgress != nil {
-			randomizerProgress.Add(1)
-		}
-	}
-	if randomizerProgress != nil {
-		randomizerProgress.Finish()
-	}
-
-	// Retrieve second randomizer blocks (3-tuple format)
-	var randomizer2Progress *util.ProgressBar
-	if !quiet {
-		randomizer2Progress = util.NewProgressBar(int64(len(randomizer2CIDs)), "Retrieving randomizers 2", os.Stdout)
-	}
-
-	randomizer2Blocks := make([]*blocks.Block, len(randomizer2CIDs))
-	for i, cid := range randomizer2CIDs {
-		address := &storage.BlockAddress{ID: cid}
-		block, err := storageManager.Get(context.Background(), address)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
-		}
-		randomizer2Blocks[i] = block
-		if randomizer2Progress != nil {
-			randomizer2Progress.Add(1)
-		}
-	}
-	if randomizer2Progress != nil {
-		randomizer2Progress.Finish()
-	}
-
-	// XOR blocks to reconstruct original data
-	originalBlocks := make([]*blocks.Block, len(dataBlocks))
-	for i := range dataBlocks {
-		// Use 3-tuple XOR
-		origBlock, err := dataBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
-		if err != nil {
-			return fmt.Errorf("failed to XOR blocks: %w", err)
-		}
-		originalBlocks[i] = origBlock
-	}
-
+	
+	xorDuration := time.Since(xorStartTime)
+	
 	// Create output file
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
@@ -597,10 +645,38 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	defer outputFile.Close()
 
 	// Assemble file
+	assembleStartTime := time.Now()
 	assembler := blocks.NewAssembler()
 	if err := assembler.AssembleToWriter(originalBlocks, outputFile); err != nil {
 		return fmt.Errorf("failed to assemble file: %w", err)
 	}
+	assembleDuration := time.Since(assembleStartTime)
+	
+	// Calculate total download duration
+	totalDownloadDuration := time.Since(downloadStartTime)
+	
+	// Log performance metrics
+	logger.Info("Download performance metrics", map[string]interface{}{
+		"descriptor_cid": descriptorCID,
+		"file_size": descriptor.FileSize,
+		"block_count": len(descriptor.Blocks),
+		"total_duration_ms": totalDownloadDuration.Milliseconds(),
+		"retrieval_duration_ms": retrievalDuration.Milliseconds(),
+		"xor_duration_ms": xorDuration.Milliseconds(),
+		"assembly_duration_ms": assembleDuration.Milliseconds(),
+		"throughput_mb_per_s": float64(descriptor.FileSize) / (1024 * 1024) / totalDownloadDuration.Seconds(),
+		"blocks_per_second": float64(len(descriptor.Blocks)*3) / retrievalDuration.Seconds(), // *3 for all block types
+		"worker_count": poolConfig.WorkerCount,
+	})
+	
+	// Display pool statistics
+	stats := pool.Stats()
+	logger.Debug("Worker pool statistics", map[string]interface{}{
+		"tasks_submitted": stats.Submitted,
+		"tasks_completed": stats.Completed,
+		"tasks_failed": stats.Failed,
+		"worker_count": stats.WorkerCount,
+	})
 
 	if jsonOutput {
 		result := util.DownloadResult{
@@ -612,6 +688,17 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		util.PrintJSONSuccess(result)
 	} else if !quiet {
 		fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+			float64(descriptor.FileSize)/(1024*1024)/totalDownloadDuration.Seconds(),
+			totalDownloadDuration.Seconds())
+		fmt.Printf("  - Block retrieval: %.2fs (%d blocks/s)\n", 
+			retrievalDuration.Seconds(), 
+			int(float64(len(descriptor.Blocks)*3)/retrievalDuration.Seconds()))
+		fmt.Printf("  - XOR reconstruction: %.2fs (%d blocks/s)\n", 
+			xorDuration.Seconds(),
+			int(float64(len(descriptor.Blocks))/xorDuration.Seconds()))
+		fmt.Printf("  - File assembly: %.2fs\n", assembleDuration.Seconds())
+		fmt.Printf("  - Parallel workers: %d\n", poolConfig.WorkerCount)
 	}
 
 	// Record download
