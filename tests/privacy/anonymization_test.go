@@ -59,10 +59,10 @@ func TestBlockAnonymization(t *testing.T) {
 				t.Fatalf("Failed to create second randomizer: %v", err)
 			}
 			
-			// Perform XOR3 anonymization (the actual privacy mechanism)
-			anonymizedBlock, err := sourceBlock.XOR3(randBlock1, randBlock2)
+			// Perform XOR anonymization (the actual privacy mechanism)
+			anonymizedBlock, err := sourceBlock.XOR(randBlock1, randBlock2)
 			if err != nil {
-				t.Fatalf("Failed to anonymize block with XOR3: %v", err)
+				t.Fatalf("Failed to anonymize block with XOR: %v", err)
 			}
 
 			// Verify anonymized block appears random
@@ -75,14 +75,14 @@ func TestBlockAnonymization(t *testing.T) {
 				t.Errorf("Block %d anonymized data contains source patterns", i)
 			}
 			
-			// Verify reverse XOR3 restores original
-			restoredBlock, err := anonymizedBlock.XOR3(randBlock1, randBlock2)
+			// Verify reverse XOR restores original
+			restoredBlock, err := anonymizedBlock.XOR(randBlock1, randBlock2)
 			if err != nil {
-				t.Fatalf("Failed to reverse XOR3: %v", err)
+				t.Fatalf("Failed to reverse XOR: %v", err)
 			}
 			
 			if string(restoredBlock.Data) != string(sourceBlock.Data) {
-				t.Errorf("Block %d XOR3 is not reversible", i)
+				t.Errorf("Block %d XOR is not reversible", i)
 			}
 		})
 	}
@@ -136,7 +136,7 @@ func TestPlausibleDeniability(t *testing.T) {
 			}
 			
 			// Anonymize the block
-			anonymizedBlock, err := block.XOR3(randBlock1, randBlock2)
+			anonymizedBlock, err := block.XOR(randBlock1, randBlock2)
 			if err != nil {
 				t.Fatalf("Failed to anonymize block: %v", err)
 			}
@@ -215,7 +215,7 @@ func TestMultiUseBlockValidation(t *testing.T) {
 			}
 			
 			// Anonymize the block
-			_, err = sourceBlock.XOR3(randBlock1, randBlock2)
+			_, err = sourceBlock.XOR(randBlock1, randBlock2)
 			if err != nil {
 				t.Fatalf("Failed to anonymize block: %v", err)
 			}

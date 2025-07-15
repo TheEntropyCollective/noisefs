@@ -12,9 +12,9 @@ After thorough examination of the codebase, I've found both **alignments and sig
 - Files are anonymized using 3-tuple XOR: `AnonymizedBlock = SourceBlock ⊕ Randomizer1 ⊕ Randomizer2`
 
 **Actual Implementation:**
-- ✅ **CONFIRMED**: The `Block.XOR3()` method in `/pkg/core/blocks/block.go` implements exactly this:
+- ✅ **CONFIRMED**: The `Block.XOR()` method in `/pkg/core/blocks/block.go` implements exactly this:
 ```go
-func (b *Block) XOR3(randomizer1, randomizer2 *Block) (*Block, error) {
+func (b *Block) XOR(randomizer1, randomizer2 *Block) (*Block, error) {
     result := make([]byte, len(b.Data))
     for i := range b.Data {
         result[i] = b.Data[i] ^ randomizer1.Data[i] ^ randomizer2.Data[i]

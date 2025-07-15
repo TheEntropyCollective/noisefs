@@ -79,7 +79,7 @@ func TestSimpleUploadDownload(t *testing.T) {
 			}
 
 			// XOR with both randomizers
-			xorBlock, err := block.XOR3(randBlock1, randBlock2)
+			xorBlock, err := block.XOR(randBlock1, randBlock2)
 			if err != nil {
 				t.Fatalf("Failed to XOR block %d: %v", i, err)
 			}
@@ -153,7 +153,7 @@ func TestSimpleUploadDownload(t *testing.T) {
 			}
 
 			// XOR to reconstruct original
-			originalBlock, err := xorBlock.XOR3(randBlock1, randBlock2)
+			originalBlock, err := xorBlock.XOR(randBlock1, randBlock2)
 			if err != nil {
 				t.Fatalf("Failed to reconstruct block %d: %v", i, err)
 			}
@@ -218,7 +218,7 @@ func TestBlockAnonymization(t *testing.T) {
 		randBlock2 := &blocks.Block{Data: randomizer2, ID: fmt.Sprintf("rand2_%d", i)}
 
 		// XOR with both randomizers using block methods
-		xorBlock, err := dataBlock.XOR3(randBlock1, randBlock2)
+		xorBlock, err := dataBlock.XOR(randBlock1, randBlock2)
 		if err != nil {
 			t.Fatalf("Failed to XOR block %d: %v", i, err)
 		}
@@ -239,7 +239,7 @@ func TestBlockAnonymization(t *testing.T) {
 		}
 
 		// Verify reconstruction using block methods
-		reconstructed, err := xorBlock.XOR3(randBlock1, randBlock2)
+		reconstructed, err := xorBlock.XOR(randBlock1, randBlock2)
 		if err != nil {
 			t.Fatalf("Failed to reconstruct block %d: %v", i, err)
 		}

@@ -26,7 +26,7 @@ type Descriptor struct {
 // NewDescriptor creates a new file descriptor
 func NewDescriptor(filename string, fileSize int64, blockSize int) *Descriptor {
 	return &Descriptor{
-		Version:   "2.0", // Updated for 3-tuple support
+		Version:   "2.0",
 		Filename:  filename,
 		FileSize:  fileSize,
 		BlockSize: blockSize,
@@ -35,20 +35,6 @@ func NewDescriptor(filename string, fileSize int64, blockSize int) *Descriptor {
 	}
 }
 
-// AddBlockPair adds a data/randomizer block pair to the descriptor (legacy 2-tuple support)
-func (d *Descriptor) AddBlockPair(dataCID, randomizerCID string) error {
-	if dataCID == "" || randomizerCID == "" {
-		return errors.New("CIDs cannot be empty")
-	}
-	
-	d.Blocks = append(d.Blocks, BlockPair{
-		DataCID:        dataCID,
-		RandomizerCID1: randomizerCID,
-		RandomizerCID2: "", // Empty for 2-tuple compatibility
-	})
-	
-	return nil
-}
 
 // AddBlockTriple adds a data block with two randomizers (3-tuple)
 func (d *Descriptor) AddBlockTriple(dataCID, randomizerCID1, randomizerCID2 string) error {
@@ -92,23 +78,12 @@ func (d *Descriptor) Validate() error {
 	}
 	
 	for i, block := range d.Blocks {
-		if block.DataCID == "" || block.RandomizerCID1 == "" {
-			return errors.New("block CIDs cannot be empty")
+		if block.DataCID == "" || block.RandomizerCID1 == "" || block.RandomizerCID2 == "" {
+			return errors.New("all CIDs must be present")
 		}
 		
-		// Check for 3-tuple format (version 2.0+)
-		if d.Version == "2.0" {
-			if block.RandomizerCID2 == "" {
-				return errors.New("3-tuple format requires two randomizer CIDs")
-			}
-			if block.DataCID == block.RandomizerCID1 || block.DataCID == block.RandomizerCID2 || block.RandomizerCID1 == block.RandomizerCID2 {
-				return errors.New("all CIDs in 3-tuple must be different")
-			}
-		} else {
-			// Legacy 2-tuple format
-			if block.DataCID == block.RandomizerCID1 {
-				return errors.New("data and randomizer CIDs must be different")
-			}
+		if block.DataCID == block.RandomizerCID1 || block.DataCID == block.RandomizerCID2 || block.RandomizerCID1 == block.RandomizerCID2 {
+			return errors.New("all CIDs must be different")
 		}
 		_ = i
 	}
@@ -148,10 +123,6 @@ func FromJSON(data []byte) (*Descriptor, error) {
 	return &desc, nil
 }
 
-// IsThreeTuple returns true if this descriptor uses 3-tuple format
-func (d *Descriptor) IsThreeTuple() bool {
-	return d.Version == "2.0"
-}
 
 // GetRandomizerCIDs returns the randomizer CIDs for a block at the given index
 func (d *Descriptor) GetRandomizerCIDs(blockIndex int) (string, string, error) {
@@ -160,10 +131,5 @@ func (d *Descriptor) GetRandomizerCIDs(blockIndex int) (string, string, error) {
 	}
 	
 	block := d.Blocks[blockIndex]
-	if d.IsThreeTuple() {
-		return block.RandomizerCID1, block.RandomizerCID2, nil
-	}
-	
-	// Legacy 2-tuple: return first randomizer and empty string for second
-	return block.RandomizerCID1, "", nil
+	return block.RandomizerCID1, block.RandomizerCID2, nil
 }

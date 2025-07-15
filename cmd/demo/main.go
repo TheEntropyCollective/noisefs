@@ -248,7 +248,7 @@ func uploadFileDemo(storageManager *storage.Manager, client *noisefs.Client, fil
 		}
 
 		// XOR with both randomizers
-		xorBlock, err := block.XOR3(randBlock1, randBlock2)
+		xorBlock, err := block.XOR(randBlock1, randBlock2)
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}
@@ -324,7 +324,7 @@ func downloadFileDemo(storageManager *storage.Manager, client *noisefs.Client, d
 		}
 
 		// XOR to reconstruct original
-		originalBlock, err := xorBlock.XOR3(randBlock1, randBlock2)
+		originalBlock, err := xorBlock.XOR(randBlock1, randBlock2)
 		if err != nil {
 			return fmt.Errorf("failed to reconstruct block: %w", err)
 		}

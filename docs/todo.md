@@ -19,7 +19,7 @@
 
 **Tasks**:
 - [ ] Remove `SelectRandomizer()` from client package
-- [ ] Remove `AddBlockPair()` from descriptors package
+- [x] Remove `AddBlockPair()` from descriptors package
 - [ ] Add deprecation warnings to `XOR()` method in blocks package
 - [ ] Update tests that use legacy methods
 - [ ] Add logging warnings when legacy code paths are used
@@ -51,12 +51,12 @@
 **Objective**: Simplify codebase by unifying XOR operations and descriptor structure
 
 **Tasks**:
-- [ ] Rename `XOR3()` to `XOR()` in blocks package
+- [x] Rename `XOR3()` to `XOR()` in blocks package
 - [ ] Remove original `XOR()` method
-- [ ] Update all XOR method references throughout codebase
-- [ ] Make `RandomizerCID2` required in descriptor structure
-- [ ] Remove version checks and `IsThreeTuple()` method
-- [ ] Simplify validation logic for 3-tuple only
+- [x] Update all XOR method references throughout codebase
+- [x] Make `RandomizerCID2` required in descriptor structure
+- [x] Remove version checks and `IsThreeTuple()` method
+- [x] Simplify validation logic for 3-tuple only
 
 **Success Criteria**:
 - Single XOR method for all operations

@@ -342,7 +342,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	// XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
 	anonymizedBlocks := make([]*blocks.Block, len(fileBlocks))
 	for i := range fileBlocks {
-		xorBlock, err := fileBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
+		xorBlock, err := fileBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}
@@ -455,9 +455,7 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	for i, block := range descriptor.Blocks {
 		dataCIDs[i] = block.DataCID
 		randomizer1CIDs[i] = block.RandomizerCID1
-		if descriptor.IsThreeTuple() {
-			randomizer2CIDs[i] = block.RandomizerCID2
-		}
+		randomizer2CIDs[i] = block.RandomizerCID2
 	}
 	
 	// Retrieve anonymized data blocks
@@ -504,45 +502,33 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		randomizerProgress.Finish()
 	}
 	
-	// Retrieve second randomizer blocks if using 3-tuple format
-	var randomizer2Blocks []*blocks.Block
-	if descriptor.IsThreeTuple() {
-		var randomizer2Progress *util.ProgressBar
-		if !quiet {
-			randomizer2Progress = util.NewProgressBar(int64(len(randomizer2CIDs)), "Retrieving randomizers 2", os.Stdout)
+	// Retrieve second randomizer blocks (3-tuple format)
+	var randomizer2Progress *util.ProgressBar
+	if !quiet {
+		randomizer2Progress = util.NewProgressBar(int64(len(randomizer2CIDs)), "Retrieving randomizers 2", os.Stdout)
+	}
+	
+	randomizer2Blocks := make([]*blocks.Block, len(randomizer2CIDs))
+	for i, cid := range randomizer2CIDs {
+		address := &storage.BlockAddress{ID: cid}
+	block, err := storageManager.Get(context.Background(), address)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 		}
-		
-		randomizer2Blocks = make([]*blocks.Block, len(randomizer2CIDs))
-		for i, cid := range randomizer2CIDs {
-			address := &storage.BlockAddress{ID: cid}
-		block, err := storageManager.Get(context.Background(), address)
-			if err != nil {
-				return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
-			}
-			randomizer2Blocks[i] = block
-			if randomizer2Progress != nil {
-				randomizer2Progress.Add(1)
-			}
-		}
+		randomizer2Blocks[i] = block
 		if randomizer2Progress != nil {
-			randomizer2Progress.Finish()
+			randomizer2Progress.Add(1)
 		}
+	}
+	if randomizer2Progress != nil {
+		randomizer2Progress.Finish()
 	}
 	
 	// XOR blocks to reconstruct original data
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
-		var origBlock *blocks.Block
-		var err error
-		
-		if descriptor.IsThreeTuple() && randomizer2Blocks != nil {
-			// Use 3-tuple XOR for version 2.0
-			origBlock, err = dataBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
-		} else {
-			// Use 2-tuple XOR for legacy format
-			origBlock, err = dataBlocks[i].XOR(randomizer1Blocks[i])
-		}
-		
+		// Use 3-tuple XOR
+		origBlock, err := dataBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}

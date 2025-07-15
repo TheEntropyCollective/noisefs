@@ -33,7 +33,7 @@ This approach provides:
 - **Efficient reconstruction**: Simple XOR operations for both storage and retrieval
 - **Distributed trust**: No single block reveals anything about the content
 
-The XOR3 operation validates that all blocks are the same size and performs byte-wise XOR across all three inputs, producing an anonymized output block.
+The XOR operation validates that all blocks are the same size and performs byte-wise XOR across all three inputs, producing an anonymized output block.
 
 ## Mandatory Block Reuse System
 

@@ -441,9 +441,9 @@ func realFileUpload(client *fixtures.RealIPFSNode, data []byte, blockSize int) (
 		}
 
 		// Add to descriptor
-		err = descriptor.AddBlockPair(dataCID, randCID)
+		err = descriptor.AddBlockTriple(dataCID, randCID, randCID+"_2")
 		if err != nil {
-			return nil, fmt.Errorf("failed to add block pair to descriptor: %w", err)
+			return nil, fmt.Errorf("failed to add block triple to descriptor: %w", err)
 		}
 
 		offset = end

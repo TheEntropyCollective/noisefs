@@ -655,7 +655,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 		}
 
 		// XOR with both randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
-		anonymizedBlock, err := block.XOR3(randomizer1Block, randomizer2Block)
+		anonymizedBlock, err := block.XOR(randomizer1Block, randomizer2Block)
 		if err != nil {
 			return "", err
 		}
@@ -767,30 +767,20 @@ func (w *WebUI) downloadFile(descriptorCID string, password string) ([]byte, str
 		}
 		randomizer1Blocks[i] = randomizer1Block
 
-		// Get second randomizer block if using 3-tuple format
-		if descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-			rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
-			randomizer2Block, err := w.storageManager.Get(context.Background(), rand2Address)
-			if err != nil {
-				return nil, "", err
-			}
-			randomizer2Blocks[i] = randomizer2Block
+		// Get second randomizer block (3-tuple format)
+		rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
+		randomizer2Block, err := w.storageManager.Get(context.Background(), rand2Address)
+		if err != nil {
+			return nil, "", err
 		}
+		randomizer2Blocks[i] = randomizer2Block
 	}
 
 	// XOR to reconstruct original blocks
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
-		var originalBlock *blocks.Block
-		var err error
-		
-		if descriptor.IsThreeTuple() && randomizer2Blocks[i] != nil {
-			// Use 3-tuple XOR for version 2.0
-			originalBlock, err = dataBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
-		} else {
-			// Use 2-tuple XOR for legacy format
-			originalBlock, err = dataBlocks[i].XOR(randomizer1Blocks[i])
-		}
+		// Use 3-tuple XOR
+		originalBlock, err := dataBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
 		
 		if err != nil {
 			return nil, "", err
@@ -1056,24 +1046,15 @@ func (w *WebUI) reconstructBlock(descriptor *descriptors.Descriptor, blockIdx in
 		return nil, err
 	}
 	
-	// Get second randomizer block if using 3-tuple format
-	var randomizer2Block *blocks.Block
-	if descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-		rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
-		randomizer2Block, err = w.storageManager.Get(context.Background(), rand2Address)
-		if err != nil {
-			return nil, err
-		}
+	// Get second randomizer block (3-tuple format)
+	rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
+	randomizer2Block, err := w.storageManager.Get(context.Background(), rand2Address)
+	if err != nil {
+		return nil, err
 	}
 	
 	// XOR to reconstruct original block
-	var originalBlock *blocks.Block
-	if descriptor.IsThreeTuple() && randomizer2Block != nil {
-		originalBlock, err = dataBlock.XOR3(randomizer1Block, randomizer2Block)
-	} else {
-		originalBlock, err = dataBlock.XOR(randomizer1Block)
-	}
-	
+	originalBlock, err := dataBlock.XOR(randomizer1Block, randomizer2Block)
 	if err != nil {
 		return nil, err
 	}

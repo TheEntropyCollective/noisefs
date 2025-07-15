@@ -106,7 +106,7 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 	
 	// Create descriptor (simplified - would normally include proper block structure)
 	descriptor := descriptors.NewDescriptor(fileInfo.Name(), fileInfo.Size(), 131072)
-	descriptor.AddBlockPair(cid, cid) // Simplified for demo
+	descriptor.AddBlockTriple(cid, cid+"_rand1", cid+"_rand2") // Simplified for demo
 	
 	// Save descriptor
 	descriptorCID, err := descStore.Save(descriptor)

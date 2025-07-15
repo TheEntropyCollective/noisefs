@@ -690,7 +690,7 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		}
 		
 		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
-		xorBlock, err := fileBlock.XOR3(randBlock1, randBlock2)
+		xorBlock, err := fileBlock.XOR(randBlock1, randBlock2)
 		if err != nil {
 			return "", fmt.Errorf("failed to XOR blocks: %w", err)
 		}
@@ -796,23 +796,15 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
 		}
 		
-		var origBlock *blocks.Block
-		if descriptor.IsThreeTuple() && blockInfo.RandomizerCID2 != "" {
-			// 3-tuple XOR
-			randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
-			}
-			origBlock, err = dataBlock.XOR3(randBlock1, randBlock2)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
-			}
-		} else {
-			// 2-tuple XOR (legacy)
-			origBlock, err = dataBlock.XOR(randBlock1)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
-			}
+		// Retrieve second randomizer block (3-tuple XOR)
+		randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
+		}
+		
+		origBlock, err := dataBlock.XOR(randBlock1, randBlock2)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to XOR blocks: %w", err)
 		}
 		
 		originalBlocks = append(originalBlocks, origBlock)

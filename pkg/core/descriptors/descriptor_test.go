@@ -44,59 +44,6 @@ func TestNewDescriptor(t *testing.T) {
 	}
 }
 
-func TestDescriptorAddBlockPair(t *testing.T) {
-	desc := NewDescriptor("test.txt", 1024, 128)
-
-	// Test valid block pair
-	err := desc.AddBlockPair("data_cid_1", "rand_cid_1")
-	if err != nil {
-		t.Errorf("AddBlockPair() error = %v, want nil", err)
-	}
-
-	if len(desc.Blocks) != 1 {
-		t.Errorf("After AddBlockPair(), Blocks length = %v, want 1", len(desc.Blocks))
-	}
-
-	if desc.Blocks[0].DataCID != "data_cid_1" {
-		t.Errorf("Block DataCID = %v, want data_cid_1", desc.Blocks[0].DataCID)
-	}
-
-	if desc.Blocks[0].RandomizerCID1 != "rand_cid_1" {
-		t.Errorf("Block RandomizerCID1 = %v, want rand_cid_1", desc.Blocks[0].RandomizerCID1)
-	}
-
-	// Should be empty for legacy 2-tuple
-	if desc.Blocks[0].RandomizerCID2 != "" {
-		t.Errorf("Block RandomizerCID2 = %v, want empty string for legacy 2-tuple", desc.Blocks[0].RandomizerCID2)
-	}
-
-	// Test empty data CID
-	err = desc.AddBlockPair("", "rand_cid_2")
-	if err == nil {
-		t.Error("AddBlockPair() with empty data CID should return error")
-	}
-
-	// Test empty randomizer CID
-	err = desc.AddBlockPair("data_cid_2", "")
-	if err == nil {
-		t.Error("AddBlockPair() with empty randomizer CID should return error")
-	}
-
-	// Length should still be 1 (failed additions shouldn't be added)
-	if len(desc.Blocks) != 1 {
-		t.Errorf("After failed AddBlockPair(), Blocks length = %v, want 1", len(desc.Blocks))
-	}
-
-	// Test adding multiple valid pairs
-	err = desc.AddBlockPair("data_cid_2", "rand_cid_2")
-	if err != nil {
-		t.Errorf("AddBlockPair() second pair error = %v, want nil", err)
-	}
-
-	if len(desc.Blocks) != 2 {
-		t.Errorf("After second AddBlockPair(), Blocks length = %v, want 2", len(desc.Blocks))
-	}
-}
 
 func TestDescriptorValidate(t *testing.T) {
 	tests := []struct {
@@ -108,12 +55,12 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "valid descriptor",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 				CreatedAt: time.Now(),
 			},
@@ -127,7 +74,7 @@ func TestDescriptorValidate(t *testing.T) {
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
@@ -141,7 +88,7 @@ func TestDescriptorValidate(t *testing.T) {
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
@@ -155,7 +102,7 @@ func TestDescriptorValidate(t *testing.T) {
 				FileSize:  0,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
@@ -169,7 +116,7 @@ func TestDescriptorValidate(t *testing.T) {
 				FileSize:  -1,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
@@ -178,12 +125,12 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "zero block size",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 0,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
@@ -192,7 +139,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "no blocks",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -204,44 +151,58 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "empty data CID in block",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "", RandomizerCID1: "rand1", RandomizerCID2: ""},
+					{DataCID: "", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
-			errMsg:  "block CIDs cannot be empty",
+			errMsg:  "all CIDs must be present",
 		},
 		{
 			name: "empty randomizer CID in block",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "data1", RandomizerCID1: "", RandomizerCID2: ""},
+					{DataCID: "data1", RandomizerCID1: "", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
-			errMsg:  "block CIDs cannot be empty",
+			errMsg:  "all CIDs must be present",
 		},
 		{
 			name: "same data and randomizer CID",
 			desc: &Descriptor{
-				Version:   "1.0",
+				Version:   "2.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
 				Blocks: []BlockPair{
-					{DataCID: "same_cid", RandomizerCID1: "same_cid", RandomizerCID2: ""},
+					{DataCID: "same_cid", RandomizerCID1: "same_cid", RandomizerCID2: "rand2"},
 				},
 			},
 			wantErr: true,
-			errMsg:  "data and randomizer CIDs must be different",
+			errMsg:  "all CIDs must be different",
+		},
+		{
+			name: "empty second randomizer CID",
+			desc: &Descriptor{
+				Version:   "2.0",
+				Filename:  "test.txt",
+				FileSize:  1024,
+				BlockSize: 128,
+				Blocks: []BlockPair{
+					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
+				},
+			},
+			wantErr: true,
+			errMsg:  "all CIDs must be present",
 		},
 	}
 
@@ -432,54 +393,6 @@ func TestDescriptorRoundTrip(t *testing.T) {
 	}
 }
 
-func TestBlockPairValidation(t *testing.T) {
-	tests := []struct {
-		name         string
-		dataCID      string
-		randomizerCID string
-		wantErr      bool
-	}{
-		{
-			name:         "valid pair",
-			dataCID:      "data_cid",
-			randomizerCID: "rand_cid",
-			wantErr:      false,
-		},
-		{
-			name:         "empty data CID",
-			dataCID:      "",
-			randomizerCID: "rand_cid",
-			wantErr:      true,
-		},
-		{
-			name:         "empty randomizer CID",
-			dataCID:      "data_cid",
-			randomizerCID: "",
-			wantErr:      true,
-		},
-		{
-			name:         "both empty",
-			dataCID:      "",
-			randomizerCID: "",
-			wantErr:      true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			desc := NewDescriptor("test.txt", 1024, 128)
-			err := desc.AddBlockPair(tt.dataCID, tt.randomizerCID)
-
-			if tt.wantErr && err == nil {
-				t.Errorf("AddBlockPair() error = nil, wantErr %v", tt.wantErr)
-			}
-
-			if !tt.wantErr && err != nil {
-				t.Errorf("AddBlockPair() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
 
 func TestDescriptorAddBlockTriple(t *testing.T) {
 	desc := NewDescriptor("test.txt", 1024, 128)
@@ -542,19 +455,6 @@ func TestDescriptorAddBlockTriple(t *testing.T) {
 	}
 }
 
-func TestDescriptorIsThreeTuple(t *testing.T) {
-	desc := NewDescriptor("test.txt", 1024, 128)
-	
-	if !desc.IsThreeTuple() {
-		t.Error("NewDescriptor() should create 3-tuple descriptor by default")
-	}
-
-	// Test legacy descriptor
-	legacyDesc := &Descriptor{Version: "1.0"}
-	if legacyDesc.IsThreeTuple() {
-		t.Error("Legacy descriptor (v1.0) should not be 3-tuple")
-	}
-}
 
 func TestDescriptorGetRandomizerCIDs(t *testing.T) {
 	desc := NewDescriptor("test.txt", 1024, 128)
@@ -588,26 +488,5 @@ func TestDescriptorGetRandomizerCIDs(t *testing.T) {
 	_, _, err = desc.GetRandomizerCIDs(1)
 	if err == nil {
 		t.Error("GetRandomizerCIDs(1) should return error for out of range")
-	}
-
-	// Test legacy 2-tuple descriptor
-	legacyDesc := &Descriptor{
-		Version: "1.0",
-		Blocks: []BlockPair{
-			{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: ""},
-		},
-	}
-
-	cid1, cid2, err = legacyDesc.GetRandomizerCIDs(0)
-	if err != nil {
-		t.Errorf("GetRandomizerCIDs(0) on legacy descriptor error = %v, want nil", err)
-	}
-
-	if cid1 != "rand1" {
-		t.Errorf("Legacy GetRandomizerCIDs(0) cid1 = %v, want rand1", cid1)
-	}
-
-	if cid2 != "" {
-		t.Errorf("Legacy GetRandomizerCIDs(0) cid2 = %v, want empty string", cid2)
 	}
 }

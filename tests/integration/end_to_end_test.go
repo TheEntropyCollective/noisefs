@@ -288,17 +288,23 @@ func TestBlockSplittingAndXOR(t *testing.T) {
 		})
 	}
 
-	// XOR blocks
+	// XOR blocks (using legacy 2-tuple behavior with zero block)
 	var xoredBlocks []blocks.Block
 	for i, dataBlock := range dataBlocks {
-		xored, err := dataBlock.XOR(&randomizerBlocks[i])
+		// Create zero block for legacy 2-tuple XOR
+		zeroBlock, err := blocks.NewBlock(make([]byte, dataBlock.Size()))
+		if err != nil {
+			t.Fatalf("Failed to create zero block: %v", err)
+		}
+		
+		xored, err := dataBlock.XOR(&randomizerBlocks[i], zeroBlock)
 		if err != nil {
 			t.Fatalf("Failed to XOR blocks: %v", err)
 		}
 		xoredBlocks = append(xoredBlocks, *xored)
 
-		// Verify XOR property: data XOR randomizer XOR randomizer = data
-		recovered, err := xored.XOR(&randomizerBlocks[i])
+		// Verify XOR property: data XOR randomizer XOR zero XOR randomizer XOR zero = data
+		recovered, err := xored.XOR(&randomizerBlocks[i], zeroBlock)
 		if err != nil {
 			t.Fatalf("Failed to recover block: %v", err)
 		}
@@ -310,7 +316,13 @@ func TestBlockSplittingAndXOR(t *testing.T) {
 	// Reconstruct data
 	var reconstructedData []byte
 	for i, xoredBlock := range xoredBlocks {
-		recovered, err := xoredBlock.XOR(&randomizerBlocks[i])
+		// Create zero block for legacy 2-tuple XOR
+		zeroBlock, err := blocks.NewBlock(make([]byte, xoredBlock.Size()))
+		if err != nil {
+			t.Fatalf("Failed to create zero block: %v", err)
+		}
+		
+		recovered, err := xoredBlock.XOR(&randomizerBlocks[i], zeroBlock)
 		if err != nil {
 			t.Fatalf("Failed to recover block %d: %v", i, err)
 		}

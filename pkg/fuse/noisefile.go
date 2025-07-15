@@ -106,30 +106,19 @@ func (f *NoiseFile) downloadContent() ([]byte, error) {
 		}
 		randomizer1Blocks[i] = randomizer1Block
 		
-		// Get second randomizer block if using 3-tuple format
-		if f.descriptor.IsThreeTuple() && blockPair.RandomizerCID2 != "" {
-			randomizer2Block, err := f.storageManager.RetrieveBlock(blockPair.RandomizerCID2)
-			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
-			}
-			randomizer2Blocks[i] = randomizer2Block
+		// Get second randomizer block (3-tuple format)
+		randomizer2Block, err := f.storageManager.RetrieveBlock(blockPair.RandomizerCID2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 		}
+		randomizer2Blocks[i] = randomizer2Block
 	}
 	
 	// XOR to reconstruct original blocks
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
-		var originalBlock *blocks.Block
-		var err error
-		
-		if f.descriptor.IsThreeTuple() && randomizer2Blocks[i] != nil {
-			// Use 3-tuple XOR
-			originalBlock, err = dataBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
-		} else {
-			// Use 2-tuple XOR for legacy format
-			originalBlock, err = dataBlocks[i].XOR(randomizer1Blocks[i])
-		}
-		
+		// Use 3-tuple XOR
+		originalBlock, err := dataBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
 		if err != nil {
 			return nil, fmt.Errorf("failed to XOR blocks: %w", err)
 		}
@@ -197,7 +186,7 @@ func (f *NoiseFile) uploadFile() error {
 	// XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
 	anonymizedBlocks := make([]*blocks.Block, len(fileBlocks))
 	for i := range fileBlocks {
-		xorBlock, err := fileBlocks[i].XOR3(randomizer1Blocks[i], randomizer2Blocks[i])
+		xorBlock, err := fileBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
 		if err != nil {
 			return fmt.Errorf("failed to XOR blocks: %w", err)
 		}

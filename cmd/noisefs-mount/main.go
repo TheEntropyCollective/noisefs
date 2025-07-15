@@ -610,7 +610,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 		}
 		
 		// Anonymize block (XOR with two randomizers)
-		anonymizedBlock, err := dataBlock.XOR3(rand1, rand2)
+		anonymizedBlock, err := dataBlock.XOR(rand1, rand2)
 		if err != nil {
 			return "", fmt.Errorf("failed to anonymize block: %w", err)
 		}
