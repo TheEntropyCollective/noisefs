@@ -1,10 +1,24 @@
 # NoiseFS Development Todo
 
-## Current Milestone: [Ready for next milestone]
+## Current Milestone: Phase 1 - Quality Foundation
 
-**Status**: READY
+**Status**: IN PROGRESS
 
-**Summary**: Test fixes completed successfully. Ready for next development milestone.
+**Summary**: Critical fixes for concurrent safety and error handling to establish a solid foundation for future development.
+
+### Sprint 1 - Race Condition Fixes (HIGH PRIORITY)
+- [ ] Fix race conditions in altruistic cache metrics (pkg/storage/cache/altruistic_cache.go lines 354-361)
+  - Replace non-atomic counter operations with sync/atomic operations
+  - Ensure thread safety for concurrent metrics access
+
+### Sprint 2 - Enhanced Error Context (HIGH PRIORITY)
+- [ ] Add debugging context to error messages across the codebase
+- [ ] Focus on validation errors and storage operations
+- [ ] Include relevant state information in error messages
+
+### Sprint 3 - Testing Infrastructure (MEDIUM PRIORITY)
+- [ ] Set up performance benchmarking baseline
+- [ ] Create test infrastructure for validating improvements
 
 ## Completed Major Milestones
 

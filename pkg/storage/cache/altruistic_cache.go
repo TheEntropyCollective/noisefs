@@ -6,6 +6,7 @@ package cache
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
@@ -158,7 +159,7 @@ type AltruisticCache struct {
 	healthTracker    *BlockHealthTracker
 	predictiveEvictor *PredictiveEvictionIntegration
 	
-	// Metrics
+	// Metrics (atomic counters for thread safety)
 	altruisticHits   int64
 	altruisticMisses int64
 	personalHits     int64
@@ -335,29 +336,40 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 
 // Get retrieves a block and updates access tracking
 func (ac *AltruisticCache) Get(cid string) (*blocks.Block, error) {
+	// First try to get the block with a read lock
 	ac.mu.RLock()
-	defer ac.mu.RUnlock()
-	
 	block, err := ac.baseCache.Get(cid)
 	if err != nil {
-		// Track misses
+		// Track misses using atomic operations
 		if _, isPersonal := ac.personalBlocks[cid]; isPersonal {
-			ac.personalMisses++
+			atomic.AddInt64(&ac.personalMisses, 1)
 		} else {
-			ac.altruisticMisses++
+			atomic.AddInt64(&ac.altruisticMisses, 1)
 		}
+		ac.mu.RUnlock()
 		return nil, err
 	}
 	
-	// Update access time and track hits
-	if metadata, isPersonal := ac.personalBlocks[cid]; isPersonal {
-		metadata.LastAccessed = time.Now()
-		metadata.Popularity++
-		ac.personalHits++
-	} else if metadata, isAltruistic := ac.altruisticBlocks[cid]; isAltruistic {
-		metadata.LastAccessed = time.Now()
-		metadata.Popularity++
-		ac.altruisticHits++
+	// Check if we need to update metadata
+	_, isPersonal := ac.personalBlocks[cid]
+	_, isAltruistic := ac.altruisticBlocks[cid]
+	ac.mu.RUnlock()
+	
+	// If we found the block and need to update metadata, acquire write lock
+	if isPersonal || isAltruistic {
+		ac.mu.Lock()
+		// Re-check after acquiring write lock
+		now := time.Now()
+		if metadata, stillPersonal := ac.personalBlocks[cid]; stillPersonal {
+			metadata.LastAccessed = now
+			metadata.Popularity++
+			atomic.AddInt64(&ac.personalHits, 1)
+		} else if metadata, stillAltruistic := ac.altruisticBlocks[cid]; stillAltruistic {
+			metadata.LastAccessed = now
+			metadata.Popularity++
+			atomic.AddInt64(&ac.altruisticHits, 1)
+		}
+		ac.mu.Unlock()
 	}
 	
 	// Record access for predictive eviction
@@ -423,6 +435,12 @@ func (ac *AltruisticCache) Clear() {
 	ac.altruisticBlocks = make(map[string]*BlockMetadata)
 	ac.personalSize = 0
 	ac.altruisticSize = 0
+	
+	// Reset atomic counters
+	atomic.StoreInt64(&ac.personalHits, 0)
+	atomic.StoreInt64(&ac.personalMisses, 0)
+	atomic.StoreInt64(&ac.altruisticHits, 0)
+	atomic.StoreInt64(&ac.altruisticMisses, 0)
 }
 
 // GetStats returns extended cache statistics
@@ -454,10 +472,10 @@ func (ac *AltruisticCache) GetAltruisticStats() *AltruisticStats {
 		PersonalSize:      ac.personalSize,
 		AltruisticSize:    ac.altruisticSize,
 		TotalCapacity:     ac.totalCapacity,
-		PersonalHits:      ac.personalHits,
-		PersonalMisses:    ac.personalMisses,
-		AltruisticHits:    ac.altruisticHits,
-		AltruisticMisses:  ac.altruisticMisses,
+		PersonalHits:      atomic.LoadInt64(&ac.personalHits),
+		PersonalMisses:    atomic.LoadInt64(&ac.personalMisses),
+		AltruisticHits:    atomic.LoadInt64(&ac.altruisticHits),
+		AltruisticMisses:  atomic.LoadInt64(&ac.altruisticMisses),
 		FlexPoolUsage:     ac.getFlexPoolUsage(),
 	}
 }
