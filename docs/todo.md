@@ -1,18 +1,85 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 2 - Comprehensive Mock Infrastructure
+## Current Milestone: Legacy Code Removal
 
-**Status**: READY FOR IMPLEMENTATION
+**Status**: PLANNING COMPLETE
 
-**Summary**: Creating comprehensive mock infrastructure for unit testing without external dependencies. This phase builds on the dependency injection foundation from Phase 1 to enable complete unit testing isolation.
+**Summary**: Systematic removal of 2-tuple legacy code to simplify codebase and improve maintainability. The system currently supports both 2-tuple (legacy) and 3-tuple (current) formats for backward compatibility, but all new files use 3-tuple format.
 
 **Current Analysis**: 
-- Existing mock infrastructure in `/pkg/storage/testing/` provides basic backend mocking
-- MockBackend has comprehensive storage.Backend implementation with test controls
-- MockStorageManager provides storage.Manager interface for testing
-- Test helpers exist but lack comprehensive IPFS client mocking
-- PeerAwareIPFSClient interface needs complete mock implementation
-- Missing environment controls and test data generators
+- 2-tuple uses single randomizer (data XOR randomizer)
+- 3-tuple uses two randomizers (data XOR randomizer1 XOR randomizer2)
+- Descriptor version "2.0" indicates 3-tuple format
+- Legacy versions indicate 2-tuple format
+- System can read both formats but creates only 3-tuple
+- ~500 lines of legacy code can be removed
+
+### Sprint 1 - Quick Wins & Deprecation Warnings
+**Objective**: Remove unused legacy creation methods and add deprecation warnings
+
+**Tasks**:
+- [ ] Remove `SelectRandomizer()` from client package
+- [ ] Remove `AddBlockPair()` from descriptors package
+- [ ] Add deprecation warnings to `XOR()` method in blocks package
+- [ ] Update tests that use legacy methods
+- [ ] Add logging warnings when legacy code paths are used
+
+**Success Criteria**:
+- No new 2-tuple descriptors can be created
+- Legacy methods show clear deprecation warnings
+- All tests pass with updated methods
+- Deprecation timeline communicated in warnings
+
+### Sprint 2 - Migration Tools Development
+**Objective**: Create tools to help users migrate from 2-tuple to 3-tuple format
+
+**Tasks**:
+- [ ] Create `noisefs-migrate` command-line tool
+- [ ] Implement `scan` subcommand to find 2-tuple descriptors
+- [ ] Implement `convert` subcommand to upgrade descriptors
+- [ ] Implement `verify` subcommand to validate conversions
+- [ ] Add auto-upgrade prompt when reading 2-tuple descriptors
+- [ ] Create migration progress tracking
+
+**Success Criteria**:
+- Users can easily identify all 2-tuple descriptors
+- Automated conversion preserves data integrity
+- Migration tool provides clear progress and verification
+- Auto-upgrade option available but not forced
+
+### Sprint 3 - Core Refactoring
+**Objective**: Simplify codebase by unifying XOR operations and descriptor structure
+
+**Tasks**:
+- [ ] Rename `XOR3()` to `XOR()` in blocks package
+- [ ] Remove original `XOR()` method
+- [ ] Update all XOR method references throughout codebase
+- [ ] Make `RandomizerCID2` required in descriptor structure
+- [ ] Remove version checks and `IsThreeTuple()` method
+- [ ] Simplify validation logic for 3-tuple only
+
+**Success Criteria**:
+- Single XOR method for all operations
+- Simplified descriptor structure
+- No version-based branching in code
+- All tests pass with refactored code
+
+### Sprint 4 - Final Cleanup & Documentation
+**Objective**: Remove all legacy support and update documentation
+
+**Tasks**:
+- [ ] Remove all 2-tuple reading capability
+- [ ] Clean up client methods (rename `SelectTwoRandomizers` to `SelectRandomizers`)
+- [ ] Update API documentation
+- [ ] Create migration guide for users
+- [ ] Update README and examples
+- [ ] Add breaking change notes for v2.0
+
+**Success Criteria**:
+- No legacy code remains in codebase
+- Documentation reflects 3-tuple only system
+- Clear migration path documented
+- Version 2.0 release prepared
 
 ### ✅ Sprint 1 - Enhanced Mock IPFS Client Infrastructure
 **Objective**: Create complete mock IPFS client with full interface compatibility
