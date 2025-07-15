@@ -13,6 +13,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
@@ -34,9 +35,11 @@ func main() {
 	var (
 		configFile = flag.String("config", "", "Configuration file path")
 		ipfsAPI    = flag.String("api", "", "IPFS API endpoint (overrides config)")
-		upload     = flag.String("upload", "", "File to upload to NoiseFS (uses parallel processing)")
+		upload     = flag.String("upload", "", "File or directory to upload to NoiseFS (uses parallel processing)")
 		download   = flag.String("download", "", "Descriptor CID to download from NoiseFS")
 		output     = flag.String("output", "", "Output file path for download")
+		recursive  = flag.Bool("r", false, "Recursively upload/download directories")
+		exclude    = flag.String("exclude", "", "Comma-separated list of file patterns to exclude from directory upload")
 		stats      = flag.Bool("stats", false, "Show NoiseFS statistics")
 		quiet      = flag.Bool("quiet", false, "Minimal output (only show errors and results)")
 		jsonOutput = flag.Bool("json", false, "Output results in JSON format")
@@ -57,7 +60,7 @@ func main() {
 	// Check for subcommands first
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "announce", "subscribe", "discover":
+		case "announce", "subscribe", "discover", "ls":
 			handleSubcommand(os.Args[1], os.Args[2:])
 			return
 		}
@@ -212,27 +215,84 @@ func main() {
 	}
 
 	if *upload != "" {
-		logger.Info("Starting file upload", map[string]interface{}{
-			"file":       *upload,
-			"block_size": cfg.Performance.BlockSize,
-			"streaming":  *streaming,
-		})
-		var err error
-		if *streaming {
-			err = streamingUploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
-		} else {
-			err = uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
-		}
+		// Check if the path is a directory
+		fileInfo, err := os.Stat(*upload)
 		if err != nil {
-			logger.Error("Upload failed", map[string]interface{}{
-				"file":  *upload,
+			logger.Error("Failed to stat upload path", map[string]interface{}{
+				"path":  *upload,
 				"error": err.Error(),
 			})
 			if *jsonOutput {
 				util.PrintJSONError(err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Error: %s\n💡 Suggestion: Verify the file or directory path exists\n", err)
 			}
 			os.Exit(1)
 		}
+
+		if fileInfo.IsDir() {
+			// Directory upload
+			if !*recursive {
+				err := fmt.Errorf("path is a directory, use -r flag for recursive upload")
+				logger.Error("Directory upload requires recursive flag", map[string]interface{}{
+					"path": *upload,
+				})
+				if *jsonOutput {
+					util.PrintJSONError(err)
+				} else {
+					fmt.Fprintf(os.Stderr, "Error: %s\n💡 Suggestion: Use -r flag to upload directories recursively\n", err)
+				}
+				os.Exit(1)
+			}
+
+			logger.Info("Starting directory upload", map[string]interface{}{
+				"directory":  *upload,
+				"block_size": cfg.Performance.BlockSize,
+				"streaming":  *streaming,
+				"recursive":  *recursive,
+			})
+			
+			var err error
+			if *streaming {
+				err = streamingUploadDirectory(storageManager, client, *upload, cfg.Performance.BlockSize, *exclude, *quiet, *jsonOutput, cfg, logger)
+			} else {
+				err = uploadDirectory(storageManager, client, *upload, cfg.Performance.BlockSize, *exclude, *quiet, *jsonOutput, cfg, logger)
+			}
+			if err != nil {
+				logger.Error("Directory upload failed", map[string]interface{}{
+					"directory": *upload,
+					"error":     err.Error(),
+				})
+				if *jsonOutput {
+					util.PrintJSONError(err)
+				}
+				os.Exit(1)
+			}
+		} else {
+			// File upload
+			logger.Info("Starting file upload", map[string]interface{}{
+				"file":       *upload,
+				"block_size": cfg.Performance.BlockSize,
+				"streaming":  *streaming,
+			})
+			var err error
+			if *streaming {
+				err = streamingUploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
+			} else {
+				err = uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
+			}
+			if err != nil {
+				logger.Error("Upload failed", map[string]interface{}{
+					"file":  *upload,
+					"error": err.Error(),
+				})
+				if *jsonOutput {
+					util.PrintJSONError(err)
+				}
+				os.Exit(1)
+			}
+		}
+		
 		if !*quiet {
 			showMetrics(client, logger)
 		}
@@ -508,6 +568,192 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	// For 3-tuple: data + randomizer1 + randomizer2 = 3x the data size
 	client.RecordUpload(fileInfo.Size(), totalStoredBytes*3) // *3 for data + 2 randomizer blocks
 
+	return nil
+}
+
+// uploadDirectory uploads a directory recursively to NoiseFS
+func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+	uploadStartTime := time.Now()
+	
+	// Parse exclude patterns
+	excludes := make([]string, 0)
+	if excludePatterns != "" {
+		excludes = strings.Split(excludePatterns, ",")
+		for i := range excludes {
+			excludes[i] = strings.TrimSpace(excludes[i])
+		}
+	}
+	
+	// Create encryption key for directory operations
+	encryptionKey, err := crypto.GenerateKey("directory-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	
+	// Create directory processor
+	processorConfig := &blocks.ProcessorConfig{
+		BlockSize:         blockSize,
+		MaxWorkers:        cfg.Performance.MaxConcurrentOps,
+		EncryptionKey:     encryptionKey,
+		ProgressCallback:  nil, // Will be set below if not quiet
+		ErrorHandler:      nil, // Will handle errors at the end
+		SkipSymlinks:      true,
+		SkipHidden:        true,
+		MaxFileSize:       0, // No limit
+		AllowedExtensions: nil,
+		BlockedExtensions: excludes,
+	}
+	
+	var progressBar *util.ProgressBar
+	if !quiet {
+		// We'll update this once we know the total
+		progressBar = util.NewProgressBar(0, "Processing directory", os.Stdout)
+		processorConfig.ProgressCallback = func(processed, total int64, currentFile string) {
+			if progressBar != nil {
+				progressBar.SetTotal(total)
+				progressBar.SetCurrent(processed)
+				progressBar.SetDescription(fmt.Sprintf("Processing: %s", filepath.Base(currentFile)))
+			}
+		}
+	}
+	
+	processor, err := blocks.NewDirectoryProcessor(processorConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create directory processor: %w", err)
+	}
+	
+	// Create a block processor to handle the blocks
+	blockProcessor := &DirectoryBlockProcessor{
+		storageManager: storageManager,
+		client:         client,
+		logger:         logger,
+		blocks:         make(map[string]*blocks.Block),
+		manifests:      make(map[string]string),
+		mutex:          sync.RWMutex{},
+	}
+	
+	// Process the directory
+	logger.Info("Starting directory processing", map[string]interface{}{
+		"directory":   dirPath,
+		"block_size":  blockSize,
+		"max_workers": cfg.Performance.MaxConcurrentOps,
+	})
+	
+	results, err := processor.ProcessDirectory(dirPath, blockProcessor)
+	if err != nil {
+		return fmt.Errorf("failed to process directory: %w", err)
+	}
+	
+	if progressBar != nil {
+		progressBar.Finish()
+	}
+	
+	// Find the root directory result
+	var rootResult *blocks.ProcessResult
+	for _, result := range results {
+		if result.Path == dirPath && result.Type == blocks.DirectoryType {
+			rootResult = result
+			break
+		}
+	}
+	
+	if rootResult == nil {
+		return fmt.Errorf("failed to find root directory result")
+	}
+	
+	totalDuration := time.Since(uploadStartTime)
+	
+	// Count files and calculate total size
+	var totalFiles int
+	var totalSize int64
+	for _, result := range results {
+		if result.Type == blocks.FileType {
+			totalFiles++
+			totalSize += result.Size
+		}
+	}
+	
+	logger.Info("Directory upload completed", map[string]interface{}{
+		"directory_cid":     rootResult.CID,
+		"directory_path":    dirPath,
+		"total_files":       totalFiles,
+		"total_size":        totalSize,
+		"total_duration_ms": totalDuration.Milliseconds(),
+		"throughput_mb_s":   float64(totalSize) / (1024 * 1024) / totalDuration.Seconds(),
+	})
+	
+	// Display results
+	if jsonOutput {
+		result := util.DirectoryUploadResult{
+			DirectoryCID: rootResult.CID,
+			DirectoryPath: filepath.Base(dirPath),
+			TotalFiles:   totalFiles,
+			TotalSize:    totalSize,
+			BlockSize:    blockSize,
+		}
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		fmt.Println(rootResult.CID)
+	} else {
+		fmt.Printf("\nDirectory upload complete!\n")
+		fmt.Printf("Directory CID: %s\n", rootResult.CID)
+		fmt.Printf("Files uploaded: %d\n", totalFiles)
+		fmt.Printf("Total size: %s\n", formatBytes(totalSize))
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+			float64(totalSize)/(1024*1024)/totalDuration.Seconds(),
+			totalDuration.Seconds())
+	}
+	
+	return nil
+}
+
+// streamingUploadDirectory uploads a directory with streaming support
+func streamingUploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+	// For now, delegate to regular upload - streaming directory upload would need more complex implementation
+	return uploadDirectory(storageManager, client, dirPath, blockSize, excludePatterns, quiet, jsonOutput, cfg, logger)
+}
+
+// DirectoryBlockProcessor handles blocks produced by directory processing
+type DirectoryBlockProcessor struct {
+	storageManager *storage.Manager
+	client         *noisefs.Client
+	logger         *logging.Logger
+	blocks         map[string]*blocks.Block
+	manifests      map[string]string
+	mutex          sync.RWMutex
+}
+
+// ProcessDirectoryBlock processes a block from a file in the directory
+func (dbp *DirectoryBlockProcessor) ProcessDirectoryBlock(blockIndex int, block *blocks.Block) error {
+	dbp.mutex.Lock()
+	defer dbp.mutex.Unlock()
+	
+	// Store the block
+	dbp.blocks[block.ID] = block
+	
+	// Store block in storage backend
+	_, err := dbp.storageManager.Put(context.Background(), block)
+	if err != nil {
+		return fmt.Errorf("failed to store block %s: %w", block.ID, err)
+	}
+	
+	return nil
+}
+
+// ProcessDirectoryManifest processes a directory manifest
+func (dbp *DirectoryBlockProcessor) ProcessDirectoryManifest(dirPath string, manifestBlock *blocks.Block) error {
+	dbp.mutex.Lock()
+	defer dbp.mutex.Unlock()
+	
+	// Store manifest block
+	dbp.manifests[dirPath] = manifestBlock.ID
+	
+	// Store manifest in storage backend
+	_, err := dbp.storageManager.Put(context.Background(), manifestBlock)
+	if err != nil {
+		return fmt.Errorf("failed to store manifest block %s: %w", manifestBlock.ID, err)
+	}
+	
 	return nil
 }
 
@@ -1103,6 +1349,8 @@ func handleSubcommand(cmd string, args []string) {
 		err = announceCommand(args, storageManager, ipfsShell, quiet, jsonOutput)
 	case "subscribe":
 		err = subscribeCommand(args, storageManager, ipfsShell, quiet, jsonOutput)
+	case "ls":
+		err = lsCommand(args, storageManager, quiet, jsonOutput)
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
@@ -1184,4 +1432,93 @@ func showLegalDisclaimer() {
 	fmt.Println("\nThank you for accepting the terms. Remember to use NoiseFS responsibly.")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Println()
+}
+
+// lsCommand implements directory listing functionality
+func lsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonOutput bool) error {
+	if len(args) == 0 {
+		return fmt.Errorf("directory CID required")
+	}
+	
+	directoryCID := args[0]
+	
+	// Create directory manager
+	encryptionKey, err := crypto.GenerateKey("directory-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	
+	directoryManager, err := storage.NewDirectoryManager(storageManager, encryptionKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create directory manager: %w", err)
+	}
+	
+	// Retrieve directory manifest
+	manifest, err := directoryManager.RetrieveDirectoryManifest(context.Background(), "", directoryCID)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve directory manifest: %w", err)
+	}
+	
+	// Process directory entries
+	entries := make([]DirectoryListEntry, 0, len(manifest.Entries))
+	for _, entry := range manifest.Entries {
+		// For now, we'll show encrypted names - in a real implementation,
+		// we would need the correct encryption key to decrypt names
+		listEntry := DirectoryListEntry{
+			Name:       fmt.Sprintf("encrypted_%d", len(entries)),
+			CID:        entry.CID,
+			Type:       entry.Type,
+			Size:       entry.Size,
+			ModifiedAt: entry.ModifiedAt,
+		}
+		entries = append(entries, listEntry)
+	}
+	
+	// Output results
+	if jsonOutput {
+		result := DirectoryListResult{
+			DirectoryCID: directoryCID,
+			Entries:      entries,
+			TotalEntries: len(entries),
+		}
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		for _, entry := range entries {
+			fmt.Printf("%s\t%s\t%s\n", entry.CID, entry.Type, entry.Name)
+		}
+	} else {
+		fmt.Printf("Directory: %s\n", directoryCID)
+		fmt.Printf("Entries: %d\n\n", len(entries))
+		
+		for _, entry := range entries {
+			typeStr := "FILE"
+			if entry.Type == blocks.DirectoryType {
+				typeStr = "DIR"
+			}
+			
+			fmt.Printf("%-4s  %-8s  %s  %s\n", 
+				typeStr, 
+				formatBytes(entry.Size), 
+				entry.ModifiedAt.Format("2006-01-02 15:04:05"),
+				entry.Name)
+		}
+	}
+	
+	return nil
+}
+
+// DirectoryListEntry represents a directory entry for listing
+type DirectoryListEntry struct {
+	Name       string                `json:"name"`
+	CID        string                `json:"cid"`
+	Type       blocks.DescriptorType `json:"type"`
+	Size       int64                 `json:"size"`
+	ModifiedAt time.Time             `json:"modified_at"`
+}
+
+// DirectoryListResult represents the result of directory listing
+type DirectoryListResult struct {
+	DirectoryCID string               `json:"directory_cid"`
+	Entries      []DirectoryListEntry `json:"entries"`
+	TotalEntries int                  `json:"total_entries"`
 }

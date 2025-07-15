@@ -13,25 +13,51 @@ type BlockPair struct {
 	RandomizerCID2 string `json:"randomizer_cid2"`
 }
 
-// Descriptor contains metadata needed to reconstruct a file
+// DescriptorType represents the type of descriptor
+type DescriptorType string
+
+const (
+	// FileType represents a regular file descriptor
+	FileType DescriptorType = "file"
+	// DirectoryType represents a directory descriptor
+	DirectoryType DescriptorType = "directory"
+)
+
+// Descriptor contains metadata needed to reconstruct a file or directory
 type Descriptor struct {
-	Version   string      `json:"version"`
-	Filename  string      `json:"filename"`
-	FileSize  int64       `json:"file_size"`
-	BlockSize int         `json:"block_size"`
-	Blocks    []BlockPair `json:"blocks"`
-	CreatedAt time.Time   `json:"created_at"`
+	Version      string         `json:"version"`
+	Type         DescriptorType `json:"type,omitempty"`         // Optional for backward compatibility
+	Filename     string         `json:"filename"`
+	FileSize     int64          `json:"file_size"`
+	BlockSize    int            `json:"block_size"`
+	Blocks       []BlockPair    `json:"blocks,omitempty"`        // Empty for directories
+	ManifestCID  string         `json:"manifest_cid,omitempty"`  // Only for directories
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 // NewDescriptor creates a new file descriptor
 func NewDescriptor(filename string, fileSize int64, blockSize int) *Descriptor {
 	return &Descriptor{
 		Version:   "3.0",
+		Type:      FileType,
 		Filename:  filename,
 		FileSize:  fileSize,
 		BlockSize: blockSize,
 		Blocks:    make([]BlockPair, 0),
 		CreatedAt: time.Now(),
+	}
+}
+
+// NewDirectoryDescriptor creates a new directory descriptor
+func NewDirectoryDescriptor(dirname string, manifestCID string) *Descriptor {
+	return &Descriptor{
+		Version:     "4.0",
+		Type:        DirectoryType,
+		Filename:    dirname,
+		FileSize:    0,              // Directories don't have a fixed size
+		BlockSize:   0,              // Not applicable for directories
+		ManifestCID: manifestCID,
+		CreatedAt:   time.Now(),
 	}
 }
 
@@ -65,6 +91,26 @@ func (d *Descriptor) Validate() error {
 		return errors.New("filename is required")
 	}
 	
+	// Handle backward compatibility - if Type is not set, assume it's a file
+	if d.Type == "" {
+		d.Type = FileType
+	}
+	
+	// Validate based on type
+	switch d.Type {
+	case FileType:
+		return d.validateFile()
+	case DirectoryType:
+		return d.validateDirectory()
+	default:
+		// For backward compatibility, treat unknown types as files for older versions
+		d.Type = FileType
+		return d.validateFile()
+	}
+}
+
+// validateFile validates file-specific fields
+func (d *Descriptor) validateFile() error {
 	if d.FileSize <= 0 {
 		return errors.New("file size must be positive")
 	}
@@ -86,6 +132,23 @@ func (d *Descriptor) Validate() error {
 			return errors.New("all CIDs must be different")
 		}
 		_ = i
+	}
+	
+	return nil
+}
+
+// validateDirectory validates directory-specific fields
+func (d *Descriptor) validateDirectory() error {
+	if d.Version != "4.0" {
+		return errors.New("directory descriptors require version 4.0")
+	}
+	
+	if d.ManifestCID == "" {
+		return errors.New("directory descriptor must have a manifest CID")
+	}
+	
+	if len(d.Blocks) > 0 {
+		return errors.New("directory descriptors should not contain blocks")
 	}
 	
 	return nil
@@ -132,4 +195,18 @@ func (d *Descriptor) GetRandomizerCIDs(blockIndex int) (string, string, error) {
 	
 	block := d.Blocks[blockIndex]
 	return block.RandomizerCID1, block.RandomizerCID2, nil
+}
+
+// IsFile returns true if this is a file descriptor
+func (d *Descriptor) IsFile() bool {
+	// Handle backward compatibility - if Type is not set, assume it's a file
+	if d.Type == "" {
+		return true
+	}
+	return d.Type == FileType
+}
+
+// IsDirectory returns true if this is a directory descriptor
+func (d *Descriptor) IsDirectory() bool {
+	return d.Type == DirectoryType
 }

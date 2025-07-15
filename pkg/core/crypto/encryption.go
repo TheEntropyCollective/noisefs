@@ -4,11 +4,13 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/hkdf"
 )
 
 // EncryptionKey represents an encryption key with metadata
@@ -141,4 +143,57 @@ func SecureZero(data []byte) {
 	for i := range data {
 		data[i] = 0
 	}
+}
+
+// DeriveDirectoryKey derives a directory-specific encryption key using HKDF
+func DeriveDirectoryKey(masterKey *EncryptionKey, directoryPath string) (*EncryptionKey, error) {
+	if masterKey == nil || len(masterKey.Key) == 0 {
+		return nil, fmt.Errorf("master key is required")
+	}
+	
+	// Use HKDF to derive a directory-specific key
+	info := []byte("noisefs-directory:" + directoryPath)
+	hkdf := hkdf.New(sha256.New, masterKey.Key, masterKey.Salt, info)
+	
+	// Derive a 32-byte key
+	derivedKey := make([]byte, 32)
+	if _, err := io.ReadFull(hkdf, derivedKey); err != nil {
+		return nil, fmt.Errorf("failed to derive directory key: %w", err)
+	}
+	
+	return &EncryptionKey{
+		Key:  derivedKey,
+		Salt: masterKey.Salt, // Reuse the master key's salt
+	}, nil
+}
+
+// EncryptFileName encrypts a filename using AES-256-GCM with a directory-specific key
+func EncryptFileName(filename string, dirKey *EncryptionKey) ([]byte, error) {
+	if filename == "" {
+		return nil, fmt.Errorf("filename cannot be empty")
+	}
+	
+	if dirKey == nil {
+		return nil, fmt.Errorf("directory key cannot be nil")
+	}
+	
+	return Encrypt([]byte(filename), dirKey)
+}
+
+// DecryptFileName decrypts a filename using AES-256-GCM with a directory-specific key
+func DecryptFileName(encryptedName []byte, dirKey *EncryptionKey) (string, error) {
+	if len(encryptedName) == 0 {
+		return "", fmt.Errorf("encrypted name cannot be empty")
+	}
+	
+	if dirKey == nil {
+		return "", fmt.Errorf("directory key cannot be nil")
+	}
+	
+	decrypted, err := Decrypt(encryptedName, dirKey)
+	if err != nil {
+		return "", err
+	}
+	
+	return string(decrypted), nil
 }

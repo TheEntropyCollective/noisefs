@@ -1,92 +1,91 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Agent 2 - Directory Storage Integration
+## Current Milestone: Agent 3 - Directory CLI Integration
 
-**Status**: ACTIVE - Agent 2 (Storage Integration) - Implementation Phase
+**Status**: ACTIVE - Agent 3 (CLI Integration) - Implementation Phase
 
-**Summary**: Complete directory storage integration for NoiseFS, building on Agent 1's core directory infrastructure. Implement directory processor for recursive tree walking, directory manager with LRU caching, directory reconstruction capabilities, and integration with existing storage manager architecture. Support streaming for large directories while maintaining privacy through XOR anonymization.
+**Summary**: Complete CLI integration for directory support in NoiseFS, building on Agent 1's core directory infrastructure and Agent 2's storage integration. Enhance upload command with recursive directory support, implement directory listing command, enhance download command with directory support, add CLI UX improvements with progress bars and error handling, and create comprehensive integration testing.
 
-**Analysis Complete**: Agent 1 has successfully implemented core directory infrastructure (DirectoryManifest, DirectoryEntry) with encrypted manifests in pkg/core/descriptors/directory.go. Storage manager exists with full backend abstraction in pkg/storage/manager.go. However, critical directory-specific storage integration components are missing: directory_processor.go and directory_manager.go. These components are essential for complete directory support.
+**Analysis Complete**: Agent 1 successfully implemented DirectoryManifest and DirectoryEntry structures with encrypted manifests in pkg/core/descriptors/directory.go. Agent 2 completed directory storage integration with directory_processor.go and directory_manager.go, providing recursive tree walking, LRU caching, and storage backend integration. CLI foundation exists in cmd/noisefs/main.go with existing upload/download commands for single files.
 
-**Key Finding**: Directory storage integration requires implementing directory processor for recursive tree walking, directory manager with LRU caching, directory reconstruction capabilities, and integration with existing storage manager. Current storage manager lacks directory-specific handling.
+**Key Finding**: CLI integration requires enhancing existing upload/download commands with directory detection and support, implementing new ls command for directory listing, integrating with existing worker pool infrastructure for parallel processing, and adding progress reporting and UX improvements.
 
-**Integration Strategy**: Build upon Agent 1's directory structures and existing storage manager architecture. Use worker pool infrastructure for parallel processing, implement LRU caching for performance, support streaming for large directories, and maintain privacy through XOR anonymization.
+**Integration Strategy**: Build upon Agent 1's directory structures and Agent 2's storage integration. Integrate with existing CLI patterns in main.go, use existing worker pool infrastructure for parallel processing, support both streaming and regular modes, add progress reporting and exclude patterns, and maintain backward compatibility with existing single-file operations.
 
-### Sprint 1: Core Directory Processor Implementation (HIGH PRIORITY)
-- [ ] Create pkg/core/blocks/directory_processor.go with recursive tree walking
-- [ ] Implement parallel directory processing with worker pools
-- [ ] Add progress tracking and cancellation support
-- [ ] Create directory entry encryption/decryption pipeline
-- [ ] Implement streaming support for large directories
-- [ ] Add comprehensive error handling for directory operations
-- [ ] Create unit tests for directory processor functionality
-- [ ] Add integration tests with existing block processing
-- [ ] Implement directory processor benchmarks
+### Sprint 1: Enhanced Upload Command (HIGH PRIORITY)
+- [ ] Add -r/--recursive flag to upload command
+- [ ] Implement directory detection in upload function
+- [ ] Integrate with directory processor for recursive tree walking
+- [ ] Add progress reporting for directory uploads
+- [ ] Implement exclude patterns for directory uploads
+- [ ] Add support for both streaming and regular modes
+- [ ] Create directory upload testing
+- [ ] Add directory upload performance optimization
+- [ ] Implement directory upload error handling and recovery
 
-### Sprint 2: Directory Manager Implementation (HIGH PRIORITY)
-- [ ] Create pkg/storage/directory_manager.go with LRU caching
-- [ ] Implement directory manifest storage/retrieval
-- [ ] Add directory reconstruction from storage
-- [ ] Create directory-specific cache management
-- [ ] Implement directory manager integration with storage backends
-- [ ] Add directory operation error handling and recovery
-- [ ] Create unit tests for directory manager functionality
-- [ ] Add integration tests with storage manager
-- [ ] Implement directory manager performance benchmarks
+### Sprint 2: Directory Listing Command (HIGH PRIORITY)
+- [ ] Implement noisefs ls command for directory listing
+- [ ] Add support for directory descriptor CID input
+- [ ] Implement directory tree visualization
+- [ ] Add filtering and sorting options for directory listing
+- [ ] Implement recursive directory listing with depth control
+- [ ] Add JSON output format for directory listings
+- [ ] Create directory listing performance optimization
+- [ ] Add directory listing error handling
+- [ ] Implement directory listing unit tests
 
-### Sprint 3: Storage Manager Integration (HIGH PRIORITY)
-- [ ] Add directory-specific methods to storage manager
-- [ ] Implement directory upload/download workflows
-- [ ] Add support for nested directory structures
-- [ ] Create directory-specific backend routing
-- [ ] Implement directory batch operations
-- [ ] Add directory operation monitoring and metrics
-- [ ] Create directory storage optimization features
-- [ ] Add directory-specific error handling
-- [ ] Implement directory operation cancellation support
+### Sprint 3: Enhanced Download Command (HIGH PRIORITY)
+- [ ] Add directory support to download command
+- [ ] Implement directory descriptor detection
+- [ ] Add support for downloading entire directories
+- [ ] Implement selective file download from directories
+- [ ] Add progress reporting for directory downloads
+- [ ] Support both streaming and regular download modes
+- [ ] Add directory download error handling and recovery
+- [ ] Implement directory download performance optimization
+- [ ] Create directory download testing
 
-### Sprint 4: Testing and Validation (HIGH PRIORITY)
-- [ ] Create comprehensive directory processor unit tests
-- [ ] Implement directory manager integration tests
-- [ ] Add storage manager directory functionality tests
+### Sprint 4: CLI UX Improvements (HIGH PRIORITY)
+- [ ] Add comprehensive progress bars for directory operations
+- [ ] Implement detailed error messages with suggestions
+- [ ] Add operation cancellation support with Ctrl+C handling
+- [ ] Implement verbose output modes with detailed logging
+- [ ] Add configuration validation for directory operations
+- [ ] Create help text and usage examples for directory commands
+- [ ] Add operation timing and performance reporting
+- [ ] Implement memory usage monitoring for large directories
+- [ ] Add color-coded output for better readability
+
+### Sprint 5: Integration Testing (HIGH PRIORITY)
+- [ ] Create comprehensive directory upload/download integration tests
+- [ ] Implement directory listing integration tests
+- [ ] Add large directory handling tests (>1000 files)
 - [ ] Create directory operation performance benchmarks
-- [ ] Implement directory encryption/decryption validation
-- [ ] Add directory streaming operation tests
-- [ ] Create directory error handling tests
+- [ ] Implement directory operation stress tests
+- [ ] Add directory operation memory usage validation
+- [ ] Create directory operation error handling tests
 - [ ] Add directory operation concurrency tests
-- [ ] Implement directory operation memory usage validation
-
-### Sprint 5: Production Readiness (HIGH PRIORITY)
-- [ ] Add directory operation logging and monitoring
-- [ ] Implement directory operation timeout handling
-- [ ] Create directory operation retry logic
-- [ ] Add directory operation rate limiting
-- [ ] Implement directory operation security validation
-- [ ] Create directory operation documentation
-- [ ] Add directory operation examples and usage guides
-- [ ] Implement directory operation health checks
-- [ ] Add directory operation configuration options
+- [ ] Implement directory operation end-to-end validation
 
 **Implementation Architecture Integration Points:**
-- Build upon Agent 1's directory structures (pkg/core/descriptors/directory.go) with DirectoryManifest and DirectoryEntry
-- Integrate with existing storage manager architecture (pkg/storage/manager.go) for backend abstraction
-- Leverage existing block processing infrastructure (pkg/core/blocks/) for file handling
-- Use existing worker pool patterns for parallel directory processing
-- Integrate with existing crypto package for encryption/decryption operations
-- Build upon existing error handling and metrics collection systems
-- Leverage existing caching infrastructure for directory-specific optimizations
-- Maintain compatibility with existing storage backends and routing
+- Build upon Agent 1's DirectoryManifest and DirectoryEntry structures (pkg/core/descriptors/directory.go)
+- Integrate with Agent 2's directory processor (pkg/core/blocks/directory_processor.go) for recursive operations
+- Leverage Agent 2's directory manager (pkg/storage/directory_manager.go) for storage operations
+- Use existing CLI patterns and command structure from cmd/noisefs/main.go
+- Integrate with existing worker pool infrastructure (pkg/infrastructure/workers/) for parallel processing
+- Build upon existing progress reporting and error handling systems
+- Maintain compatibility with existing storage manager and cache systems
+- Leverage existing JSON output and quiet mode functionality
 
 **Expected Outcomes:**
-- Complete directory storage integration with processor and manager components
-- Recursive tree walking capabilities with parallel processing support
-- LRU caching for directory manifests with efficient storage/retrieval
-- Directory reconstruction capabilities from storage backends
-- Streaming support for large directories with constant memory usage
-- Privacy-preserving directory operations with XOR anonymization
-- Integration with existing storage manager architecture
+- Complete CLI integration with directory support for upload, download, and listing operations
+- Recursive directory operations with parallel processing and progress reporting
+- Enhanced user experience with comprehensive error handling and progress visualization
+- Integration with existing storage and caching infrastructure
+- Backward compatibility with existing single-file operations
 - Comprehensive testing ensuring reliability and performance
-- Foundation for Agent 3 (CLI) and Agent 4 (FUSE) directory operations
+- Foundation for advanced directory operations and workflow automation
+- Production-ready CLI with professional UX and error handling
 
 ## Completed Major Milestones
 

@@ -64,6 +64,24 @@ func (p *ProgressBar) SetCurrent(current int64) {
 	p.draw()
 }
 
+// SetTotal sets the total progress value
+func (p *ProgressBar) SetTotal(total int64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	
+	p.total = total
+	p.draw()
+}
+
+// SetDescription sets the progress bar description
+func (p *ProgressBar) SetDescription(description string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	
+	p.prefix = description
+	p.draw()
+}
+
 // Finish completes the progress bar
 func (p *ProgressBar) Finish() {
 	p.mu.Lock()
