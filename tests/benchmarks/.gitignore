@@ -1,0 +1,15 @@
+# Benchmark result files
+results/
+*.json
+*.log
+*.prof
+*.bench
+*.out
+
+# Temporary test files
+tmp/
+temp/
+
+# Performance reports
+*.html
+*.pdf
