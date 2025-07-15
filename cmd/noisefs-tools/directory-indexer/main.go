@@ -313,7 +313,7 @@ func uploadFile(client *noisefs.Client, filePath, relativePath string, blockSize
 	// Process each block with 3-tuple anonymization
 	for _, dataBlock := range fileBlocks {
 		// Select randomizers
-		rand1, cid1, rand2, cid2, err := client.SelectTwoRandomizers(dataBlock.Size())
+		rand1, cid1, rand2, cid2, err := client.SelectRandomizers(dataBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}

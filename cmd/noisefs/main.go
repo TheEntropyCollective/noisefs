@@ -15,7 +15,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
-	// "github.com/TheEntropyCollective/noisefs/pkg/storage/integration" // TODO: Uncomment when Sprint 4 complete
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/integration"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
@@ -107,31 +107,10 @@ func main() {
 		"endpoint": cfg.IPFS.APIEndpoint,
 	})
 	
-	// TODO: Complete storage abstraction integration in Sprint 4
 	// Create IPFS client through storage abstraction for better architecture
-	// storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
-	// if err != nil {
-	// 	logger.Error("Failed to connect to storage backend", map[string]interface{}{
-	// 		"endpoint": cfg.IPFS.APIEndpoint,
-	// 		"error":    err.Error(),
-	// 	})
-	// 	if *jsonOutput {
-	// 		util.PrintJSONError(err)
-	// 	} else {
-	// 		fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
-	// 	}
-	// 	os.Exit(1)
-	// }
-	
-	// Create storage manager
-	storageConfig := storage.DefaultConfig()
-	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
-		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
-	}
-	
-	storageManager, err := storage.NewManager(storageConfig)
+	storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
 	if err != nil {
-		logger.Error("Failed to create storage manager", map[string]interface{}{
+		logger.Error("Failed to connect to storage backend", map[string]interface{}{
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})
@@ -142,20 +121,6 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	
-	err = storageManager.Start(context.Background())
-	if err != nil {
-		logger.Error("Failed to start storage manager", map[string]interface{}{
-			"error": err.Error(),
-		})
-		if *jsonOutput {
-			util.PrintJSONError(err)
-		} else {
-			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
-		}
-		os.Exit(1)
-	}
-	defer storageManager.Stop(context.Background())
 	
 	// Create cache
 	logger.Debug("Initializing block cache", map[string]interface{}{
@@ -329,7 +294,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	randomizer2CIDs := make([]string, len(fileBlocks))
 	
 	for i := range fileBlocks {
-		randBlock1, cid1, randBlock2, cid2, err := client.SelectTwoRandomizers(fileBlocks[i].Size())
+		randBlock1, cid1, randBlock2, cid2, err := client.SelectRandomizers(fileBlocks[i].Size())
 		if err != nil {
 			return fmt.Errorf("failed to select randomizer blocks: %w", err)
 		}

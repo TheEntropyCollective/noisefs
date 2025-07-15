@@ -410,25 +410,20 @@ func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descript
 
 		blockData := data[offset:end]
 
-		// Create data block (for validation only)
-		_, err := blocks.NewBlock(blockData)
+		// Create data block
+		dataBlock, err := blocks.NewBlock(blockData)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create data block: %w", err)
 		}
 
-		// Get randomizer
-		randomizer, randCID, err := client.NoiseClient.SelectRandomizer(len(blockData))
+		// Get two randomizers for 3-tuple XOR
+		randomizer1, randCID1, randomizer2, randCID2, err := client.NoiseClient.SelectRandomizers(len(blockData))
 		if err != nil {
-			return nil, fmt.Errorf("failed to select randomizer: %w", err)
+			return nil, fmt.Errorf("failed to select randomizers: %w", err)
 		}
 
-		// XOR with randomizer to anonymize
-		anonymizedData := make([]byte, len(blockData))
-		for i := 0; i < len(blockData); i++ {
-			anonymizedData[i] = blockData[i] ^ randomizer.Data[i]
-		}
-
-		anonymizedBlock, err := blocks.NewBlock(anonymizedData)
+		// XOR with both randomizers to anonymize (3-tuple: data XOR randomizer1 XOR randomizer2)
+		anonymizedBlock, err := dataBlock.XOR(randomizer1, randomizer2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create anonymized block: %w", err)
 		}
@@ -439,8 +434,8 @@ func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descript
 			return nil, fmt.Errorf("failed to store anonymized block: %w", err)
 		}
 
-		// Add to descriptor
-		err = descriptor.AddBlockTriple(dataCID, randCID, randCID+"_2")
+		// Add to descriptor (3-tuple format)
+		err = descriptor.AddBlockTriple(dataCID, randCID1, randCID2)
 		if err != nil {
 			return nil, fmt.Errorf("failed to add block triple to descriptor: %w", err)
 		}
@@ -462,19 +457,25 @@ func realFileDownload(client *RealIPFSNode, descriptor *descriptors.Descriptor) 
 			return nil, fmt.Errorf("failed to retrieve anonymized block %d: %w", i, err)
 		}
 
-		// Retrieve randomizer block
-		randomizerBlock, err := client.NoiseClient.RetrieveBlockWithCache(blockPair.RandomizerCID1)
+		// Retrieve first randomizer block
+		randomizer1Block, err := client.NoiseClient.RetrieveBlockWithCache(blockPair.RandomizerCID1)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve randomizer block %d: %w", i, err)
+			return nil, fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
 		}
 
-		// XOR to recover original data
-		originalData := make([]byte, len(anonymizedBlock.Data))
-		for j := 0; j < len(anonymizedBlock.Data); j++ {
-			originalData[j] = anonymizedBlock.Data[j] ^ randomizerBlock.Data[j]
+		// Retrieve second randomizer block
+		randomizer2Block, err := client.NoiseClient.RetrieveBlockWithCache(blockPair.RandomizerCID2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 		}
 
-		result = append(result, originalData...)
+		// XOR to recover original data (3-tuple: anonymized XOR randomizer1 XOR randomizer2)
+		originalBlock, err := anonymizedBlock.XOR(randomizer1Block, randomizer2Block)
+		if err != nil {
+			return nil, fmt.Errorf("failed to XOR blocks for recovery: %w", err)
+		}
+
+		result = append(result, originalBlock.Data...)
 	}
 
 	return result, nil

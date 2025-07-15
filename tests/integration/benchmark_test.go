@@ -111,7 +111,7 @@ func BenchmarkRandomizerSelection(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, err := client.SelectRandomizer(blockSize)
+			_, _, _, _, err := client.SelectRandomizers(blockSize)
 			if err != nil {
 				b.Errorf("Randomizer selection failed: %v", err)
 			}
@@ -334,22 +334,24 @@ func BenchmarkStorageOverhead(b *testing.B) {
 		rand.Read(sourceData)
 		originalSize += int64(len(sourceData))
 		
-		// Get randomizer
-		randomizer, _, err := client.SelectRandomizer(len(sourceData))
+		// Get two randomizers for 3-tuple XOR
+		randomizer1, _, randomizer2, _, err := client.SelectRandomizers(len(sourceData))
 		if err != nil {
-			b.Errorf("Failed to get randomizer: %v", err)
+			b.Errorf("Failed to get randomizers: %v", err)
 			continue
 		}
 		
-		// Create anonymized block (XOR with randomizer)
-		anonData := make([]byte, len(sourceData))
-		for j := 0; j < len(sourceData); j++ {
-			anonData[j] = sourceData[j] ^ randomizer.Data[j]
+		// Create data block
+		dataBlock, err := blocks.NewBlock(sourceData)
+		if err != nil {
+			b.Errorf("Failed to create data block: %v", err)
+			continue
 		}
 		
-		anonBlock, err := blocks.NewBlock(anonData)
+		// Create anonymized block (3-tuple XOR: data XOR randomizer1 XOR randomizer2)
+		anonBlock, err := dataBlock.XOR(randomizer1, randomizer2)
 		if err != nil {
-			b.Errorf("Failed to create anonymized block: %v", err)
+			b.Errorf("Failed to XOR blocks: %v", err)
 			continue
 		}
 		
@@ -360,10 +362,11 @@ func BenchmarkStorageOverhead(b *testing.B) {
 			continue
 		}
 		
-		// Account for storage (anonymized block + randomizer reference)
-		storedSize += int64(len(anonData))
-		if i == 0 { // Only count randomizer once if reused
-			storedSize += int64(len(randomizer.Data))
+		// Account for storage (anonymized block + two randomizer references)
+		storedSize += int64(len(anonBlock.Data))
+		if i == 0 { // Only count randomizers once if reused
+			storedSize += int64(len(randomizer1.Data))
+			storedSize += int64(len(randomizer2.Data))
 		}
 		
 		client.RecordUpload(int64(len(sourceData)), storedSize-originalSize)

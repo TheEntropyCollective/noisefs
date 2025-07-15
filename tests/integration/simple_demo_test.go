@@ -73,7 +73,7 @@ func TestSimpleUploadDownload(t *testing.T) {
 		// Process each block (3-tuple format)
 		for i, block := range fileBlocks {
 			// Select two randomizers
-			randBlock1, cid1, randBlock2, cid2, err := noisefsClient.SelectTwoRandomizers(block.Size())
+			randBlock1, cid1, randBlock2, cid2, err := noisefsClient.SelectRandomizers(block.Size())
 			if err != nil {
 				t.Fatalf("Failed to select randomizers for block %d: %v", i, err)
 			}

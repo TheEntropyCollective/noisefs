@@ -12,13 +12,15 @@ type mockNoisefsClient struct {
 	blocks        map[string][]byte
 }
 
-func (m *mockNoisefsClient) SelectRandomizer(size int) (*mockBlock, string, error) {
-	// Return a simple randomizer
-	data := make([]byte, size)
-	for i := range data {
-		data[i] = 0xFF // Simple pattern
+func (m *mockNoisefsClient) SelectRandomizers(size int) (*mockBlock, string, *mockBlock, string, error) {
+	// Return two simple randomizers
+	data1 := make([]byte, size)
+	data2 := make([]byte, size)
+	for i := range data1 {
+		data1[i] = 0xFF // Simple pattern for first randomizer
+		data2[i] = 0xAA // Different pattern for second randomizer
 	}
-	return &mockBlock{data: data}, "mock_randomizer_cid", nil
+	return &mockBlock{data: data1}, "mock_randomizer1_cid", &mockBlock{data: data2}, "mock_randomizer2_cid", nil
 }
 
 func (m *mockNoisefsClient) StoreBlockWithCache(block blockLike) (string, error) {

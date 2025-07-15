@@ -161,60 +161,6 @@ func (c *Client) SetPeerManager(manager *p2p.PeerManager) {
 	}
 }
 
-// SelectRandomizer selects a randomizer block for the given block size (legacy 2-tuple support)
-func (c *Client) SelectRandomizer(blockSize int) (*blocks.Block, string, error) {
-	// If we have peer selection enabled, use intelligent randomizer selection
-	if c.preferRandomizerPeers && c.peerManager != nil {
-		return c.selectRandomizerWithPeerSelection(blockSize)
-	}
-	
-	// Try to get popular blocks from cache first
-	randomizers, err := c.cache.GetRandomizers(10)
-	if err == nil && len(randomizers) > 0 {
-		// Filter by matching size
-		suitableBlocks := make([]*cache.BlockInfo, 0)
-		for _, info := range randomizers {
-			if info.Size == blockSize {
-				suitableBlocks = append(suitableBlocks, info)
-			}
-		}
-		
-		// If we have suitable cached blocks, use one
-		if len(suitableBlocks) > 0 {
-			// Use cryptographically secure random selection
-			index, err := rand.Int(rand.Reader, big.NewInt(int64(len(suitableBlocks))))
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to generate random index: %w", err)
-			}
-			
-			selected := suitableBlocks[index.Int64()]
-			c.cache.IncrementPopularity(selected.CID)
-			c.metrics.RecordBlockReuse()
-			return selected.Block, selected.CID, nil
-		}
-	}
-	
-	// No suitable cached blocks, generate new randomizer
-	randBlock, err := blocks.NewRandomBlock(blockSize)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create randomizer: %w", err)
-	}
-	
-	// Store in IPFS with randomizer strategy if available
-	cid, err := c.storeBlockWithStrategy(randBlock, "randomizer")
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to store randomizer: %w", err)
-	}
-	
-	// Cache the new randomizer
-	c.cacheBlock(cid, randBlock, map[string]interface{}{
-		"is_randomizer": true,
-		"block_type":    "randomizer",
-	})
-	c.metrics.RecordBlockGeneration()
-	
-	return randBlock, cid, nil
-}
 
 // selectRandomizerWithPeerSelection uses peer selection to find optimal randomizer blocks
 func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block, string, error) {
@@ -279,8 +225,8 @@ func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string,
 	return randBlock, cid, nil
 }
 
-// SelectTwoRandomizers selects two randomizer blocks for 3-tuple anonymization
-func (c *Client) SelectTwoRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
+// SelectRandomizers selects two randomizer blocks for 3-tuple anonymization
+func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
 	// Try to get popular blocks from cache first
 	randomizers, err := c.cache.GetRandomizers(20) // Get more blocks for better selection
 	if err == nil && len(randomizers) > 0 {
@@ -684,7 +630,7 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 			progress("Anonymizing blocks", i, totalBlocks)
 		}
 		// Select two randomizer blocks (3-tuple XOR)
-		randBlock1, cid1, randBlock2, cid2, err := c.SelectTwoRandomizers(fileBlock.Size())
+		randBlock1, cid1, randBlock2, cid2, err := c.SelectRandomizers(fileBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}

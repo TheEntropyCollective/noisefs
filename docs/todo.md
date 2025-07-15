@@ -18,11 +18,11 @@
 **Objective**: Remove unused legacy creation methods and add deprecation warnings
 
 **Tasks**:
-- [ ] Remove `SelectRandomizer()` from client package
+- [x] Remove `SelectRandomizer()` from client package
 - [x] Remove `AddBlockPair()` from descriptors package
-- [ ] Add deprecation warnings to `XOR()` method in blocks package
-- [ ] Update tests that use legacy methods
-- [ ] Add logging warnings when legacy code paths are used
+- [x] Add deprecation warnings to `XOR()` method in blocks package
+- [x] Update tests that use legacy methods
+- [x] Add logging warnings when legacy code paths are used
 
 **Success Criteria**:
 - No new 2-tuple descriptors can be created
@@ -69,7 +69,7 @@
 
 **Tasks**:
 - [ ] Remove all 2-tuple reading capability
-- [ ] Clean up client methods (rename `SelectTwoRandomizers` to `SelectRandomizers`)
+- [x] Clean up client methods (rename `SelectTwoRandomizers` to `SelectRandomizers`)
 - [ ] Update API documentation
 - [ ] Create migration guide for users
 - [ ] Update README and examples

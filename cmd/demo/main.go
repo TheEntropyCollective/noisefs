@@ -242,7 +242,7 @@ func uploadFileDemo(storageManager *storage.Manager, client *noisefs.Client, fil
 	// Process blocks with 3-tuple format
 	for _, block := range fileBlocks {
 		// Select two randomizers
-		randBlock1, cid1, randBlock2, cid2, err := client.SelectTwoRandomizers(block.Size())
+		randBlock1, cid1, randBlock2, cid2, err := client.SelectRandomizers(block.Size())
 		if err != nil {
 			return fmt.Errorf("failed to select randomizers: %w", err)
 		}
