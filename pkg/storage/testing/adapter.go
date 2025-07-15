@@ -21,7 +21,6 @@ type MockBackendAdapter struct {
 	conditionSim  *ConditionSimulator
 	
 	// Compatibility state
-	legacyMode    bool
 	backendType   string
 	
 	// Environment configuration
@@ -59,7 +58,6 @@ type TestEnvironmentConfig struct {
 	BandwidthLimit    int64
 	
 	// Compatibility settings
-	LegacyMode        bool
 	BackendType       string
 	
 	// Advanced options
@@ -109,14 +107,15 @@ func NewMockBackendAdapter(config *TestEnvironmentConfig) *MockBackendAdapter {
 	}
 
 	adapter := &MockBackendAdapter{
-		mockClient:    mockClient,
-		networkSim:    networkSim,
-		conditionSim:  conditionSim,
-		legacyMode:    config.LegacyMode,
-		backendType:   config.BackendType,
-		adapterCalls:  make(map[string]int64),
-		errors:        make(map[string]int64),
-		eventHandlers: make(map[string]func(AdapterEvent)),
+		mockClient:     mockClient,
+		networkSim:     networkSim,
+		conditionSim:   conditionSim,
+		backendType:    config.BackendType,
+		testMode:       config.TestMode,
+		isolationLevel: config.IsolationLevel,
+		adapterCalls:   make(map[string]int64),
+		errors:         make(map[string]int64),
+		eventHandlers:  make(map[string]func(AdapterEvent)),
 	}
 
 	// Start simulators based on configuration
@@ -266,7 +265,6 @@ func (a *MockBackendAdapter) GetBackendInfo() *storage.BackendInfo {
 	// Add adapter-specific information
 	info.Config["adapter"] = true
 	info.Config["test_mode"] = true
-	info.Config["legacy_mode"] = a.legacyMode
 	info.Config["isolation_level"] = a.isolationLevel
 	
 	return info
@@ -309,25 +307,6 @@ func (a *MockBackendAdapter) IsConnected() bool {
 	return a.mockClient.IsConnected()
 }
 
-// Legacy Compatibility Methods
-
-// Store legacy method for storing blocks
-func (a *MockBackendAdapter) Store(ctx context.Context, block *blocks.Block) (string, error) {
-	address, err := a.Put(ctx, block)
-	if err != nil {
-		return "", err
-	}
-	return address.ID, nil
-}
-
-// Retrieve legacy method for retrieving blocks
-func (a *MockBackendAdapter) Retrieve(ctx context.Context, cid string) (*blocks.Block, error) {
-	address := &storage.BlockAddress{
-		ID:          cid,
-		BackendType: a.backendType,
-	}
-	return a.Get(ctx, address)
-}
 
 // Test Environment Management
 
@@ -345,12 +324,6 @@ func (a *MockBackendAdapter) SetIsolationLevel(level string) {
 	a.isolationLevel = level
 }
 
-// EnableLegacyMode enables/disables legacy compatibility mode
-func (a *MockBackendAdapter) EnableLegacyMode(enabled bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.legacyMode = enabled
-}
 
 // GetMockClient returns the underlying mock client for direct access
 func (a *MockBackendAdapter) GetMockClient() *MockIPFSClient {
@@ -462,7 +435,6 @@ func (a *MockBackendAdapter) GetAdapterStats() map[string]interface{} {
 	stats := map[string]interface{}{
 		"test_mode":       a.testMode,
 		"isolation_level": a.isolationLevel,
-		"legacy_mode":     a.legacyMode,
 		"backend_type":    a.backendType,
 		"adapter_calls":   a.copyIntMap(a.adapterCalls),
 		"errors":          a.copyIntMap(a.errors),

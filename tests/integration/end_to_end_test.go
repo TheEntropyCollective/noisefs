@@ -288,23 +288,29 @@ func TestBlockSplittingAndXOR(t *testing.T) {
 		})
 	}
 
-	// XOR blocks (using legacy 2-tuple behavior with zero block)
+	// XOR blocks using 3-tuple format
 	var xoredBlocks []blocks.Block
 	for i, dataBlock := range dataBlocks {
-		// Create zero block for legacy 2-tuple XOR
-		zeroBlock, err := blocks.NewBlock(make([]byte, dataBlock.Size()))
+		// Generate second randomizer for 3-tuple
+		randomizer2 := make([]byte, dataBlock.Size())
+		_, err := rand.Read(randomizer2)
 		if err != nil {
-			t.Fatalf("Failed to create zero block: %v", err)
+			t.Fatalf("Failed to generate second randomizer: %v", err)
 		}
 		
-		xored, err := dataBlock.XOR(&randomizerBlocks[i], zeroBlock)
+		randomizer2Block, err := blocks.NewBlock(randomizer2)
+		if err != nil {
+			t.Fatalf("Failed to create second randomizer block: %v", err)
+		}
+		
+		xored, err := dataBlock.XOR(&randomizerBlocks[i], randomizer2Block)
 		if err != nil {
 			t.Fatalf("Failed to XOR blocks: %v", err)
 		}
 		xoredBlocks = append(xoredBlocks, *xored)
 
-		// Verify XOR property: data XOR randomizer XOR zero XOR randomizer XOR zero = data
-		recovered, err := xored.XOR(&randomizerBlocks[i], zeroBlock)
+		// Verify XOR property: data XOR randomizer1 XOR randomizer2 XOR randomizer1 XOR randomizer2 = data
+		recovered, err := xored.XOR(&randomizerBlocks[i], randomizer2Block)
 		if err != nil {
 			t.Fatalf("Failed to recover block: %v", err)
 		}
@@ -316,13 +322,19 @@ func TestBlockSplittingAndXOR(t *testing.T) {
 	// Reconstruct data
 	var reconstructedData []byte
 	for i, xoredBlock := range xoredBlocks {
-		// Create zero block for legacy 2-tuple XOR
-		zeroBlock, err := blocks.NewBlock(make([]byte, xoredBlock.Size()))
+		// Generate second randomizer for reconstruction (in real scenario, this would be retrieved)
+		randomizer2 := make([]byte, xoredBlock.Size())
+		_, err := rand.Read(randomizer2)
 		if err != nil {
-			t.Fatalf("Failed to create zero block: %v", err)
+			t.Fatalf("Failed to generate second randomizer: %v", err)
 		}
 		
-		recovered, err := xoredBlock.XOR(&randomizerBlocks[i], zeroBlock)
+		randomizer2Block, err := blocks.NewBlock(randomizer2)
+		if err != nil {
+			t.Fatalf("Failed to create second randomizer block: %v", err)
+		}
+		
+		recovered, err := xoredBlock.XOR(&randomizerBlocks[i], randomizer2Block)
 		if err != nil {
 			t.Fatalf("Failed to recover block %d: %v", i, err)
 		}

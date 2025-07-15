@@ -231,37 +231,6 @@ func NewSlowMockStorageManager() *SlowMockStorageManager {
 	}
 }
 
-// MockIPFSCompatibilityLayer provides compatibility for tests that expect IPFS-like interface
-type MockIPFSCompatibilityLayer struct {
-	storageManager *MockStorageManager
-}
-
-// NewMockIPFSCompatibilityLayer creates a compatibility layer for legacy tests
-func NewMockIPFSCompatibilityLayer() *MockIPFSCompatibilityLayer {
-	return &MockIPFSCompatibilityLayer{
-		storageManager: CreateTestStorageManager(),
-	}
-}
-
-// StoreBlock stores a block (compatibility method)
-func (m *MockIPFSCompatibilityLayer) StoreBlock(block *blocks.Block) (string, error) {
-	return m.storageManager.Store(context.Background(), block)
-}
-
-// RetrieveBlock retrieves a block (compatibility method)
-func (m *MockIPFSCompatibilityLayer) RetrieveBlock(cid string) (*blocks.Block, error) {
-	return m.storageManager.Retrieve(context.Background(), cid)
-}
-
-// HasBlock checks if a block exists (compatibility method)
-func (m *MockIPFSCompatibilityLayer) HasBlock(cid string) (bool, error) {
-	return m.storageManager.Has(context.Background(), cid)
-}
-
-// GetStorageManager returns the underlying storage manager
-func (m *MockIPFSCompatibilityLayer) GetStorageManager() *MockStorageManager {
-	return m.storageManager
-}
 
 // TestBlock creates a test block with specified data
 func CreateTestBlock(data []byte) (*blocks.Block, error) {

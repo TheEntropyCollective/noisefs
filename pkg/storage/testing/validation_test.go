@@ -614,35 +614,6 @@ func TestMockBackendAdapter(t *testing.T) {
 		}
 	})
 
-	t.Run("LegacyCompatibility", func(t *testing.T) {
-		adapter := NewUnitTestAdapter()
-		adapter.EnableLegacyMode(true)
-		defer adapter.Stop()
-
-		ctx := context.Background()
-		testBlock := &blocks.Block{
-			Data: []byte("test data for legacy compatibility"),
-		}
-
-		// Test legacy Store method
-		cid, err := adapter.Store(ctx, testBlock)
-		if err != nil {
-			t.Fatalf("Legacy Store failed: %v", err)
-		}
-		if cid == "" {
-			t.Fatal("Legacy Store returned empty CID")
-		}
-
-		// Test legacy Retrieve method
-		retrievedBlock, err := adapter.Retrieve(ctx, cid)
-		if err != nil {
-			t.Fatalf("Legacy Retrieve failed: %v", err)
-		}
-
-		if string(retrievedBlock.Data) != string(testBlock.Data) {
-			t.Fatalf("Data mismatch: got %s, want %s", retrievedBlock.Data, testBlock.Data)
-		}
-	})
 
 	t.Run("ComponentAccess", func(t *testing.T) {
 		adapter := NewIntegrationTestAdapter()
