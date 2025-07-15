@@ -803,14 +803,11 @@ func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filen
 		return "", errors.New("reader cannot be nil")
 	}
 	
-	// TODO: Streaming implementation not yet complete
-	return "", fmt.Errorf("streaming upload not yet implemented - use regular Upload method")
-	
 	// Create streaming splitter
-	// splitter, err := blocks.NewStreamingSplitter(blockSize)
-	// if err != nil {
-	//	return "", fmt.Errorf("failed to create streaming splitter: %w", err)
-	// }
+	splitter, err := blocks.NewStreamingSplitter(blockSize)
+	if err != nil {
+		return "", fmt.Errorf("failed to create streaming splitter: %w", err)
+	}
 	
 	// Create descriptor (we'll estimate file size as we go)
 	descriptor := descriptors.NewDescriptor(filename, 0, blockSize) // Size will be updated
@@ -819,7 +816,6 @@ func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filen
 	var totalBlocksProcessed int
 	
 	// Define block processing callback
-	/*
 	blockProcessor := func(fileBlock *blocks.Block) error {
 		if progress != nil {
 			progress("Processing blocks", totalBytesProcessed, totalBlocksProcessed)
@@ -853,10 +849,8 @@ func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filen
 		
 		return nil
 	}
-	*/
 	
 	// Define progress callback for streaming splitter
-	/*
 	streamingProgress := func(bytesProcessed int64, blocksProcessed int) {
 		totalBytesProcessed = bytesProcessed
 		totalBlocksProcessed = blocksProcessed
@@ -864,12 +858,11 @@ func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filen
 			progress("Splitting and anonymizing", bytesProcessed, blocksProcessed)
 		}
 	}
-	*/
 	
 	// Process blocks in streaming fashion
-	// if err := splitter.StreamBlocks(reader, blockProcessor, streamingProgress); err != nil {
-	//	return "", fmt.Errorf("failed to process blocks: %w", err)
-	// }
+	if err := splitter.StreamBlocks(reader, blockProcessor, streamingProgress); err != nil {
+		return "", fmt.Errorf("failed to process blocks: %w", err)
+	}
 	
 	// Update descriptor with final file size
 	descriptor.FileSize = totalBytesProcessed
@@ -1022,14 +1015,11 @@ func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.W
 		progress("Descriptor loaded", 0, 0)
 	}
 	
-	// TODO: Streaming implementation not yet complete
-	return fmt.Errorf("streaming download not yet implemented - use regular Download method")
-	
 	// Create streaming assembler
-	// assembler, err := blocks.NewStreamingAssembler(writer)
-	// if err != nil {
-	//	return fmt.Errorf("failed to create streaming assembler: %w", err)
-	// }
+	assembler, err := blocks.NewStreamingAssembler(writer)
+	if err != nil {
+		return fmt.Errorf("failed to create streaming assembler: %w", err)
+	}
 	
 	// Process blocks in streaming fashion
 	totalBlocks := len(descriptor.Blocks)
@@ -1047,7 +1037,6 @@ func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.W
 		}
 		
 		// Retrieve randomizer blocks
-		/*
 		randBlock1, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID1)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
@@ -1057,12 +1046,11 @@ func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.W
 		if err != nil {
 			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 		}
-		*/
 		
 		// Reconstruct and write block immediately (streaming)
-		// if err := assembler.ProcessBlockWithXOR(dataBlock, randBlock1, randBlock2); err != nil {
-		//	return fmt.Errorf("failed to process block %d: %w", i, err)
-		// }
+		if err := assembler.ProcessBlockWithXOR(dataBlock, randBlock1, randBlock2); err != nil {
+			return fmt.Errorf("failed to process block %d: %w", i, err)
+		}
 		
 		totalBytesWritten += int64(dataBlock.Size())
 	}

@@ -3,6 +3,7 @@ package testing
 import (
 	"crypto/rand"
 	"fmt"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -10,11 +11,22 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 )
 
+// isDockerAvailable checks if Docker is available and running
+func isDockerAvailable() bool {
+	cmd := exec.Command("docker", "version")
+	return cmd.Run() == nil
+}
+
 // TestRealEndToEnd tests NoiseFS with real IPFS network
 func TestRealEndToEnd(t *testing.T) {
 	// Skip if running in CI or if Docker not available
 	if testing.Short() {
 		t.Skip("Skipping real IPFS test in short mode")
+	}
+
+	// Check if Docker is available before proceeding
+	if !isDockerAvailable() {
+		t.Skip("Skipping real IPFS test - Docker not available or not running")
 	}
 
 	// Setup real IPFS network
