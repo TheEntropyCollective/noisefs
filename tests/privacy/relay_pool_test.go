@@ -422,16 +422,52 @@ func TestRelayPoolMetrics(t *testing.T) {
 	}
 
 	// Route requests and collect metrics
-	_, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
 	startTime := time.Now()
 	
-	for _, req := range testRequests {
-		_ = req // Mock routing
+	// Actually route requests through relay pool to generate metrics
+	for i, req := range testRequests {
+		// Select relay(s) for this request
+		selectedRelays, err := suite.relayPool.SelectRelays(ctx, 1)
+		if err != nil {
+			t.Fatalf("Failed to select relay for request %d: %v", i, err)
+		}
+		
+		if len(selectedRelays) == 0 {
+			t.Fatalf("No relays selected for request %d", i)
+		}
+		
+		relay := selectedRelays[0]
+		
+		// Simulate request processing through the relay
+		requestStart := time.Now()
+		
+		// Mock successful request processing
+		requestLatency := time.Duration(10+i*2) * time.Millisecond // Vary latency
+		time.Sleep(requestLatency) // Simulate actual processing time
+		
+		// Update relay performance metrics to reflect the processed request
+		perfMetrics := &relay.PerformanceMetrics{
+			TotalRequests:      relay.Performance.TotalRequests + 1,
+			SuccessfulRequests: relay.Performance.SuccessfulRequests + 1,
+			FailedRequests:     relay.Performance.FailedRequests,
+			AverageLatency:     requestLatency,
+			TotalBandwidth:     relay.Performance.TotalBandwidth + 1.5, // Simulate bandwidth usage
+			LastUpdate:         time.Now(),
+		}
+		
+		// Update relay pool with performance metrics from this request
+		suite.relayPool.UpdateRelayPerformance(relay.ID, perfMetrics)
+		
+		t.Logf("Processed request %d through relay %s (latency: %v)", 
+			i, relay.ID.String(), time.Since(requestStart))
+		_ = req // Still acknowledge the request object
 	}
 
-	_ = time.Since(startTime)
+	totalTime := time.Since(startTime)
+	t.Logf("Total processing time for %d requests: %v", len(testRequests), totalTime)
 
 	// Collect relay pool metrics
 	metrics := suite.relayPool.GetMetrics()
@@ -447,6 +483,11 @@ func TestRelayPoolMetrics(t *testing.T) {
 
 	if metrics.SuccessRate < 0.8 {
 		t.Errorf("Success rate too low: %.2f (expected >= 0.8)", metrics.SuccessRate)
+	}
+
+	// Verify we processed the expected number of requests
+	if metrics.TotalRequests != int64(len(testRequests)) {
+		t.Errorf("Expected %d total requests, got %d", len(testRequests), metrics.TotalRequests)
 	}
 
 	// Verify anonymity metrics (mock)

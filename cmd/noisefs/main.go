@@ -10,14 +10,13 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/integration"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 	shell "github.com/ipfs/go-ipfs-api"
 )
@@ -41,11 +40,11 @@ func main() {
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
 		// Altruistic cache flags
-		minPersonalCacheMB = flag.Int("min-personal-cache", 0, "Minimum personal cache size in MB (overrides config)")
-		disableAltruistic = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
+		minPersonalCacheMB    = flag.Int("min-personal-cache", 0, "Minimum personal cache size in MB (overrides config)")
+		disableAltruistic     = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
 		altruisticBandwidthMB = flag.Int("altruistic-bandwidth", 0, "Bandwidth limit for altruistic operations in MB/s")
 	)
-	
+
 	// Check for subcommands first
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -54,9 +53,9 @@ func main() {
 			return
 		}
 	}
-	
+
 	flag.Parse()
-	
+
 	// Load configuration
 	cfg, err := loadConfig(*configFile)
 	if err != nil {
@@ -77,9 +76,9 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	
+
 	logger := logging.GetGlobalLogger().WithComponent("noisefs")
-	
+
 	// Apply command-line overrides
 	if *ipfsAPI != "" {
 		cfg.IPFS.APIEndpoint = *ipfsAPI
@@ -100,17 +99,22 @@ func main() {
 	if *altruisticBandwidthMB > 0 {
 		cfg.Cache.AltruisticBandwidthMB = *altruisticBandwidthMB
 	}
-	
+
 	// Create storage backend (IPFS with abstraction layer)
 	logger.Info("Connecting to storage backend", map[string]interface{}{
 		"backend":  "ipfs",
 		"endpoint": cfg.IPFS.APIEndpoint,
 	})
-	
-	// Create IPFS client through storage abstraction for better architecture
-	storageManager, err := integration.CreateDefaultStorageManager(cfg.IPFS.APIEndpoint)
+
+	// Create storage manager with IPFS backend
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
+
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		logger.Error("Failed to connect to storage backend", map[string]interface{}{
+		logger.Error("Failed to create storage manager", map[string]interface{}{
 			"endpoint": cfg.IPFS.APIEndpoint,
 			"error":    err.Error(),
 		})
@@ -121,16 +125,32 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	
+
+	// Start the storage manager
+	err = storageManager.Start(context.Background())
+	if err != nil {
+		logger.Error("Failed to start storage manager", map[string]interface{}{
+			"endpoint": cfg.IPFS.APIEndpoint,
+			"error":    err.Error(),
+		})
+		if *jsonOutput {
+			util.PrintJSONError(err)
+		} else {
+			fmt.Fprintf(os.Stderr, "%s\n", util.FormatError(err))
+		}
+		os.Exit(1)
+	}
+	defer storageManager.Stop(context.Background())
+
 	// Create cache
 	logger.Debug("Initializing block cache", map[string]interface{}{
-		"cache_size": cfg.Cache.BlockCacheSize,
+		"cache_size":         cfg.Cache.BlockCacheSize,
 		"altruistic_enabled": cfg.Cache.EnableAltruistic,
 	})
-	
+
 	var blockCache cache.Cache
 	baseCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
-	
+
 	// Wrap with altruistic cache if enabled
 	if cfg.Cache.EnableAltruistic && cfg.Cache.MinPersonalCacheMB > 0 {
 		altruisticConfig := &cache.AltruisticCacheConfig{
@@ -138,23 +158,23 @@ func main() {
 			EnableAltruistic:      true,
 			AltruisticBandwidthMB: cfg.Cache.AltruisticBandwidthMB,
 		}
-		
+
 		// Calculate total capacity based on memory limit or default
 		totalCapacity := int64(cfg.Cache.MemoryLimit) * 1024 * 1024
 		if totalCapacity == 0 {
 			totalCapacity = int64(cfg.Cache.BlockCacheSize) * 128 * 1024 // Assume 128KB blocks
 		}
-		
+
 		blockCache = cache.NewAltruisticCache(baseCache, altruisticConfig, totalCapacity)
 		logger.Info("Altruistic cache enabled", map[string]interface{}{
-			"min_personal_mb": cfg.Cache.MinPersonalCacheMB,
-			"total_capacity_mb": totalCapacity / (1024 * 1024),
+			"min_personal_mb":    cfg.Cache.MinPersonalCacheMB,
+			"total_capacity_mb":  totalCapacity / (1024 * 1024),
 			"bandwidth_limit_mb": cfg.Cache.AltruisticBandwidthMB,
 		})
 	} else {
 		blockCache = baseCache
 	}
-	
+
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
@@ -168,7 +188,7 @@ func main() {
 		}
 		os.Exit(1)
 	}
-	
+
 	if *upload != "" {
 		logger.Info("Starting file upload", map[string]interface{}{
 			"file":       *upload,
@@ -233,7 +253,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 			configPath = defaultPath
 		}
 	}
-	
+
 	return config.LoadConfig(configPath)
 }
 
@@ -244,55 +264,55 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
-	
+
 	// Get file info
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
-	
+
 	// Create splitter
 	splitter, err := blocks.NewSplitter(blockSize)
 	if err != nil {
 		return fmt.Errorf("failed to create splitter: %w", err)
 	}
-	
+
 	// Split file into blocks
 	logger.Info("Splitting file into blocks", map[string]interface{}{
 		"block_size": blockSize,
 	})
-	
+
 	var splitProgress *util.ProgressBar
 	if !quiet {
 		splitProgress = util.NewProgressBar(fileInfo.Size(), "Splitting file", os.Stdout)
 	}
-	
+
 	fileBlocks, err := splitter.Split(file)
 	if err != nil {
 		return fmt.Errorf("failed to split file: %w", err)
 	}
-	
+
 	if splitProgress != nil {
 		splitProgress.Finish()
 	}
-	
+
 	logger.Info("File split into blocks", map[string]interface{}{
 		"block_count": len(fileBlocks),
 	})
-	
+
 	// Create descriptor
 	descriptor := descriptors.NewDescriptor(
 		filepath.Base(filePath),
 		fileInfo.Size(),
 		blockSize,
 	)
-	
+
 	// Generate or select randomizer blocks (using 3-tuple format)
 	randomizer1Blocks := make([]*blocks.Block, len(fileBlocks))
 	randomizer1CIDs := make([]string, len(fileBlocks))
 	randomizer2Blocks := make([]*blocks.Block, len(fileBlocks))
 	randomizer2CIDs := make([]string, len(fileBlocks))
-	
+
 	for i := range fileBlocks {
 		randBlock1, cid1, randBlock2, cid2, err := client.SelectRandomizers(fileBlocks[i].Size())
 		if err != nil {
@@ -303,7 +323,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		randomizer2Blocks[i] = randBlock2
 		randomizer2CIDs[i] = cid2
 	}
-	
+
 	// XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
 	anonymizedBlocks := make([]*blocks.Block, len(fileBlocks))
 	for i := range fileBlocks {
@@ -313,13 +333,13 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		}
 		anonymizedBlocks[i] = xorBlock
 	}
-	
+
 	// Store anonymized blocks in IPFS with caching
 	var uploadProgress *util.ProgressBar
 	if !quiet {
 		uploadProgress = util.NewProgressBar(int64(len(anonymizedBlocks)), "Uploading blocks", os.Stdout)
 	}
-	
+
 	dataCIDs := make([]string, len(anonymizedBlocks))
 	for i, block := range anonymizedBlocks {
 		cid, err := client.StoreBlockWithCache(block)
@@ -331,29 +351,29 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 			uploadProgress.Add(1)
 		}
 	}
-	
+
 	if uploadProgress != nil {
 		uploadProgress.Finish()
 	}
-	
+
 	// Add block triples to descriptor (3-tuple format)
 	for i := range dataCIDs {
 		if err := descriptor.AddBlockTriple(dataCIDs[i], randomizer1CIDs[i], randomizer2CIDs[i]); err != nil {
 			return fmt.Errorf("failed to add block triple to descriptor: %w", err)
 		}
 	}
-	
+
 	// Store descriptor using storage manager
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	descriptorCID, err := store.Save(descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to store descriptor: %w", err)
 	}
-	
+
 	// Log upload completion
 	logger.Info("Upload completed successfully", map[string]interface{}{
 		"descriptor_cid": descriptorCID,
@@ -361,7 +381,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		"file_size":      fileInfo.Size(),
 		"block_count":    len(fileBlocks),
 	})
-	
+
 	// Display results for user
 	if jsonOutput {
 		result := util.UploadResult{
@@ -378,7 +398,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		fmt.Println("\nUpload complete!")
 		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
 	}
-	
+
 	// Record upload metrics
 	totalStoredBytes := int64(0)
 	for _, block := range anonymizedBlocks {
@@ -387,17 +407,17 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	// Add randomizer blocks size (they're stored but already exist)
 	// For 3-tuple: data + randomizer1 + randomizer2 = 3x the data size
 	client.RecordUpload(fileInfo.Size(), totalStoredBytes*3) // *3 for data + 2 randomizer blocks
-	
+
 	return nil
 }
 
-func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
+func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, _ *logging.Logger) error {
 	// Create descriptor store
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	// Load descriptor from IPFS
 	if !quiet {
 		fmt.Printf("Loading descriptor from CID: %s\n", descriptorCID)
@@ -406,29 +426,29 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	if err != nil {
 		return fmt.Errorf("failed to load descriptor: %w", err)
 	}
-	
+
 	if !quiet {
 		fmt.Printf("Downloading file: %s (%d bytes)\n", descriptor.Filename, descriptor.FileSize)
 		fmt.Printf("Blocks to retrieve: %d\n", len(descriptor.Blocks))
 	}
-	
+
 	// Retrieve all data blocks
 	dataCIDs := make([]string, len(descriptor.Blocks))
 	randomizer1CIDs := make([]string, len(descriptor.Blocks))
 	randomizer2CIDs := make([]string, len(descriptor.Blocks))
-	
+
 	for i, block := range descriptor.Blocks {
 		dataCIDs[i] = block.DataCID
 		randomizer1CIDs[i] = block.RandomizerCID1
 		randomizer2CIDs[i] = block.RandomizerCID2
 	}
-	
+
 	// Retrieve anonymized data blocks
 	var downloadProgress *util.ProgressBar
 	if !quiet {
 		downloadProgress = util.NewProgressBar(int64(len(dataCIDs)), "Downloading blocks", os.Stdout)
 	}
-	
+
 	dataBlocks := make([]*blocks.Block, len(dataCIDs))
 	for i, cid := range dataCIDs {
 		address := &storage.BlockAddress{ID: cid}
@@ -444,13 +464,13 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	if downloadProgress != nil {
 		downloadProgress.Finish()
 	}
-	
+
 	// Retrieve first randomizer blocks
 	var randomizerProgress *util.ProgressBar
 	if !quiet {
 		randomizerProgress = util.NewProgressBar(int64(len(randomizer1CIDs)), "Retrieving randomizers", os.Stdout)
 	}
-	
+
 	randomizer1Blocks := make([]*blocks.Block, len(randomizer1CIDs))
 	for i, cid := range randomizer1CIDs {
 		address := &storage.BlockAddress{ID: cid}
@@ -466,17 +486,17 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	if randomizerProgress != nil {
 		randomizerProgress.Finish()
 	}
-	
+
 	// Retrieve second randomizer blocks (3-tuple format)
 	var randomizer2Progress *util.ProgressBar
 	if !quiet {
 		randomizer2Progress = util.NewProgressBar(int64(len(randomizer2CIDs)), "Retrieving randomizers 2", os.Stdout)
 	}
-	
+
 	randomizer2Blocks := make([]*blocks.Block, len(randomizer2CIDs))
 	for i, cid := range randomizer2CIDs {
 		address := &storage.BlockAddress{ID: cid}
-	block, err := storageManager.Get(context.Background(), address)
+		block, err := storageManager.Get(context.Background(), address)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
 		}
@@ -488,7 +508,7 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	if randomizer2Progress != nil {
 		randomizer2Progress.Finish()
 	}
-	
+
 	// XOR blocks to reconstruct original data
 	originalBlocks := make([]*blocks.Block, len(dataBlocks))
 	for i := range dataBlocks {
@@ -499,20 +519,20 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		}
 		originalBlocks[i] = origBlock
 	}
-	
+
 	// Create output file
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer outputFile.Close()
-	
+
 	// Assemble file
 	assembler := blocks.NewAssembler()
 	if err := assembler.AssembleToWriter(originalBlocks, outputFile); err != nil {
 		return fmt.Errorf("failed to assemble file: %w", err)
 	}
-	
+
 	if jsonOutput {
 		result := util.DownloadResult{
 			OutputPath: outputPath,
@@ -524,17 +544,17 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	} else if !quiet {
 		fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
 	}
-	
+
 	// Record download
 	client.RecordDownload()
-	
+
 	return nil
 }
 
 // showMetrics displays current NoiseFS metrics
 func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 	metrics := client.GetMetrics()
-	
+
 	// Log performance metrics for analysis
 	logger.Info("Performance metrics", map[string]interface{}{
 		"block_reuse_rate":        metrics.BlockReuseRate,
@@ -549,19 +569,19 @@ func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 		"bytes_uploaded_original": metrics.BytesUploadedOriginal,
 		"bytes_stored_ipfs":       metrics.BytesStoredIPFS,
 	})
-	
+
 	// Keep console output for user visibility
 	fmt.Println("\n--- NoiseFS Metrics ---")
-	fmt.Printf("Block Reuse Rate: %.1f%% (%d reused, %d generated)\n", 
+	fmt.Printf("Block Reuse Rate: %.1f%% (%d reused, %d generated)\n",
 		metrics.BlockReuseRate, metrics.BlocksReused, metrics.BlocksGenerated)
-	fmt.Printf("Cache Hit Rate: %.1f%% (%d hits, %d misses)\n", 
+	fmt.Printf("Cache Hit Rate: %.1f%% (%d hits, %d misses)\n",
 		metrics.CacheHitRate, metrics.CacheHits, metrics.CacheMisses)
 	fmt.Printf("Storage Efficiency: %.1f%% overhead\n", metrics.StorageEfficiency)
-	fmt.Printf("Total Operations: %d uploads, %d downloads\n", 
+	fmt.Printf("Total Operations: %d uploads, %d downloads\n",
 		metrics.TotalUploads, metrics.TotalDownloads)
-	
+
 	if metrics.BytesUploadedOriginal > 0 {
-		fmt.Printf("Data: %d bytes original → %d bytes stored\n", 
+		fmt.Printf("Data: %d bytes original → %d bytes stored\n",
 			metrics.BytesUploadedOriginal, metrics.BytesStoredIPFS)
 	}
 }
@@ -571,7 +591,7 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 	// Gather all statistics
 	var ipfsConnected bool
 	var peerCount int
-	
+
 	// Test storage manager connection
 	testBlock, _ := blocks.NewBlock([]byte("test"))
 	if _, err := storageManager.Put(context.Background(), testBlock); err == nil {
@@ -579,17 +599,17 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		// TODO: Get peer count from storage manager
 		peerCount = 0
 	}
-	
+
 	// Get cache stats
 	cacheStats := blockCache.GetStats()
 	var cacheHitRate float64
 	if total := cacheStats.Hits + cacheStats.Misses; total > 0 {
 		cacheHitRate = float64(cacheStats.Hits) / float64(total) * 100
 	}
-	
+
 	// Get NoiseFS metrics
 	metrics := client.GetMetrics()
-	
+
 	if jsonOutput {
 		// Output as JSON
 		result := util.StatsResult{
@@ -619,38 +639,38 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 				Downloads: metrics.TotalDownloads,
 			},
 		}
-		
+
 		// Add altruistic cache stats if available
 		if altruisticStats := client.GetAltruisticCacheStats(); altruisticStats != nil {
 			personalHitRate := 0.0
 			if altruisticStats.PersonalHits+altruisticStats.PersonalMisses > 0 {
-				personalHitRate = float64(altruisticStats.PersonalHits) / 
+				personalHitRate = float64(altruisticStats.PersonalHits) /
 					float64(altruisticStats.PersonalHits+altruisticStats.PersonalMisses) * 100
 			}
-			
+
 			altruisticHitRate := 0.0
 			if altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses > 0 {
-				altruisticHitRate = float64(altruisticStats.AltruisticHits) / 
+				altruisticHitRate = float64(altruisticStats.AltruisticHits) /
 					float64(altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses) * 100
 			}
-			
+
 			personalPercent := 0.0
 			altruisticPercent := 0.0
 			usedPercent := 0.0
 			if altruisticStats.TotalCapacity > 0 {
-				personalPercent = float64(altruisticStats.PersonalSize) / 
+				personalPercent = float64(altruisticStats.PersonalSize) /
 					float64(altruisticStats.TotalCapacity) * 100
-				altruisticPercent = float64(altruisticStats.AltruisticSize) / 
+				altruisticPercent = float64(altruisticStats.AltruisticSize) /
 					float64(altruisticStats.TotalCapacity) * 100
-				usedPercent = float64(altruisticStats.PersonalSize+altruisticStats.AltruisticSize) / 
+				usedPercent = float64(altruisticStats.PersonalSize+altruisticStats.AltruisticSize) /
 					float64(altruisticStats.TotalCapacity) * 100
 			}
-			
+
 			minPersonalCacheMB := 0
 			if cacheConfig := client.GetCacheConfig(); cacheConfig != nil {
 				minPersonalCacheMB = int(cacheConfig.MinPersonalCache / (1024 * 1024))
 			}
-			
+
 			result.Altruistic = &util.AltruisticStats{
 				Enabled:            client.IsAltruisticCacheEnabled(),
 				PersonalBlocks:     altruisticStats.PersonalBlocks,
@@ -670,10 +690,10 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		util.PrintJSONSuccess(result)
 		return
 	}
-	
+
 	// Regular text output
 	fmt.Println("=== NoiseFS System Statistics ===")
-	
+
 	// IPFS Connection Status
 	fmt.Println("--- IPFS Connection ---")
 	if ipfsConnected {
@@ -684,7 +704,7 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 	} else {
 		fmt.Println("IPFS Status: Disconnected")
 	}
-	
+
 	// Cache Statistics
 	fmt.Println("\n--- Cache Statistics ---")
 	fmt.Printf("Cache Size: %d blocks\n", cacheStats.Size)
@@ -695,51 +715,51 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		hitRate := float64(cacheStats.Hits) / float64(total) * 100
 		fmt.Printf("Cache Hit Rate: %.1f%%\n", hitRate)
 	}
-	
+
 	// Altruistic Cache Statistics (if enabled)
 	if altruisticStats := client.GetAltruisticCacheStats(); altruisticStats != nil {
 		fmt.Println("\n--- Altruistic Cache ---")
-		fmt.Printf("Personal Blocks: %d (%s)\n", 
-			altruisticStats.PersonalBlocks, 
+		fmt.Printf("Personal Blocks: %d (%s)\n",
+			altruisticStats.PersonalBlocks,
 			formatBytes(altruisticStats.PersonalSize))
-		fmt.Printf("Altruistic Blocks: %d (%s)\n", 
-			altruisticStats.AltruisticBlocks, 
+		fmt.Printf("Altruistic Blocks: %d (%s)\n",
+			altruisticStats.AltruisticBlocks,
 			formatBytes(altruisticStats.AltruisticSize))
-		
+
 		// Show usage percentages
 		totalUsed := altruisticStats.PersonalSize + altruisticStats.AltruisticSize
 		if altruisticStats.TotalCapacity > 0 {
 			personalPercent := float64(altruisticStats.PersonalSize) / float64(altruisticStats.TotalCapacity) * 100
 			altruisticPercent := float64(altruisticStats.AltruisticSize) / float64(altruisticStats.TotalCapacity) * 100
 			usedPercent := float64(totalUsed) / float64(altruisticStats.TotalCapacity) * 100
-			
-			fmt.Printf("Total Capacity: %s (%.1f%% used)\n", 
+
+			fmt.Printf("Total Capacity: %s (%.1f%% used)\n",
 				formatBytes(altruisticStats.TotalCapacity), usedPercent)
-			fmt.Printf("  Personal: %.1f%% | Altruistic: %.1f%%\n", 
+			fmt.Printf("  Personal: %.1f%% | Altruistic: %.1f%%\n",
 				personalPercent, altruisticPercent)
 		}
-		
+
 		// Show hit rates
 		if altruisticStats.PersonalHits+altruisticStats.PersonalMisses > 0 {
-			personalHitRate := float64(altruisticStats.PersonalHits) / 
+			personalHitRate := float64(altruisticStats.PersonalHits) /
 				float64(altruisticStats.PersonalHits+altruisticStats.PersonalMisses) * 100
 			fmt.Printf("Personal Hit Rate: %.1f%%\n", personalHitRate)
 		}
 		if altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses > 0 {
-			altruisticHitRate := float64(altruisticStats.AltruisticHits) / 
+			altruisticHitRate := float64(altruisticStats.AltruisticHits) /
 				float64(altruisticStats.AltruisticHits+altruisticStats.AltruisticMisses) * 100
 			fmt.Printf("Altruistic Hit Rate: %.1f%%\n", altruisticHitRate)
 		}
-		
+
 		// Show flex pool usage
-		fmt.Printf("Flex Pool Usage: %.1f%%\n", altruisticStats.FlexPoolUsage * 100)
-		
+		fmt.Printf("Flex Pool Usage: %.1f%%\n", altruisticStats.FlexPoolUsage*100)
+
 		// Show MinPersonalCache setting
 		if cacheConfig := client.GetCacheConfig(); cacheConfig != nil {
-			fmt.Printf("Min Personal Cache: %s\n", 
+			fmt.Printf("Min Personal Cache: %s\n",
 				formatBytes(cacheConfig.MinPersonalCache))
 		}
-		
+
 		// Visual representation
 		fmt.Println("\n--- Cache Visualization ---")
 		viz := util.NewCacheVisualization(50)
@@ -751,7 +771,7 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 			client.GetCacheConfig().MinPersonalCache,
 		))
 	}
-	
+
 	fmt.Println("\n--- Block Management ---")
 	fmt.Printf("Blocks Reused: %d\n", metrics.BlocksReused)
 	fmt.Printf("Blocks Generated: %d\n", metrics.BlocksGenerated)
@@ -759,7 +779,7 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		reuseRate := float64(metrics.BlocksReused) / float64(total) * 100
 		fmt.Printf("Block Reuse Rate: %.1f%%\n", reuseRate)
 	}
-	
+
 	fmt.Println("\n--- Storage Efficiency ---")
 	if metrics.BytesUploadedOriginal > 0 {
 		fmt.Printf("Original Data: %s\n", formatBytes(metrics.BytesUploadedOriginal))
@@ -769,15 +789,15 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 	} else {
 		fmt.Println("No data uploaded yet")
 	}
-	
+
 	fmt.Println("\n--- Operation History ---")
 	fmt.Printf("Total Uploads: %d\n", metrics.TotalUploads)
 	fmt.Printf("Total Downloads: %d\n", metrics.TotalDownloads)
-	
+
 	// Log the stats for debugging
 	logger.Info("System statistics displayed", map[string]interface{}{
-		"cache_size":      cacheStats.Size,
-		"cache_hit_rate":  float64(cacheStats.Hits) / float64(cacheStats.Hits+cacheStats.Misses) * 100,
+		"cache_size":       cacheStats.Size,
+		"cache_hit_rate":   float64(cacheStats.Hits) / float64(cacheStats.Hits+cacheStats.Misses) * 100,
 		"block_reuse_rate": metrics.BlockReuseRate,
 		"total_operations": metrics.TotalUploads + metrics.TotalDownloads,
 	})
@@ -790,7 +810,7 @@ func formatBytes(bytes int64) string {
 		MB = KB * 1024
 		GB = MB * 1024
 	)
-	
+
 	switch {
 	case bytes >= GB:
 		return fmt.Sprintf("%.2f GB", float64(bytes)/GB)
@@ -812,7 +832,7 @@ func handleSubcommand(cmd string, args []string) {
 		quiet      = false
 		jsonOutput = false
 	)
-	
+
 	// Look for global flags in args
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -832,7 +852,7 @@ func handleSubcommand(cmd string, args []string) {
 			jsonOutput = true
 		}
 	}
-	
+
 	// Special case for discover - doesn't need IPFS connection
 	if cmd == "discover" {
 		if err := discoverCommand(args, quiet, jsonOutput); err != nil {
@@ -845,7 +865,7 @@ func handleSubcommand(cmd string, args []string) {
 		}
 		return
 	}
-	
+
 	// Load configuration for commands that need IPFS
 	cfg, err := loadConfig(configFile)
 	if err != nil {
@@ -856,18 +876,18 @@ func handleSubcommand(cmd string, args []string) {
 		}
 		os.Exit(1)
 	}
-	
+
 	// Apply command-line override
 	if ipfsAPI != "" {
 		cfg.IPFS.APIEndpoint = ipfsAPI
 	}
-	
+
 	// Create storage manager for subcommands
 	storageConfig := storage.DefaultConfig()
 	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
 		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
-	
+
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		if jsonOutput {
@@ -877,7 +897,7 @@ func handleSubcommand(cmd string, args []string) {
 		}
 		os.Exit(1)
 	}
-	
+
 	err = storageManager.Start(context.Background())
 	if err != nil {
 		if jsonOutput {
@@ -888,10 +908,10 @@ func handleSubcommand(cmd string, args []string) {
 		os.Exit(1)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	// Create shell for PubSub
 	ipfsShell := shell.NewShell(cfg.IPFS.APIEndpoint)
-	
+
 	// Handle subcommands
 	switch cmd {
 	case "announce":
@@ -901,7 +921,7 @@ func handleSubcommand(cmd string, args []string) {
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
-	
+
 	if err != nil {
 		if jsonOutput {
 			util.PrintJSONError(err)
@@ -920,13 +940,13 @@ func checkLegalDisclaimerAccepted() bool {
 		return false
 	}
 	configDir := filepath.Join(homeDir, ".noisefs")
-	
+
 	disclaimerFile := filepath.Join(configDir, ".noisefs_legal_accepted")
 	info, err := os.Stat(disclaimerFile)
 	if err != nil {
 		return false
 	}
-	
+
 	// Check if disclaimer was accepted within the last 30 days
 	return time.Since(info.ModTime()) < 30*24*time.Hour
 }
@@ -958,15 +978,15 @@ func showLegalDisclaimer() {
 	fmt.Println()
 	fmt.Println(strings.Repeat("-", 80))
 	fmt.Printf("\nDo you understand and accept these terms? (yes/no): ")
-	
+
 	var response string
 	fmt.Scanln(&response)
-	
+
 	if strings.ToLower(response) != "yes" {
 		fmt.Println("\nYou must accept the terms to use NoiseFS. Exiting.")
 		os.Exit(1)
 	}
-	
+
 	// Save acceptance
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
@@ -975,7 +995,7 @@ func showLegalDisclaimer() {
 		disclaimerFile := filepath.Join(configDir, ".noisefs_legal_accepted")
 		os.WriteFile(disclaimerFile, []byte(time.Now().Format(time.RFC3339)), 0600)
 	}
-	
+
 	fmt.Println("\nThank you for accepting the terms. Remember to use NoiseFS responsibly.")
 	fmt.Println(strings.Repeat("=", 80))
 	fmt.Println()

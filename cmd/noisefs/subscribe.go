@@ -86,7 +86,7 @@ func subscribeCommand(args []string, storageManager *storage.Manager, shell *she
 	return addSubscription(subConfig, topic, configPath, quiet, jsonOutput)
 }
 
-func listSubscriptions(subConfig *config.Subscriptions, quiet bool, jsonOutput bool) error {
+func listSubscriptions(subConfig *config.Subscriptions, _ bool, jsonOutput bool) error {
 	subs := subConfig.GetAll()
 	
 	if jsonOutput {

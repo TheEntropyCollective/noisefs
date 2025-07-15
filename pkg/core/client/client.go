@@ -778,3 +778,289 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 	
 	return []byte(buf.String()), descriptor.Filename, nil
 }
+
+// StreamingProgressCallback is called during streaming operations to report progress
+type StreamingProgressCallback func(stage string, bytesProcessed int64, blocksProcessed int)
+
+// StreamingUpload uploads a file using streaming with constant memory usage
+func (c *Client) StreamingUpload(reader io.Reader, filename string) (string, error) {
+	return c.StreamingUploadWithBlockSize(reader, filename, blocks.DefaultBlockSize)
+}
+
+// StreamingUploadWithProgress uploads a file using streaming with progress reporting
+func (c *Client) StreamingUploadWithProgress(reader io.Reader, filename string, progress StreamingProgressCallback) (string, error) {
+	return c.StreamingUploadWithBlockSizeAndProgress(reader, filename, blocks.DefaultBlockSize, progress)
+}
+
+// StreamingUploadWithBlockSize uploads a file using streaming with a specific block size
+func (c *Client) StreamingUploadWithBlockSize(reader io.Reader, filename string, blockSize int) (string, error) {
+	return c.StreamingUploadWithBlockSizeAndProgress(reader, filename, blockSize, nil)
+}
+
+// StreamingUploadWithBlockSizeAndProgress uploads a file using streaming with block size and progress
+func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filename string, blockSize int, progress StreamingProgressCallback) (string, error) {
+	if reader == nil {
+		return "", errors.New("reader cannot be nil")
+	}
+	
+	// Create streaming splitter
+	splitter, err := blocks.NewStreamingSplitter(blockSize)
+	if err != nil {
+		return "", fmt.Errorf("failed to create streaming splitter: %w", err)
+	}
+	
+	// Create descriptor (we'll estimate file size as we go)
+	descriptor := descriptors.NewDescriptor(filename, 0, blockSize) // Size will be updated
+	
+	var totalBytesProcessed int64
+	var totalBlocksProcessed int
+	
+	// Define block processing callback
+	blockProcessor := func(fileBlock *blocks.Block) error {
+		if progress != nil {
+			progress("Processing blocks", totalBytesProcessed, totalBlocksProcessed)
+		}
+		
+		// Select two randomizer blocks (3-tuple XOR) - optimize for streaming
+		randBlock1, cid1, randBlock2, cid2, err := c.selectRandomizersForStreaming(fileBlock.Size())
+		if err != nil {
+			return fmt.Errorf("failed to select randomizers: %w", err)
+		}
+		
+		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
+		xorBlock, err := fileBlock.XOR(randBlock1, randBlock2)
+		if err != nil {
+			return fmt.Errorf("failed to XOR blocks: %w", err)
+		}
+		
+		// Store anonymized block
+		dataCID, err := c.StoreBlockWithCache(xorBlock)
+		if err != nil {
+			return fmt.Errorf("failed to store data block: %w", err)
+		}
+		
+		// Add block triple to descriptor
+		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
+			return fmt.Errorf("failed to add block triple: %w", err)
+		}
+		
+		totalBytesProcessed += int64(fileBlock.Size())
+		totalBlocksProcessed++
+		
+		return nil
+	}
+	
+	// Define progress callback for streaming splitter
+	streamingProgress := func(bytesProcessed int64, blocksProcessed int) {
+		totalBytesProcessed = bytesProcessed
+		totalBlocksProcessed = blocksProcessed
+		if progress != nil {
+			progress("Splitting and anonymizing", bytesProcessed, blocksProcessed)
+		}
+	}
+	
+	// Process blocks in streaming fashion
+	if err := splitter.StreamBlocks(reader, blockProcessor, streamingProgress); err != nil {
+		return "", fmt.Errorf("failed to process blocks: %w", err)
+	}
+	
+	// Update descriptor with final file size
+	descriptor.FileSize = totalBytesProcessed
+	
+	if progress != nil {
+		progress("Saving descriptor", totalBytesProcessed, totalBlocksProcessed)
+	}
+	
+	// Store descriptor in IPFS
+	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
+	if err != nil {
+		return "", fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	descriptorCID, err := descriptorStore.Save(descriptor)
+	if err != nil {
+		return "", fmt.Errorf("failed to save descriptor: %w", err)
+	}
+	
+	// Record metrics
+	c.RecordUpload(totalBytesProcessed, totalBytesProcessed*3) // *3 for data + 2 randomizer blocks
+	
+	if progress != nil {
+		progress("Upload complete", totalBytesProcessed, totalBlocksProcessed)
+	}
+	
+	return descriptorCID, nil
+}
+
+// selectRandomizersForStreaming optimizes randomizer selection for streaming operations
+func (c *Client) selectRandomizersForStreaming(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
+	// For streaming, we want to avoid blocking operations
+	// First try to get from cache quickly, then generate if needed
+	
+	// Try to get popular blocks from cache first (non-blocking)
+	randomizers, err := c.cache.GetRandomizers(10) // Get fewer blocks for faster lookup
+	if err == nil && len(randomizers) > 0 {
+		// Filter by matching size
+		suitableBlocks := make([]*cache.BlockInfo, 0)
+		for _, info := range randomizers {
+			if info.Size == blockSize {
+				suitableBlocks = append(suitableBlocks, info)
+			}
+		}
+		
+		// If we have at least 2 suitable cached blocks, use them (streaming optimization)
+		if len(suitableBlocks) >= 2 {
+			selected1 := suitableBlocks[0]
+			selected2 := suitableBlocks[1]
+			
+			// Update cache metrics
+			c.cache.IncrementPopularity(selected1.CID)
+			c.cache.IncrementPopularity(selected2.CID)
+			c.metrics.RecordBlockReuse()
+			c.metrics.RecordBlockReuse()
+			
+			return selected1.Block, selected1.CID, selected2.Block, selected2.CID, nil
+		}
+		
+		// If we have exactly 1 suitable cached block, use it and generate another
+		if len(suitableBlocks) == 1 {
+			selected1 := suitableBlocks[0]
+			c.cache.IncrementPopularity(selected1.CID)
+			c.metrics.RecordBlockReuse()
+			
+			// Generate second randomizer
+			randBlock2, err := blocks.NewRandomBlock(blockSize)
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+			}
+			
+			cid2, err := c.storeBlock(context.Background(), randBlock2)
+			if err != nil {
+				return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+			}
+			
+			c.cache.Store(cid2, randBlock2)
+			c.metrics.RecordBlockGeneration()
+			
+			return selected1.Block, selected1.CID, randBlock2, cid2, nil
+		}
+	}
+	
+	// No suitable cached blocks, generate both (optimized for speed)
+	return c.generateRandomizerPairFast(blockSize)
+}
+
+// generateRandomizerPairFast quickly generates a pair of randomizers for streaming
+func (c *Client) generateRandomizerPairFast(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
+	// Generate both randomizers
+	randBlock1, err := blocks.NewRandomBlock(blockSize)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to create first randomizer: %w", err)
+	}
+	
+	randBlock2, err := blocks.NewRandomBlock(blockSize)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+	}
+	
+	// Store both randomizers concurrently for speed (in future version)
+	ctx := context.Background()
+	cid1, err := c.storeBlock(ctx, randBlock1)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to store first randomizer: %w", err)
+	}
+	
+	cid2, err := c.storeBlock(ctx, randBlock2)
+	if err != nil {
+		return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+	}
+	
+	// Cache both randomizers
+	c.cache.Store(cid1, randBlock1)
+	c.cache.Store(cid2, randBlock2)
+	c.metrics.RecordBlockGeneration()
+	c.metrics.RecordBlockGeneration()
+	
+	return randBlock1, cid1, randBlock2, cid2, nil
+}
+
+// StreamingDownload downloads a file using streaming with constant memory usage
+func (c *Client) StreamingDownload(descriptorCID string, writer io.Writer) error {
+	return c.StreamingDownloadWithProgress(descriptorCID, writer, nil)
+}
+
+// StreamingDownloadWithProgress downloads a file using streaming with progress reporting
+func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.Writer, progress StreamingProgressCallback) error {
+	if writer == nil {
+		return errors.New("writer cannot be nil")
+	}
+	
+	if progress != nil {
+		progress("Loading descriptor", 0, 0)
+	}
+	
+	// Create descriptor store with storage manager
+	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
+	if err != nil {
+		return fmt.Errorf("failed to create descriptor store: %w", err)
+	}
+	
+	// Load descriptor
+	descriptor, err := descriptorStore.Load(descriptorCID)
+	if err != nil {
+		return fmt.Errorf("failed to load descriptor: %w", err)
+	}
+	
+	if progress != nil {
+		progress("Descriptor loaded", 0, 0)
+	}
+	
+	// Create streaming assembler
+	assembler, err := blocks.NewStreamingAssembler(writer)
+	if err != nil {
+		return fmt.Errorf("failed to create streaming assembler: %w", err)
+	}
+	
+	// Process blocks in streaming fashion
+	totalBlocks := len(descriptor.Blocks)
+	var totalBytesWritten int64
+	
+	for i, blockInfo := range descriptor.Blocks {
+		if progress != nil {
+			progress("Downloading blocks", totalBytesWritten, i)
+		}
+		
+		// Retrieve anonymized data block
+		dataBlock, err := c.retrieveBlock(context.Background(), blockInfo.DataCID)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve data block %d: %w", i, err)
+		}
+		
+		// Retrieve randomizer blocks
+		randBlock1, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID1)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
+		}
+		
+		randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
+		}
+		
+		// Reconstruct and write block immediately (streaming)
+		if err := assembler.ProcessBlockWithXOR(dataBlock, randBlock1, randBlock2); err != nil {
+			return fmt.Errorf("failed to process block %d: %w", i, err)
+		}
+		
+		totalBytesWritten += int64(dataBlock.Size())
+	}
+	
+	// Record download
+	c.RecordDownload()
+	
+	if progress != nil {
+		progress("Download complete", totalBytesWritten, totalBlocks)
+	}
+	
+	return nil
+}
