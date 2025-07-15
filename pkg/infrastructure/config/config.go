@@ -216,6 +216,236 @@ func DefaultConfig() *Config {
 	}
 }
 
+// QuickStartConfig returns a simplified configuration for new users
+// Optimized for ease of use with reasonable security defaults
+func QuickStartConfig() *Config {
+	homeDir, _ := os.UserHomeDir()
+	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
+
+	return &Config{
+		IPFS: IPFSConfig{
+			APIEndpoint: "127.0.0.1:5001",
+			Timeout:     30,
+		},
+		Cache: CacheConfig{
+			BlockCacheSize:     500,  // Smaller cache for quick start
+			MemoryLimit:        256,  // Conservative memory usage
+			EnableAltruistic:   false, // Disabled for simplicity
+			MinPersonalCacheMB: 128,
+		},
+		FUSE: FUSEConfig{
+			MountPath:  "",
+			VolumeName: "NoiseFS",
+			ReadOnly:   false,
+			AllowOther: false,
+			Debug:      false,
+			IndexPath:  defaultIndexPath,
+		},
+		Logging: LoggingConfig{
+			Level:  "warn", // Less verbose for new users
+			Format: "text",
+			Output: "console",
+			File:   "",
+		},
+		Performance: PerformanceConfig{
+			BlockSize:        blocks.DefaultBlockSize,
+			ReadAhead:        false,
+			WriteBack:        false,
+			MaxConcurrentOps: 5, // Conservative for stability
+		},
+		WebUI: WebUIConfig{
+			Host:         "localhost",
+			Port:         8443,
+			TLSEnabled:   true,
+			TLSCertFile:  "",
+			TLSKeyFile:   "",
+			TLSAutoGen:   true,
+			TLSHostnames: []string{"localhost"},
+			TLSMinVersion: "1.2",
+		},
+		Security: SecurityConfig{
+			// Simplified security - still secure but less complex
+			EnableEncryption:   true,
+			EncryptDescriptors: true,
+			DefaultEncrypted:   true,
+			RequirePassword:    false, // Simplified for quick start
+			PasswordPrompt:     true,
+			EncryptLocalIndex:  false, // Simplified for quick start
+			SecureMemory:       false, // Simplified for quick start
+			AntiForensics:      false,
+		},
+		Tor: TorConfig{
+			Enabled:         false, // Disabled for simplicity and speed
+			SOCKSProxy:      "127.0.0.1:9050",
+			ControlPort:     "127.0.0.1:9051",
+			UploadEnabled:   false,
+			UploadJitterMin: 1,
+			UploadJitterMax: 5,
+			DownloadEnabled: false,
+			AnnounceEnabled: false,
+		},
+	}
+}
+
+// SecurityConfig returns a configuration optimized for maximum privacy and security
+// All security features enabled with conservative performance settings
+func SecurityPresetConfig() *Config {
+	homeDir, _ := os.UserHomeDir()
+	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
+
+	return &Config{
+		IPFS: IPFSConfig{
+			APIEndpoint: "127.0.0.1:5001",
+			Timeout:     60, // Longer timeout for Tor operations
+		},
+		Cache: CacheConfig{
+			BlockCacheSize:     2000, // Larger cache for better anonymity
+			MemoryLimit:        1024, // More memory for security operations
+			EnableAltruistic:   true,  // Enhanced network participation
+			MinPersonalCacheMB: 512,
+		},
+		FUSE: FUSEConfig{
+			MountPath:  "",
+			VolumeName: "NoiseFS",
+			ReadOnly:   false,
+			AllowOther: false,
+			Debug:      false, // No debug logging for security
+			IndexPath:  defaultIndexPath,
+		},
+		Logging: LoggingConfig{
+			Level:  "error", // Minimal logging for security
+			Format: "json",  // Structured logging for security analysis
+			Output: "console",
+			File:   "",
+		},
+		Performance: PerformanceConfig{
+			BlockSize:        blocks.DefaultBlockSize,
+			ReadAhead:        false, // Conservative for security
+			WriteBack:        false, // Conservative for security
+			MaxConcurrentOps: 5,     // Conservative for stability
+		},
+		WebUI: WebUIConfig{
+			Host:         "127.0.0.1", // Strict localhost only
+			Port:         8443,
+			TLSEnabled:   true,
+			TLSCertFile:  "",
+			TLSKeyFile:   "",
+			TLSAutoGen:   true,
+			TLSHostnames: []string{"localhost", "127.0.0.1"},
+			TLSMinVersion: "1.3", // Maximum TLS security
+		},
+		Security: SecurityConfig{
+			// MAXIMUM SECURITY: All features enabled
+			EnableEncryption:   true,
+			EncryptDescriptors: true,
+			DefaultEncrypted:   true,
+			RequirePassword:    true,
+			PasswordPrompt:     true,
+			EncryptLocalIndex:  true,
+			SecureMemory:       true,
+			AntiForensics:      true, // Enable all anti-forensic features
+		},
+		Tor: TorConfig{
+			Enabled:         true,
+			SOCKSProxy:      "127.0.0.1:9050",
+			ControlPort:     "127.0.0.1:9051",
+			UploadEnabled:   true,
+			UploadJitterMin: 5,  // Longer jitter for better anonymity
+			UploadJitterMax: 15, // Longer jitter for better anonymity
+			DownloadEnabled: true, // Enable for maximum privacy
+			AnnounceEnabled: true,
+		},
+	}
+}
+
+// PerformanceConfig returns a configuration optimized for maximum performance
+// Security features balanced with performance requirements
+func PerformancePresetConfig() *Config {
+	homeDir, _ := os.UserHomeDir()
+	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
+
+	return &Config{
+		IPFS: IPFSConfig{
+			APIEndpoint: "127.0.0.1:5001",
+			Timeout:     15, // Shorter timeout for speed
+		},
+		Cache: CacheConfig{
+			BlockCacheSize:     5000, // Large cache for performance
+			MemoryLimit:        2048, // High memory allocation
+			EnableAltruistic:   true,
+			MinPersonalCacheMB: 1024, // Large personal cache
+		},
+		FUSE: FUSEConfig{
+			MountPath:  "",
+			VolumeName: "NoiseFS",
+			ReadOnly:   false,
+			AllowOther: false,
+			Debug:      false,
+			IndexPath:  defaultIndexPath,
+		},
+		Logging: LoggingConfig{
+			Level:  "warn", // Minimal logging overhead
+			Format: "text",
+			Output: "console",
+			File:   "",
+		},
+		Performance: PerformanceConfig{
+			BlockSize:        blocks.DefaultBlockSize,
+			ReadAhead:        true,  // Enable for performance
+			WriteBack:        true,  // Enable for performance
+			MaxConcurrentOps: 50,    // High concurrency
+		},
+		WebUI: WebUIConfig{
+			Host:         "localhost",
+			Port:         8443,
+			TLSEnabled:   true,
+			TLSCertFile:  "",
+			TLSKeyFile:   "",
+			TLSAutoGen:   true,
+			TLSHostnames: []string{"localhost"},
+			TLSMinVersion: "1.2", // Balanced security/performance
+		},
+		Security: SecurityConfig{
+			// Balanced security for performance
+			EnableEncryption:   true,
+			EncryptDescriptors: true,
+			DefaultEncrypted:   true,
+			RequirePassword:    true,
+			PasswordPrompt:     true,
+			EncryptLocalIndex:  false, // Disabled for performance
+			SecureMemory:       false, // Disabled for performance
+			AntiForensics:      false, // Disabled for performance
+		},
+		Tor: TorConfig{
+			Enabled:         false, // Disabled for maximum performance
+			SOCKSProxy:      "127.0.0.1:9050",
+			ControlPort:     "127.0.0.1:9051",
+			UploadEnabled:   false,
+			UploadJitterMin: 1,
+			UploadJitterMax: 3, // Minimal jitter for speed
+			DownloadEnabled: false,
+			AnnounceEnabled: false,
+		},
+	}
+}
+
+// GetPresetConfig returns a configuration based on the specified preset name
+// Available presets: "default", "quickstart", "security", "performance"
+func GetPresetConfig(preset string) (*Config, error) {
+	switch preset {
+	case "default", "":
+		return DefaultConfig(), nil
+	case "quickstart":
+		return QuickStartConfig(), nil
+	case "security":
+		return SecurityPresetConfig(), nil
+	case "performance":
+		return PerformancePresetConfig(), nil
+	default:
+		return nil, fmt.Errorf("unknown preset '%s'. Available presets: default, quickstart, security, performance", preset)
+	}
+}
+
 // LoadConfig loads configuration from file with environment variable overrides
 func LoadConfig(configPath string) (*Config, error) {
 	config := DefaultConfig()
