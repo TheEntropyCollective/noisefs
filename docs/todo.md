@@ -13,25 +13,25 @@
 **Integration Strategy**: Build upon Agent 1's directory structures and Agent 2's storage integration. Integrate with existing CLI patterns in main.go, use existing worker pool infrastructure for parallel processing, support both streaming and regular modes, add progress reporting and exclude patterns, and maintain backward compatibility with existing single-file operations.
 
 ### Sprint 1: Enhanced Upload Command (HIGH PRIORITY)
-- [ ] Add -r/--recursive flag to upload command
-- [ ] Implement directory detection in upload function
-- [ ] Integrate with directory processor for recursive tree walking
-- [ ] Add progress reporting for directory uploads
-- [ ] Implement exclude patterns for directory uploads
-- [ ] Add support for both streaming and regular modes
-- [ ] Create directory upload testing
-- [ ] Add directory upload performance optimization
-- [ ] Implement directory upload error handling and recovery
+- [x] Add -r/--recursive flag to upload command
+- [x] Implement directory detection in upload function
+- [x] Integrate with directory processor for recursive tree walking
+- [x] Add progress reporting for directory uploads
+- [x] Implement exclude patterns for directory uploads
+- [x] Add support for both streaming and regular modes
+- [x] Create directory upload testing
+- [x] Add directory upload performance optimization
+- [x] Implement directory upload error handling and recovery
 
 ### Sprint 2: Directory Listing Command (HIGH PRIORITY)
-- [ ] Implement noisefs ls command for directory listing
-- [ ] Add support for directory descriptor CID input
+- [x] Implement noisefs ls command for directory listing
+- [x] Add support for directory descriptor CID input
 - [ ] Implement directory tree visualization
 - [ ] Add filtering and sorting options for directory listing
 - [ ] Implement recursive directory listing with depth control
-- [ ] Add JSON output format for directory listings
-- [ ] Create directory listing performance optimization
-- [ ] Add directory listing error handling
+- [x] Add JSON output format for directory listings
+- [x] Create directory listing performance optimization
+- [x] Add directory listing error handling
 - [ ] Implement directory listing unit tests
 
 ### Sprint 3: Enhanced Download Command (HIGH PRIORITY)
