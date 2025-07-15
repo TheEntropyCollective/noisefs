@@ -307,21 +307,12 @@ func main() {
 			}
 			os.Exit(1)
 		}
-		logger.Info("Starting file download", map[string]interface{}{
-			"descriptor_cid": *download,
-			"output_file":    *output,
-			"streaming":      *streaming,
-		})
-		var err error
-		if *streaming {
-			err = streamingDownloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
-		} else {
-			err = downloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, logger)
-		}
+		
+		// Try to detect if the CID is a directory descriptor
+		isDirectory, err := detectDirectoryDescriptor(storageManager, *download)
 		if err != nil {
-			logger.Error("Download failed", map[string]interface{}{
+			logger.Error("Failed to detect descriptor type", map[string]interface{}{
 				"descriptor_cid": *download,
-				"output_file":    *output,
 				"error":          err.Error(),
 			})
 			if *jsonOutput {
@@ -329,6 +320,59 @@ func main() {
 			}
 			os.Exit(1)
 		}
+		
+		if isDirectory {
+			// Directory download
+			logger.Info("Starting directory download", map[string]interface{}{
+				"descriptor_cid": *download,
+				"output_dir":     *output,
+				"streaming":      *streaming,
+				"recursive":      *recursive,
+			})
+			
+			var err error
+			if *streaming {
+				err = streamingDownloadDirectory(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
+			} else {
+				err = downloadDirectory(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
+			}
+			if err != nil {
+				logger.Error("Directory download failed", map[string]interface{}{
+					"descriptor_cid": *download,
+					"output_dir":     *output,
+					"error":          err.Error(),
+				})
+				if *jsonOutput {
+					util.PrintJSONError(err)
+				}
+				os.Exit(1)
+			}
+		} else {
+			// File download
+			logger.Info("Starting file download", map[string]interface{}{
+				"descriptor_cid": *download,
+				"output_file":    *output,
+				"streaming":      *streaming,
+			})
+			var err error
+			if *streaming {
+				err = streamingDownloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
+			} else {
+				err = downloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, logger)
+			}
+			if err != nil {
+				logger.Error("Download failed", map[string]interface{}{
+					"descriptor_cid": *download,
+					"output_file":    *output,
+					"error":          err.Error(),
+				})
+				if *jsonOutput {
+					util.PrintJSONError(err)
+				}
+				os.Exit(1)
+			}
+		}
+		
 		if !*quiet {
 			showMetrics(client, logger)
 		}
@@ -1521,4 +1565,157 @@ type DirectoryListResult struct {
 	DirectoryCID string               `json:"directory_cid"`
 	Entries      []DirectoryListEntry `json:"entries"`
 	TotalEntries int                  `json:"total_entries"`
+}
+
+// detectDirectoryDescriptor detects if a CID is a directory descriptor
+func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (bool, error) {
+	// Try to retrieve the descriptor
+	address := &storage.BlockAddress{
+		ID:          cid,
+		BackendType: storageManager.GetConfig().DefaultBackend,
+	}
+	
+	block, err := storageManager.Get(context.Background(), address)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve descriptor: %w", err)
+	}
+	
+	// Try to unmarshal as a regular file descriptor first
+	_, err = descriptors.FromJSON(block.Data)
+	if err == nil {
+		return false, nil // It's a file descriptor
+	}
+	
+	// Try to unmarshal as directory manifest
+	encryptionKey, err := crypto.GenerateKey("directory-key")
+	if err != nil {
+		return false, fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	
+	_, err = descriptors.DecryptManifest(block.Data, encryptionKey)
+	if err == nil {
+		return true, nil // It's a directory descriptor
+	}
+	
+	// If both fail, we can't determine the type
+	return false, fmt.Errorf("unable to determine descriptor type")
+}
+
+// downloadDirectory downloads a directory recursively
+func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+	downloadStartTime := time.Now()
+	
+	// Create output directory
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+	
+	// Create directory manager
+	encryptionKey, err := crypto.GenerateKey("directory-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate encryption key: %w", err)
+	}
+	
+	directoryManager, err := storage.NewDirectoryManager(storageManager, encryptionKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create directory manager: %w", err)
+	}
+	
+	// Reconstruct directory
+	result, err := directoryManager.ReconstructDirectory(context.Background(), directoryCID, outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to reconstruct directory: %w", err)
+	}
+	
+	// Create progress bar
+	var progressBar *util.ProgressBar
+	if !quiet {
+		progressBar = util.NewProgressBar(int64(result.TotalEntries), "Downloading files", os.Stdout)
+	}
+	
+	// Download each file
+	downloadedFiles := 0
+	totalSize := int64(0)
+	
+	for _, entry := range result.Entries {
+		if entry.Type == blocks.FileType {
+			// Download file
+			filePath := filepath.Join(outputDir, entry.DecryptedName)
+			
+			if err := downloadFile(storageManager, client, entry.CID, filePath, true, false, logger); err != nil {
+				logger.Error("Failed to download file", map[string]interface{}{
+					"file_cid":  entry.CID,
+					"file_path": filePath,
+					"error":     err.Error(),
+				})
+				continue
+			}
+			
+			downloadedFiles++
+			totalSize += entry.Size
+			
+			if progressBar != nil {
+				progressBar.Add(1)
+			}
+		} else if entry.Type == blocks.DirectoryType {
+			// Recursively download subdirectory
+			subdirPath := filepath.Join(outputDir, entry.DecryptedName)
+			if err := downloadDirectory(storageManager, client, entry.CID, subdirPath, true, false, cfg, logger); err != nil {
+				logger.Error("Failed to download subdirectory", map[string]interface{}{
+					"subdir_cid":  entry.CID,
+					"subdir_path": subdirPath,
+					"error":       err.Error(),
+				})
+				continue
+			}
+			
+			if progressBar != nil {
+				progressBar.Add(1)
+			}
+		}
+	}
+	
+	if progressBar != nil {
+		progressBar.Finish()
+	}
+	
+	totalDuration := time.Since(downloadStartTime)
+	
+	logger.Info("Directory download completed", map[string]interface{}{
+		"directory_cid":     directoryCID,
+		"output_dir":        outputDir,
+		"files_downloaded":  downloadedFiles,
+		"total_size":        totalSize,
+		"total_duration_ms": totalDuration.Milliseconds(),
+		"throughput_mb_s":   float64(totalSize) / (1024 * 1024) / totalDuration.Seconds(),
+	})
+	
+	// Display results
+	if jsonOutput {
+		result := util.DirectoryDownloadResult{
+			DirectoryCID:    directoryCID,
+			OutputDir:       outputDir,
+			FilesDownloaded: downloadedFiles,
+			TotalSize:       totalSize,
+		}
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		fmt.Printf("Downloaded %d files to %s\n", downloadedFiles, outputDir)
+	} else {
+		fmt.Printf("\nDirectory download complete!\n")
+		fmt.Printf("Directory: %s\n", outputDir)
+		fmt.Printf("Files downloaded: %d\n", downloadedFiles)
+		fmt.Printf("Total size: %s\n", formatBytes(totalSize))
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+			float64(totalSize)/(1024*1024)/totalDuration.Seconds(),
+			totalDuration.Seconds())
+	}
+	
+	return nil
+}
+
+// streamingDownloadDirectory downloads a directory with streaming support
+func streamingDownloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+	// For now, delegate to regular download - streaming directory download would need more complex implementation
+	return downloadDirectory(storageManager, client, directoryCID, outputDir, quiet, jsonOutput, cfg, logger)
 }

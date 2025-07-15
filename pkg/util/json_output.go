@@ -38,6 +38,14 @@ type DirectoryUploadResult struct {
 	BlockSize     int    `json:"block_size"`
 }
 
+// DirectoryDownloadResult represents the result of a directory download operation
+type DirectoryDownloadResult struct {
+	DirectoryCID    string `json:"directory_cid"`
+	OutputDir       string `json:"output_dir"`
+	FilesDownloaded int    `json:"files_downloaded"`
+	TotalSize       int64  `json:"total_size"`
+}
+
 // StatsResult represents system statistics
 type StatsResult struct {
 	IPFS       IPFSStats          `json:"ipfs"`
