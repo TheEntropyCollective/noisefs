@@ -2,48 +2,95 @@
 
 ## Current Milestone: Streaming Implementation
 
-**Status**: IN PROGRESS - Sprint 3
+**Status**: COMPLETED - Sprint 1
 
-**Summary**: Implement streaming client API for NoiseFS to enable constant memory usage regardless of file size.
+**Summary**: Implement streaming file support infrastructure for NoiseFS to enable constant memory usage regardless of file size.
 
 **Current Analysis**: 
-- Existing streaming infrastructure completed in Sprints 1-2
-- Advanced cache system with ML-based predictions and tiered storage ready for streaming optimization
-- Need to optimize cache system for streaming workloads with predictive fetching and buffer management
-- Focus on bandwidth-aware controls and randomizer pre-caching for smooth streaming performance
+- ✅ Sprint 1 completed: Core streaming infrastructure implemented with all tests passing
+- StreamingSplitter enables callback-based block processing without buffering entire files
+- StreamingAssembler handles out-of-order block arrival and incremental writing
+- Streaming XOR operations maintain 3-tuple anonymization progressively
+- Memory usage remains constant regardless of file size
+- Ready to proceed with Sprint 2: Streaming Client API implementation
 
-### ✅ Sprint 1 - Streaming Infrastructure  
-**Objective**: Build streaming infrastructure for block splitting and assembly
+### ✅ Sprint 1 - Streaming Infrastructure Foundation
+**Objective**: Build core streaming infrastructure for block splitting and assembly
 
 **Tasks**:
 - [x] Add StreamingSplitter to blocks package with io.Reader processing
-- [x] Add StreamingAssembler to blocks package with real-time XOR and writing
-- [x] Create callback-based block processing for memory efficiency
-- [x] Implement progressive descriptor building
-- [x] Maintain backward compatibility with existing APIs
+- [x] Add StreamingAssembler to blocks package with incremental writing  
+- [x] Add progress callback infrastructure
+- [x] Implement streaming-aware XOR operations
+- [x] Support progressive descriptor creation capabilities
+- [x] Maintain existing block ordering for proper reconstruction
 
 **Success Criteria**: ✅ COMPLETED
-- StreamingSplitter processes files with constant memory usage
-- StreamingAssembler handles incremental writing and out-of-order blocks
-- 3-tuple XOR operations work progressively
-- Descriptor building supports streaming workflow
+- StreamingSplitter processes io.Reader without loading entire file
+- StreamingAssembler writes to io.Writer as blocks become available
+- Memory usage remains constant regardless of file size
+- Block order maintained for proper file reconstruction
+- XOR anonymization works progressively
+- Backward compatibility with existing batch APIs maintained
 
-### ✅ Sprint 2 - Streaming Client API
-**Objective**: Implement streaming client methods and integration
+**Implementation Details**:
+- Created `pkg/core/blocks/streaming.go` with complete streaming infrastructure
+- `BlockProcessor` interface enables callback-based block processing
+- `StreamingSplitter` splits files from io.Reader without memory buffering
+- `StreamingAssembler` handles out-of-order blocks and sequential writing
+- `StreamingXORProcessor` provides progressive 3-tuple anonymization
+- `RandomizerProvider` interface abstracts randomizer selection strategies
+- Comprehensive test coverage validates all streaming functionality
+
+### Sprint 2 - Streaming Client API
+**Objective**: Build streaming client API using Sprint 1 infrastructure
 
 **Tasks**:
-- [x] Add streaming upload/download methods to client
-- [x] Integrate streaming components with storage layer
-- [x] Add progress tracking and error handling for streaming operations
-- [x] Create streaming-aware descriptor management
-- [x] Implement streaming validation and testing
+- [ ] Add StreamingUpload method to client.go using StreamingSplitter
+- [ ] Add StreamingDownload method to client.go using StreamingAssembler
+- [ ] Add progress callback support for bytes processed and blocks completed
+- [ ] Optimize randomizer selection to not block streaming pipeline
+- [ ] Integrate with existing storage manager and cache systems
+
+**Success Criteria**:
+- StreamingUpload processes io.Reader with constant memory usage
+- StreamingDownload writes to io.Writer with constant memory usage
+- Progress reporting works during streaming operations
+- XOR anonymization maintained during streaming
+- Seamless integration with existing NoiseFS infrastructure
+
+### ✅ Sprint 1 - Fix RelayPoolMetrics Test
+**Objective**: Update TestRelayPoolMetrics to route requests through relay pool to generate metrics
+
+**Tasks**:
+- [x] Analyze the test logic in `tests/privacy/relay_pool_test.go`
+- [x] Update test to route requests through relay pool to generate metrics
+- [x] Ensure `UpdateRelayPerformance` method is called during request processing
+- [x] Verify metrics are properly recorded and retrieved
+- [x] Fix bug in relay pool where UpdateRelayPerformance didn't update pool metrics
 
 **Success Criteria**: ✅ COMPLETED
-- Client supports streaming uploads with constant memory usage
-- Streaming downloads work with real-time assembly
-- Progress tracking provides user feedback
-- Full integration with existing storage backends
-- Comprehensive test coverage for streaming operations
+- TestRelayPoolMetrics passes with actual metrics recorded
+- Requests properly routed through relay pool infrastructure
+- Metrics show non-zero values for TotalRequests, AverageLatency, and SuccessRate
+- Test validates relay pool performance tracking
+- Fixed critical bug in RelayPool.UpdateRelayPerformance() that prevented pool metrics updates
+
+### ✅ Sprint 2 - Handle Docker-Dependent Test
+**Objective**: Update TestRealEndToEnd to properly skip when Docker unavailable
+
+**Tasks**:
+- [x] Update `TestRealEndToEnd` to properly skip when Docker unavailable
+- [x] Add better environment detection for Docker availability
+- [x] Ensure clear skip messaging when Docker not available
+- [x] Test both fixtures and system package versions
+
+**Success Criteria**: ✅ COMPLETED
+- TestRealEndToEnd cleanly skips when Docker unavailable
+- Clear skip message explains why test was skipped
+- No test failures when Docker not running
+- Both test files handle Docker availability consistently
+- Added `isDockerAvailable()` function that checks Docker daemon connectivity
 
 ## Completed Major Milestones
 
