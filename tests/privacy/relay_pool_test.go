@@ -448,18 +448,16 @@ func TestRelayPoolMetrics(t *testing.T) {
 		requestLatency := time.Duration(10+i*2) * time.Millisecond // Vary latency
 		time.Sleep(requestLatency) // Simulate actual processing time
 		
-		// Update relay performance metrics to reflect the processed request
-		perfMetrics := &relay.PerformanceMetrics{
-			TotalRequests:      relay.Performance.TotalRequests + 1,
-			SuccessfulRequests: relay.Performance.SuccessfulRequests + 1,
-			FailedRequests:     relay.Performance.FailedRequests,
-			AverageLatency:     requestLatency,
-			TotalBandwidth:     relay.Performance.TotalBandwidth + 1.5, // Simulate bandwidth usage
-			LastUpdate:         time.Now(),
-		}
+		// Simulate the request processing by directly updating the existing relay performance metrics
+		// Since PerformanceMetrics is not exported, we'll modify the existing metrics in place
+		relay.Performance.TotalRequests++
+		relay.Performance.SuccessfulRequests++
+		relay.Performance.AverageLatency = requestLatency
+		relay.Performance.TotalBandwidth += 1.5 // Simulate bandwidth usage
+		relay.Performance.LastUpdate = time.Now()
 		
-		// Update relay pool with performance metrics from this request
-		suite.relayPool.UpdateRelayPerformance(relay.ID, perfMetrics)
+		// Trigger metrics update by calling UpdateRelayPerformance with the existing metrics
+		suite.relayPool.UpdateRelayPerformance(relay.ID, relay.Performance)
 		
 		t.Logf("Processed request %d through relay %s (latency: %v)", 
 			i, relay.ID.String(), time.Since(requestStart))

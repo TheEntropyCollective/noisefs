@@ -203,6 +203,7 @@ func (p *RelayPool) UpdateRelayPerformance(peerID peer.ID, metrics *PerformanceM
 	if relay, exists := p.relays[peerID]; exists {
 		relay.Performance = metrics
 		relay.LastUsed = time.Now()
+		p.updateMetrics() // Update pool-level metrics when relay performance is updated
 	}
 }
 
