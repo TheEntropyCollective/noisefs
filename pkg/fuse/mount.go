@@ -3,14 +3,18 @@
 package fuse
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
@@ -26,6 +30,19 @@ type MountOptions struct {
 	Debug          bool
 	Security       *security.SecurityManager
 	IndexPassword  string
+	
+	// Directory mounting options
+	DirectoryDescriptor string // Directory descriptor CID to mount
+	DirectoryKey       string // Encryption key for directory
+	Subdir             string // Subdirectory to mount
+	MultiDirs          []DirectoryMount // Multiple directories to mount
+}
+
+// DirectoryMount represents a directory to mount
+type DirectoryMount struct {
+	Name          string // Mount name/path
+	DescriptorCID string // Directory descriptor CID
+	EncryptionKey string // Encryption key
 }
 
 // MountInfo contains information about mounted filesystems
@@ -84,14 +101,38 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 		}
 	}
 
+	// Create directory cache
+	cacheConfig := DefaultDirectoryCacheConfig()
+	dirCache, err := NewDirectoryCache(cacheConfig, storageManager)
+	if err != nil {
+		return fmt.Errorf("failed to create directory cache: %w", err)
+	}
+	
 	// Create NoiseFS filesystem
 	nfs := &NoiseFS{
-		FileSystem: pathfs.NewDefaultFileSystem(),
-		client:     client,
+		FileSystem:     pathfs.NewDefaultFileSystem(),
+		client:         client,
 		storageManager: storageManager,
-		mountPath:  opts.MountPath,
-		readOnly:   opts.ReadOnly,
-		index:      index,
+		mountPath:      opts.MountPath,
+		readOnly:       opts.ReadOnly,
+		index:          index,
+		dirCache:       dirCache,
+		encryptionKeys: make(map[string]*crypto.EncryptionKey),
+	}
+	
+	// Handle directory mounting
+	if opts.DirectoryDescriptor != "" {
+		// Add single directory to mount
+		if err := nfs.mountDirectory("", opts.DirectoryDescriptor, opts.DirectoryKey, opts.Subdir); err != nil {
+			return fmt.Errorf("failed to mount directory: %w", err)
+		}
+	}
+	
+	// Handle multiple directory mounts
+	for _, dir := range opts.MultiDirs {
+		if err := nfs.mountDirectory(dir.Name, dir.DescriptorCID, dir.EncryptionKey, ""); err != nil {
+			return fmt.Errorf("failed to mount directory %s: %w", dir.Name, err)
+		}
 	}
 
 	// Create path filesystem
@@ -167,6 +208,62 @@ type NoiseFS struct {
 	
 	// Persistent file index
 	index *FileIndex
+	
+	// Directory manifest cache
+	dirCache *DirectoryCache
+	
+	// Encryption keys for directories
+	encryptionKeys map[string]*crypto.EncryptionKey
+	keyMutex       sync.RWMutex
+}
+
+// mountDirectory adds a directory descriptor to the filesystem
+func (fs *NoiseFS) mountDirectory(name, descriptorCID, encryptionKey, subdir string) error {
+	// Validate descriptor CID
+	if descriptorCID == "" {
+		return fmt.Errorf("directory descriptor CID is required")
+	}
+	
+	// Parse encryption key if provided
+	var key *crypto.EncryptionKey
+	if encryptionKey != "" {
+		// Decode base64 key
+		keyBytes, err := base64.StdEncoding.DecodeString(encryptionKey)
+		if err != nil {
+			return fmt.Errorf("failed to decode encryption key: %w", err)
+		}
+		if len(keyBytes) != 32 {
+			return fmt.Errorf("encryption key must be 32 bytes")
+		}
+		key = &crypto.EncryptionKey{
+			Key: keyBytes,
+		}
+	}
+	
+	// Store encryption key
+	fs.keyMutex.Lock()
+	fs.encryptionKeys[descriptorCID] = key
+	fs.keyMutex.Unlock()
+	
+	// Add directory to index
+	mountPath := name
+	if mountPath == "" {
+		mountPath = "mounted-dir"
+	}
+	
+	// If subdir is specified, we'll need to load the manifest and navigate to it
+	if subdir != "" {
+		// This will be handled in GetAttr/OpenDir when accessing the directory
+		mountPath = filepath.Join(mountPath, subdir)
+	}
+	
+	// Add directory entry to index
+	fs.index.AddDirectory(mountPath, descriptorCID, encryptionKey)
+	
+	// The directory will be loaded on first access
+	// Cache warming happens automatically when directories are accessed
+	
+	return nil
 }
 
 // GetAttr implements pathfs.FileSystem
@@ -190,9 +287,30 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 		// Get relative path
 		relativePath := strings.TrimPrefix(name, "files/")
 		
+		// First check if it's a registered directory with descriptor
+		if dirEntry, exists := fs.index.GetDirectory(relativePath); exists {
+			// Return directory attributes with metadata
+			return &fuse.Attr{
+				Mode:  fuse.S_IFDIR | 0755,
+				Mtime: uint64(dirEntry.ModifiedAt.Unix()),
+				Atime: uint64(dirEntry.ModifiedAt.Unix()),
+				Ctime: uint64(dirEntry.CreatedAt.Unix()),
+			}, fuse.OK
+		}
+		
 		// Check if it's a known file
 		entry, exists := fs.index.GetFile(relativePath)
 		if exists {
+			// Handle based on entry type
+			if entry.Type == DirectoryEntryType {
+				return &fuse.Attr{
+					Mode:  fuse.S_IFDIR | 0755,
+					Mtime: uint64(entry.ModifiedAt.Unix()),
+					Atime: uint64(entry.ModifiedAt.Unix()),
+					Ctime: uint64(entry.CreatedAt.Unix()),
+				}, fuse.OK
+			}
+			
 			// Return file attributes from index
 			return &fuse.Attr{
 				Mode:  fuse.S_IFREG | 0644,

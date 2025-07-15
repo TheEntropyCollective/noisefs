@@ -10,7 +10,15 @@ import (
 	"time"
 )
 
-// IndexEntry represents a single file entry in the NoiseFS index
+// EntryType represents the type of entry (file or directory)
+type EntryType string
+
+const (
+	FileEntryType      EntryType = "file"
+	DirectoryEntryType EntryType = "directory"
+)
+
+// IndexEntry represents a single file or directory entry in the NoiseFS index
 type IndexEntry struct {
 	Filename      string    `json:"filename"`
 	DescriptorCID string    `json:"descriptor_cid"`
@@ -18,6 +26,11 @@ type IndexEntry struct {
 	CreatedAt     time.Time `json:"created_at"`
 	ModifiedAt    time.Time `json:"modified_at"`
 	Directory     string    `json:"directory,omitempty"` // Relative path within files/
+	
+	// New fields for directory support
+	Type                  EntryType `json:"type,omitempty"`                    // Entry type (file or directory)
+	DirectoryDescriptorCID string    `json:"directory_descriptor_cid,omitempty"` // For directories
+	EncryptionKeyID       string    `json:"encryption_key_id,omitempty"`        // Key identifier for directory encryption
 }
 
 // FileIndex manages the persistent mapping of files to descriptor CIDs
@@ -78,6 +91,15 @@ func (idx *FileIndex) LoadIndex() error {
 	// Merge loaded entries
 	if loadedIndex.Entries != nil {
 		idx.Entries = loadedIndex.Entries
+		
+		// Ensure backward compatibility - set type for entries without it
+		for path, entry := range idx.Entries {
+			if entry.Type == "" {
+				// Default to file type for backward compatibility
+				entry.Type = FileEntryType
+				idx.Entries[path] = entry
+			}
+		}
 	}
 	idx.Version = loadedIndex.Version
 	idx.dirty = false
@@ -148,6 +170,35 @@ func (idx *FileIndex) AddFile(path, descriptorCID string, fileSize int64) {
 		CreatedAt:     now,
 		ModifiedAt:    now,
 		Directory:     dir,
+		Type:          FileEntryType, // Default to file type
+	}
+	
+	idx.Entries[path] = entry
+	idx.dirty = true
+}
+
+// AddDirectory adds a directory to the index
+func (idx *FileIndex) AddDirectory(path, descriptorCID, encryptionKeyID string) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	
+	now := time.Now()
+	
+	// Determine parent directory from path
+	dir := filepath.Dir(path)
+	if dir == "." {
+		dir = ""
+	}
+	
+	entry := &IndexEntry{
+		Filename:               filepath.Base(path),
+		DirectoryDescriptorCID: descriptorCID,
+		FileSize:               0, // Directories have no size
+		CreatedAt:              now,
+		ModifiedAt:             now,
+		Directory:              dir,
+		Type:                   DirectoryEntryType,
+		EncryptionKeyID:        encryptionKeyID,
 	}
 	
 	idx.Entries[path] = entry
@@ -242,12 +293,17 @@ func (idx *FileIndex) IsDirty() bool {
 	return idx.dirty
 }
 
-// IsDirectory checks if a path represents a directory by looking for files within it
+// IsDirectory checks if a path represents a directory
 func (idx *FileIndex) IsDirectory(path string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	
-	// Check if any files have this path as their directory
+	// First check if this path is explicitly registered as a directory
+	if entry, exists := idx.Entries[path]; exists && entry.Type == DirectoryEntryType {
+		return true
+	}
+	
+	// Then check if any files have this path as their directory
 	for _, entry := range idx.Entries {
 		if entry.Directory == path {
 			return true
@@ -258,6 +314,49 @@ func (idx *FileIndex) IsDirectory(path string) bool {
 		}
 	}
 	return false
+}
+
+// GetDirectory retrieves a directory entry from the index
+func (idx *FileIndex) GetDirectory(path string) (*IndexEntry, bool) {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	
+	entry, exists := idx.Entries[path]
+	if !exists || entry.Type != DirectoryEntryType {
+		return nil, false
+	}
+	
+	// Return a copy to avoid race conditions
+	entryCopy := *entry
+	return &entryCopy, true
+}
+
+// GetDirectoriesInDirectory returns all directories in a specific directory
+func (idx *FileIndex) GetDirectoriesInDirectory(dir string) map[string]*IndexEntry {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	
+	result := make(map[string]*IndexEntry)
+	for path, entry := range idx.Entries {
+		if entry.Type == DirectoryEntryType && entry.Directory == dir {
+			entryCopy := *entry
+			result[path] = &entryCopy
+		}
+	}
+	return result
+}
+
+// HasDirectoryDescriptor checks if an entry has a directory descriptor
+func (idx *FileIndex) HasDirectoryDescriptor(path string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	
+	entry, exists := idx.Entries[path]
+	if !exists {
+		return false
+	}
+	
+	return entry.Type == DirectoryEntryType && entry.DirectoryDescriptorCID != ""
 }
 
 // GetIndexPath returns the file path of the index

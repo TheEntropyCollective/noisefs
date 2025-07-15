@@ -51,6 +51,12 @@ func main() {
 		bootstrapSize   = flag.Int64("bootstrap-size", 100*1024*1024, "Maximum bootstrap data size in bytes")
 		bootstrapDir    = flag.String("bootstrap-dir", "", "Directory to store bootstrap data before upload")
 		listBootstrap   = flag.Bool("list-bootstrap", false, "List available bootstrap datasets")
+		
+		// Directory mounting flags
+		directoryDescriptor = flag.String("directory-descriptor", "", "Directory descriptor CID to mount")
+		directoryKey       = flag.String("directory-key", "", "Encryption key for directory descriptor")
+		subdir             = flag.String("subdir", "", "Subdirectory within directory descriptor to mount")
+		multiDirs          = flag.String("multi-dirs", "", "Mount multiple directories (format: name1:cid1:key1,name2:cid2:key2)")
 	)
 	flag.Parse()
 
@@ -139,7 +145,8 @@ func main() {
 
 	// Mount filesystem
 	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
-		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, logger)
+		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, 
+		*directoryDescriptor, *directoryKey, *subdir, *multiDirs, logger)
 }
 
 func showHelp() {
@@ -196,6 +203,19 @@ func showHelp() {
 	fmt.Println("  # Mount with limited bootstrap size")
 	fmt.Println("  noisefs-mount -mount /mnt/noisefs -bootstrap -bootstrap-size 50000000")
 	fmt.Println()
+	fmt.Println("Directory Mounting:")
+	fmt.Println("  # Mount a specific directory")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -directory-descriptor QmXXX...")
+	fmt.Println()
+	fmt.Println("  # Mount directory with encryption key")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -directory-descriptor QmXXX... -directory-key base64key...")
+	fmt.Println()
+	fmt.Println("  # Mount subdirectory")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -directory-descriptor QmXXX... -subdir photos/vacation")
+	fmt.Println()
+	fmt.Println("  # Mount multiple directories")
+	fmt.Println("  noisefs-mount -mount /mnt/noisefs -multi-dirs docs:QmXXX:key1,photos:QmYYY:key2")
+	fmt.Println()
 	fmt.Println("Requirements:")
 	fmt.Println("  - IPFS daemon running at specified endpoint")
 	fmt.Println("  - macFUSE or FUSE installed (macOS/Linux)")
@@ -220,7 +240,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile string, logger *logging.Logger) {
+func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, allowOther, debug, daemon bool, pidFile, indexFile, directoryDescriptor, directoryKey, subdir, multiDirs string, logger *logging.Logger) {
 	// Clean mount path
 	mountPath = filepath.Clean(mountPath)
 
@@ -266,19 +286,61 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 		os.Exit(1)
 	}
 
+	// Parse multi-directory mounts
+	var multiDirMounts []fuse.DirectoryMount
+	if multiDirs != "" {
+		parts := strings.Split(multiDirs, ",")
+		for _, part := range parts {
+			dirParts := strings.Split(part, ":")
+			if len(dirParts) != 3 {
+				logger.Error("Invalid multi-dirs format", map[string]interface{}{
+					"format": part,
+					"expected": "name:cid:key",
+				})
+				os.Exit(1)
+			}
+			multiDirMounts = append(multiDirMounts, fuse.DirectoryMount{
+				Name:          dirParts[0],
+				DescriptorCID: dirParts[1],
+				EncryptionKey: dirParts[2],
+			})
+		}
+	}
+
 	// Mount options
 	opts := fuse.MountOptions{
-		MountPath:  mountPath,
-		VolumeName: volumeName,
-		ReadOnly:   readOnly,
-		AllowOther: allowOther,
-		Debug:      debug,
+		MountPath:           mountPath,
+		VolumeName:          volumeName,
+		ReadOnly:            readOnly,
+		AllowOther:          allowOther,
+		Debug:               debug,
+		DirectoryDescriptor: directoryDescriptor,
+		DirectoryKey:        directoryKey,
+		Subdir:              subdir,
+		MultiDirs:           multiDirMounts,
 	}
 
 	fmt.Printf("Mounting NoiseFS at: %s\n", mountPath)
 	fmt.Printf("IPFS endpoint: %s\n", ipfsAPI)
 	fmt.Printf("Cache size: %d blocks\n", cacheSize)
 	fmt.Printf("Volume name: %s\n", volumeName)
+	
+	// Show directory mounting info
+	if directoryDescriptor != "" {
+		fmt.Printf("Directory descriptor: %s\n", directoryDescriptor)
+		if directoryKey != "" {
+			fmt.Println("Using encryption key: ***")
+		}
+		if subdir != "" {
+			fmt.Printf("Subdirectory: %s\n", subdir)
+		}
+	}
+	if len(multiDirMounts) > 0 {
+		fmt.Printf("Mounting %d directories:\n", len(multiDirMounts))
+		for _, dir := range multiDirMounts {
+			fmt.Printf("  - %s: %s\n", dir.Name, dir.DescriptorCID)
+		}
+	}
 
 	if daemon {
 		fmt.Println("Running in daemon mode...")
