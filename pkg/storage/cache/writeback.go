@@ -39,6 +39,18 @@ type WriteBackStats struct {
 	CoalescedWrites       int64
 }
 
+// WriteBackStatsSnapshot represents a snapshot of write-back statistics without mutex
+type WriteBackStatsSnapshot struct {
+	BufferedWrites        int64         `json:"buffered_writes"`
+	FlushedWrites         int64         `json:"flushed_writes"`
+	BufferHits            int64         `json:"buffer_hits"`
+	BufferSize            int64         `json:"buffer_size"`
+	FlushLatency          time.Duration `json:"flush_latency"`
+	TotalFlushLatency     time.Duration `json:"total_flush_latency"`
+	FlushErrors           int64         `json:"flush_errors"`
+	CoalescedWrites       int64         `json:"coalesced_writes"`
+}
+
 // BufferedWrite represents a write operation in the buffer
 type BufferedWrite struct {
 	CID           string
@@ -263,10 +275,20 @@ func (c *WriteBackCache) Close() error {
 }
 
 // GetStats returns current write-back statistics
-func (c *WriteBackCache) GetStats() WriteBackStats {
+func (c *WriteBackCache) GetStats() WriteBackStatsSnapshot {
 	c.stats.mu.RLock()
 	defer c.stats.mu.RUnlock()
-	return c.stats
+	
+	return WriteBackStatsSnapshot{
+		BufferedWrites:    c.stats.BufferedWrites,
+		FlushedWrites:     c.stats.FlushedWrites,
+		BufferHits:        c.stats.BufferHits,
+		BufferSize:        c.stats.BufferSize,
+		FlushLatency:      c.stats.FlushLatency,
+		TotalFlushLatency: c.stats.TotalFlushLatency,
+		FlushErrors:       c.stats.FlushErrors,
+		CoalescedWrites:   c.stats.CoalescedWrites,
+	}
 }
 
 // flushWorker processes flush requests

@@ -276,12 +276,13 @@ func (hg *HealthGossiper) calculateAggregateStats(
 	
 	for blockID, hint := range hints {
 		// Add to appropriate bloom filters
-		if hint.ReplicationBucket == ReplicationLow {
+		switch hint.ReplicationBucket {
+		case ReplicationLow:
 			lowRepFilter.AddString(blockID)
 			stats.LowReplicationCount++
-		} else if hint.ReplicationBucket == ReplicationMedium {
+		case ReplicationMedium:
 			stats.MediumReplicationCount++
-		} else {
+		default:
 			stats.HighReplicationCount++
 		}
 		

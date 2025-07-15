@@ -552,24 +552,6 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 	return nil
 }
 
-func (ac *AltruisticCache) getAltruisticBlocksByAge() []*BlockMetadata {
-	blocks := make([]*BlockMetadata, 0, len(ac.altruisticBlocks))
-	for _, metadata := range ac.altruisticBlocks {
-		blocks = append(blocks, metadata)
-	}
-	
-	// Sort by last access time (oldest first)
-	// Simple bubble sort for now - can optimize later
-	for i := 0; i < len(blocks); i++ {
-		for j := i + 1; j < len(blocks); j++ {
-			if blocks[i].LastAccessed.After(blocks[j].LastAccessed) {
-				blocks[i], blocks[j] = blocks[j], blocks[i]
-			}
-		}
-	}
-	
-	return blocks
-}
 
 // ShouldCacheAltruistic checks if an altruistic block should be cached
 // Returns false if the block was recently evicted or space constraints prevent it

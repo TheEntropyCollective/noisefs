@@ -88,6 +88,23 @@ type AdaptiveCacheStats struct {
 	mutex           sync.RWMutex
 }
 
+// AdaptiveCacheStatsSnapshot represents a snapshot of adaptive cache statistics without mutex
+type AdaptiveCacheStatsSnapshot struct {
+	Hits               int64         `json:"hits"`
+	Misses             int64         `json:"misses"`
+	Evictions          int64         `json:"evictions"`
+	Insertions         int64         `json:"insertions"`
+	TotalRequests      int64         `json:"total_requests"`
+	HitRate            float64       `json:"hit_rate"`
+	AvgAccessTime      time.Duration `json:"avg_access_time"`
+	HotTierHits        int64         `json:"hot_tier_hits"`
+	WarmTierHits       int64         `json:"warm_tier_hits"`
+	ColdTierHits       int64         `json:"cold_tier_hits"`
+	PredictionHits     int64         `json:"prediction_hits"`
+	PredictionTotal    int64         `json:"prediction_total"`
+	PredictionAccuracy float64       `json:"prediction_accuracy"`
+}
+
 // AdaptiveCacheConfig holds configuration for the adaptive cache
 type AdaptiveCacheConfig struct {
 	MaxSize            int64         `json:"max_size_bytes"`
@@ -116,8 +133,8 @@ type PeerCacheInfo struct {
 
 // CacheExchangeProtocol manages cache state exchange between peers
 type CacheExchangeProtocol struct {
-	exchangeRate    float64   `json:"exchange_rate"`
-	lastExchange    time.Time `json:"last_exchange"`
+	ExchangeRate    float64   `json:"exchange_rate"`
+	LastExchange    time.Time `json:"last_exchange"`
 	mutex           sync.RWMutex
 }
 
@@ -230,7 +247,7 @@ func NewAdaptiveCache(config *AdaptiveCacheConfig) *AdaptiveCache {
 	
 	// Initialize cache exchange protocol
 	cache.cacheExchange = &CacheExchangeProtocol{
-		exchangeRate: 0.1, // 10% of cache state exchanged per sync
+		ExchangeRate: 0.1, // 10% of cache state exchanged per sync
 	}
 	
 	// Initialize privacy components
@@ -417,50 +434,6 @@ func (ac *AdaptiveCache) promoteIfNeeded(item *AdaptiveCacheItem) {
 	}
 }
 
-// updateAccessPattern updates the access pattern for prediction
-func (ac *AdaptiveCache) updateAccessPattern(cid string) {
-	pattern, exists := ac.accessHistory[cid]
-	if !exists {
-		ac.initializeAccessPattern(cid)
-		pattern = ac.accessHistory[cid]
-	}
-	
-	now := time.Now()
-	pattern.AccessTimes = append(pattern.AccessTimes, now)
-	pattern.AccessCount++
-	pattern.LastAccess = now
-	
-	// Calculate interval if we have previous access
-	if len(pattern.AccessTimes) > 1 {
-		lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-2]
-		interval := now.Sub(lastAccess)
-		pattern.AccessIntervals = append(pattern.AccessIntervals, interval)
-		
-		// Add training example for ML
-		if ac.predictor != nil && ac.predictor.engine != nil {
-			if item, exists := ac.items[cid]; exists {
-				metadata := map[string]interface{}{
-					"is_randomizer": item.IsRandomizer,
-					"block_type":    item.BlockType,
-				}
-				// This block was accessed, so it's a positive example
-				ac.predictor.engine.AddTrainingExample(pattern, true, metadata)
-			}
-		}
-	}
-	
-	// Update daily and weekly patterns
-	hour := now.Hour()
-	weekday := int(now.Weekday())
-	pattern.DailyPattern[hour]++
-	pattern.WeeklyPattern[weekday]++
-	
-	// Limit history size
-	if len(pattern.AccessTimes) > 1000 {
-		pattern.AccessTimes = pattern.AccessTimes[100:] // Keep recent 900 entries
-		pattern.AccessIntervals = pattern.AccessIntervals[100:]
-	}
-}
 
 // initializeAccessPattern creates a new access pattern for a CID
 func (ac *AdaptiveCache) initializeAccessPattern(cid string) {
@@ -479,7 +452,7 @@ func (ac *AdaptiveCache) initializeAccessPattern(cid string) {
 }
 
 // recordHit records a cache hit
-func (ac *AdaptiveCache) recordHit(cid string, tier AdaptiveCacheTier) {
+func (ac *AdaptiveCache) recordHit(_ string, tier AdaptiveCacheTier) {
 	ac.stats.mutex.Lock()
 	defer ac.stats.mutex.Unlock()
 	
@@ -499,7 +472,7 @@ func (ac *AdaptiveCache) recordHit(cid string, tier AdaptiveCacheTier) {
 }
 
 // recordMiss records a cache miss
-func (ac *AdaptiveCache) recordMiss(cid string) {
+func (ac *AdaptiveCache) recordMiss(_ string) {
 	ac.stats.mutex.Lock()
 	defer ac.stats.mutex.Unlock()
 	
@@ -599,31 +572,6 @@ func (ac *AdaptiveCache) performMaintenance() {
 	ac.cleanOldAccessPatterns()
 }
 
-// updatePopularityScores recalculates popularity scores for all items
-func (ac *AdaptiveCache) updatePopularityScores() {
-	now := time.Now()
-	
-	for _, item := range ac.items {
-		item.mutex.Lock()
-		
-		// Calculate popularity based on access frequency and recency
-		timeSinceCreation := now.Sub(item.CreatedAt)
-		timeSinceLastAccess := now.Sub(item.LastAccessed)
-		
-		accessRate := float64(item.AccessCount) / math.Max(timeSinceCreation.Hours(), 1.0)
-		recencyFactor := 1.0 / (1.0 + timeSinceLastAccess.Hours())
-		
-		// Bonus for randomizer blocks
-		randomizerBonus := 1.0
-		if item.IsRandomizer {
-			randomizerBonus = 1.5
-		}
-		
-		item.PopularityScore = accessRate * recencyFactor * randomizerBonus
-		
-		item.mutex.Unlock()
-	}
-}
 
 // cleanOldAccessPatterns removes old access pattern data
 func (ac *AdaptiveCache) cleanOldAccessPatterns() {
@@ -660,7 +608,7 @@ func (ac *AdaptiveCache) exchangeCacheState() {
 	defer ac.cacheExchange.mutex.Unlock()
 	
 	// Update last exchange time
-	ac.cacheExchange.lastExchange = time.Now()
+	ac.cacheExchange.LastExchange = time.Now()
 	
 	// In a real implementation, this would:
 	// 1. Get list of connected peers
@@ -670,13 +618,26 @@ func (ac *AdaptiveCache) exchangeCacheState() {
 }
 
 // GetAdaptiveStats returns current adaptive cache statistics
-func (ac *AdaptiveCache) GetAdaptiveStats() *AdaptiveCacheStats {
+func (ac *AdaptiveCache) GetAdaptiveStats() *AdaptiveCacheStatsSnapshot {
 	ac.stats.mutex.RLock()
 	defer ac.stats.mutex.RUnlock()
 	
-	// Create a copy to avoid race conditions
-	statsCopy := *ac.stats
-	return &statsCopy
+	// Create a snapshot without the mutex
+	return &AdaptiveCacheStatsSnapshot{
+		Hits:               ac.stats.Hits,
+		Misses:             ac.stats.Misses,
+		Evictions:          ac.stats.Evictions,
+		Insertions:         ac.stats.Insertions,
+		TotalRequests:      ac.stats.TotalRequests,
+		HitRate:            ac.stats.HitRate,
+		AvgAccessTime:      ac.stats.AvgAccessTime,
+		HotTierHits:        ac.stats.HotTierHits,
+		WarmTierHits:       ac.stats.WarmTierHits,
+		ColdTierHits:       ac.stats.ColdTierHits,
+		PredictionHits:     ac.stats.PredictionHits,
+		PredictionTotal:    ac.stats.PredictionTotal,
+		PredictionAccuracy: ac.stats.PredictionAccuracy,
+	}
 }
 
 // GetTierStats returns statistics by cache tier

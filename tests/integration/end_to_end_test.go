@@ -102,7 +102,7 @@ func TestEndToEndFlow(t *testing.T) {
 
 	t.Run("Multi-File Block Reuse", func(t *testing.T) {
 		// Enable reuse system if available
-		reuseClient, err := reuse.NewReuseAwareClient(ipfsClient, blockCache)
+		reuseClient, err := reuse.NewReuseAwareClient(storageManager, blockCache)
 		if err == nil {
 			// Upload first file
 			file1Data := []byte("File 1: This content will be mixed with public domain blocks for plausible deniability.")
@@ -175,7 +175,7 @@ func TestEndToEndFlow(t *testing.T) {
 
 	t.Run("Descriptor Storage and Retrieval", func(t *testing.T) {
 		// Create descriptor store
-		_, err := descriptors.NewStore(ipfsClient)
+		_, err := descriptors.NewStore(storageManager)
 		if err != nil {
 			t.Fatalf("Failed to create descriptor store: %v", err)
 		}

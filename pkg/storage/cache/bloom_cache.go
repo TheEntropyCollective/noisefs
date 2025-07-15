@@ -213,7 +213,7 @@ func (ac *AdaptiveCache) UpdateCacheExchangeWithBloom() {
 	// 4. Avoid querying peers that definitely don't have content
 	
 	// For now, we'll store it for demonstration
-	ac.cacheExchange.lastExchange = time.Now()
+	ac.cacheExchange.LastExchange = time.Now()
 	
 	// Use hint to demonstrate functionality
 	_ = hint

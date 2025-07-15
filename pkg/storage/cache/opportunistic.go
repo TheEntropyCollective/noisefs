@@ -224,7 +224,7 @@ func (of *OpportunisticFetcher) checkAndQueueBlocks() {
 }
 
 // fetchWorker processes blocks from the fetch queue
-func (of *OpportunisticFetcher) fetchWorker(id int) {
+func (of *OpportunisticFetcher) fetchWorker(_ int) {
 	defer of.wg.Done()
 	
 	for {
@@ -284,7 +284,7 @@ func (of *OpportunisticFetcher) fetchBlock(cid string) {
 }
 
 // handleFetchError records fetch failures
-func (of *OpportunisticFetcher) handleFetchError(cid string, err error) {
+func (of *OpportunisticFetcher) handleFetchError(cid string, _ error) {
 	of.mu.Lock()
 	defer of.mu.Unlock()
 	

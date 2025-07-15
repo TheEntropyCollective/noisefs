@@ -201,7 +201,7 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 	// Update valuable blocks filter
 	if filter, exists := be.localFilters["valuable_blocks"]; exists {
 		be.cache.mu.RLock()
-		for blockID, _ := range be.cache.altruisticBlocks {
+		for blockID := range be.cache.altruisticBlocks {
 			// Check if block is valuable based on health
 			healthScore := be.cache.healthTracker.GetBlockValue(blockID)
 			if healthScore > 0.7 {

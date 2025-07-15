@@ -40,6 +40,18 @@ type ReadAheadStats struct {
 	TotalReadAheadLatency time.Duration
 }
 
+// ReadAheadStatsSnapshot represents a snapshot of read-ahead statistics without mutex
+type ReadAheadStatsSnapshot struct {
+	ReadAheadRequests     int64         `json:"read_ahead_requests"`
+	ReadAheadHits         int64         `json:"read_ahead_hits"`
+	ReadAheadMisses       int64         `json:"read_ahead_misses"`
+	ReadAheadBytes        int64         `json:"read_ahead_bytes"`
+	PrefetchedBlocks      int64         `json:"prefetched_blocks"`
+	PrefetchCacheHits     int64         `json:"prefetch_cache_hits"`
+	AvgReadAheadLatency   time.Duration `json:"avg_read_ahead_latency"`
+	TotalReadAheadLatency time.Duration `json:"total_read_ahead_latency"`
+}
+
 // ReadAheadPattern tracks sequential access patterns for read-ahead
 type ReadAheadPattern struct {
 	LastAccess    time.Time
@@ -180,10 +192,20 @@ func (c *ReadAheadCache) Close() error {
 }
 
 // GetStats returns current read-ahead statistics
-func (c *ReadAheadCache) GetStats() ReadAheadStats {
+func (c *ReadAheadCache) GetStats() ReadAheadStatsSnapshot {
 	c.stats.mu.RLock()
 	defer c.stats.mu.RUnlock()
-	return c.stats
+	
+	return ReadAheadStatsSnapshot{
+		ReadAheadRequests:     c.stats.ReadAheadRequests,
+		ReadAheadHits:         c.stats.ReadAheadHits,
+		ReadAheadMisses:       c.stats.ReadAheadMisses,
+		ReadAheadBytes:        c.stats.ReadAheadBytes,
+		PrefetchedBlocks:      c.stats.PrefetchedBlocks,
+		PrefetchCacheHits:     c.stats.PrefetchCacheHits,
+		AvgReadAheadLatency:   c.stats.AvgReadAheadLatency,
+		TotalReadAheadLatency: c.stats.TotalReadAheadLatency,
+	}
 }
 
 // updateAccessPattern updates the access pattern for a CID

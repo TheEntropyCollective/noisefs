@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -10,8 +11,8 @@ import (
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 // TestSimpleUploadDownload demonstrates the core NoiseFS flow
@@ -25,17 +26,22 @@ func TestSimpleUploadDownload(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.IPFS.APIEndpoint = "http://127.0.0.1:5001"
 
-	// Initialize IPFS client
-	ipfsClient, err := ipfs.NewClient(cfg.IPFS.APIEndpoint)
+	// Initialize storage manager
+	storageConfig := storage.DefaultConfig()
+	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
+	}
+	
+	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Fatalf("Failed to create IPFS client: %v", err)
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 
 	// Create cache
 	blockCache := cache.NewMemoryCache(100)
 
 	// Create NoiseFS client
-	noisefsClient, err := noisefs.NewClient(ipfsClient, blockCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		t.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -45,6 +51,8 @@ func TestSimpleUploadDownload(t *testing.T) {
 	blockSize := blocks.DefaultBlockSize
 
 	t.Run("Manual Upload and Download", func(t *testing.T) {
+		ctx := context.Background()
+		
 		// Create splitter
 		splitter, err := blocks.NewSplitter(blockSize)
 		if err != nil {
@@ -77,10 +85,11 @@ func TestSimpleUploadDownload(t *testing.T) {
 			}
 
 			// Store anonymized block
-			xorCID, err := ipfsClient.StoreBlock(xorBlock)
+			xorAddr, err := storageManager.Put(ctx, xorBlock)
 			if err != nil {
 				t.Fatalf("Failed to store anonymized block %d: %v", i, err)
 			}
+			xorCID := xorAddr.ID
 
 			// Add to descriptor
 			err = descriptor.AddBlockTriple(xorCID, cid1, cid2)
@@ -102,16 +111,18 @@ func TestSimpleUploadDownload(t *testing.T) {
 			t.Fatalf("Failed to create descriptor block: %v", err)
 		}
 
-		descriptorCID, err := ipfsClient.StoreBlock(descriptorBlock)
+		descriptorAddr, err := storageManager.Put(ctx, descriptorBlock)
 		if err != nil {
 			t.Fatalf("Failed to store descriptor: %v", err)
 		}
+		descriptorCID := descriptorAddr.ID
 
 		t.Logf("Stored descriptor: %s", descriptorCID)
 
 		// Now download the file
 		// Retrieve descriptor
-		retrievedDescBlock, err := ipfsClient.RetrieveBlock(descriptorCID)
+		descAddr := &storage.BlockAddress{ID: descriptorCID}
+		retrievedDescBlock, err := storageManager.Get(ctx, descAddr)
 		if err != nil {
 			t.Fatalf("Failed to retrieve descriptor: %v", err)
 		}

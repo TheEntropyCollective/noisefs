@@ -93,6 +93,103 @@ func (m *MockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *
 	return err
 }
 
+// storage.Backend interface methods
+func (m *MockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
+	cid, err := m.StoreBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	return &storage.BlockAddress{
+		ID:          cid,
+		BackendType: "mock",
+		Size:        int64(len(block.Data)),
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+func (m *MockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
+	return m.RetrieveBlock(address.ID)
+}
+
+func (m *MockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
+	return m.HasBlock(address.ID)
+}
+
+func (m *MockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
+	delete(m.blocks, address.ID)
+	return nil
+}
+
+func (m *MockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
+	addresses := make([]*storage.BlockAddress, 0, len(blocks))
+	for _, block := range blocks {
+		addr, err := m.Put(ctx, block)
+		if err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, addr)
+	}
+	return addresses, nil
+}
+
+func (m *MockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
+	blocks := make([]*blocks.Block, 0, len(addresses))
+	for _, addr := range addresses {
+		block, err := m.Get(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
+	return blocks, nil
+}
+
+func (m *MockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (m *MockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (m *MockBlockStore) GetBackendInfo() *storage.BackendInfo {
+	return &storage.BackendInfo{
+		Name:         "MockBlockStore",
+		Type:         "mock",
+		Version:      "1.0",
+		Capabilities: []string{storage.CapabilityBatch},
+	}
+}
+
+func (m *MockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
+	return &storage.HealthStatus{
+		Healthy:   true,
+		Status:    "healthy",
+		LastCheck: time.Now(),
+	}
+}
+
+func (m *MockBlockStore) Connect(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockBlockStore) Disconnect(ctx context.Context) error {
+	return nil
+}
+
+func (m *MockBlockStore) IsConnected() bool {
+	return true
+}
+
+// storage.Manager specific methods (for backward compatibility)
+func (m *MockBlockStore) Start(ctx context.Context) error {
+	return m.Connect(ctx)
+}
+
+func (m *MockBlockStore) Stop(ctx context.Context) error {
+	return m.Disconnect(ctx)
+}
+
 // TestCompleteUploadDownloadWorkflow tests the entire file lifecycle
 func TestCompleteUploadDownloadWorkflow(t *testing.T) {
 	suite := setupE2ETestSuite(t)
@@ -583,4 +680,111 @@ func (c *CorruptedMockBlockStore) RequestFromPeer(ctx context.Context, cid strin
 func (c *CorruptedMockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
 	_, err := c.StoreBlock(block)
 	return err
+}
+
+// storage.Backend interface methods
+func (c *CorruptedMockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
+	cid, err := c.StoreBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	return &storage.BlockAddress{
+		ID:          cid,
+		BackendType: "corrupted_mock",
+		Size:        int64(len(block.Data)),
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+func (c *CorruptedMockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
+	return c.RetrieveBlock(address.ID)
+}
+
+func (c *CorruptedMockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
+	return c.HasBlock(address.ID)
+}
+
+func (c *CorruptedMockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
+	delete(c.blocks, address.ID)
+	return nil
+}
+
+func (c *CorruptedMockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
+	addresses := make([]*storage.BlockAddress, 0, len(blocks))
+	for _, block := range blocks {
+		addr, err := c.Put(ctx, block)
+		if err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, addr)
+	}
+	return addresses, nil
+}
+
+func (c *CorruptedMockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
+	blocks := make([]*blocks.Block, 0, len(addresses))
+	for _, addr := range addresses {
+		block, err := c.Get(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
+	return blocks, nil
+}
+
+func (c *CorruptedMockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (c *CorruptedMockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (c *CorruptedMockBlockStore) GetBackendInfo() *storage.BackendInfo {
+	return &storage.BackendInfo{
+		Name:         "CorruptedMockBlockStore",
+		Type:         "corrupted_mock",
+		Version:      "1.0",
+		Capabilities: []string{storage.CapabilityBatch},
+	}
+}
+
+func (c *CorruptedMockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
+	// Report as degraded due to simulated failures
+	return &storage.HealthStatus{
+		Healthy:   false,
+		Status:    "degraded",
+		ErrorRate: c.failureRate,
+		LastCheck: time.Now(),
+		Issues: []storage.HealthIssue{
+			{
+				Severity:    "warning",
+				Code:        "SIMULATED_FAILURES",
+				Description: fmt.Sprintf("Simulated failure rate: %.2f%%", c.failureRate*100),
+				Timestamp:   time.Now(),
+			},
+		},
+	}
+}
+
+func (c *CorruptedMockBlockStore) Connect(ctx context.Context) error {
+	return nil
+}
+
+func (c *CorruptedMockBlockStore) Disconnect(ctx context.Context) error {
+	return nil
+}
+
+func (c *CorruptedMockBlockStore) IsConnected() bool {
+	return true
+}
+
+// storage.Manager specific methods (for backward compatibility)
+func (c *CorruptedMockBlockStore) Start(ctx context.Context) error {
+	return c.Connect(ctx)
+}
+
+func (c *CorruptedMockBlockStore) Stop(ctx context.Context) error {
+	return c.Disconnect(ctx)
 }

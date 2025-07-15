@@ -128,7 +128,7 @@ func (ce *CoordinationEngine) findHighDemandBlocks(
 
 // generateBlockSuggestions suggests blocks for a peer to cache
 func (ce *CoordinationEngine) generateBlockSuggestions(
-	localFilters map[string]*bloom.BloomFilter,
+	_ map[string]*bloom.BloomFilter,
 	peerFilters map[string]*PeerFilterSet,
 	valuableBlocks map[string][]string,
 ) []string {

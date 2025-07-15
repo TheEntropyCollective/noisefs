@@ -175,13 +175,70 @@ func (s *CacheStats) SetMaxSize(maxSize int64) {
 	s.MaxSize = maxSize
 }
 
+// CacheStatsSnapshot represents a snapshot of cache statistics without mutex
+type CacheStatsSnapshot struct {
+	// Hit/Miss statistics
+	Hits                  int64     `json:"hits"`
+	Misses                int64     `json:"misses"`
+	TotalRequests         int64     `json:"total_requests"`
+	HitRate               float64   `json:"hit_rate"`
+	
+	// Storage statistics
+	Stores                int64     `json:"stores"`
+	Removals              int64     `json:"removals"`
+	Evictions             int64     `json:"evictions"`
+	CurrentSize           int64     `json:"current_size"`
+	MaxSize               int64     `json:"max_size"`
+	
+	// Byte statistics
+	BytesStored           int64     `json:"bytes_stored"`
+	BytesRetrieved        int64     `json:"bytes_retrieved"`
+	BytesEvicted          int64     `json:"bytes_evicted"`
+	
+	// Performance statistics
+	AvgGetLatency         time.Duration `json:"avg_get_latency"`
+	AvgStoreLatency       time.Duration `json:"avg_store_latency"`
+	TotalGetLatency       time.Duration `json:"total_get_latency"`
+	TotalStoreLatency     time.Duration `json:"total_store_latency"`
+	
+	// Time-based statistics
+	StartTime             time.Time `json:"start_time"`
+	LastReset             time.Time `json:"last_reset"`
+	
+	// Popular blocks
+	PopularBlocks         map[string]int64 `json:"popular_blocks"`
+	MostPopularCID        string           `json:"most_popular_cid"`
+	MostPopularCount      int64            `json:"most_popular_count"`
+}
+
 // GetSnapshot returns a snapshot of current statistics
-func (s *CacheStats) GetSnapshot() CacheStats {
+func (s *CacheStats) GetSnapshot() CacheStatsSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	
-	// Create a copy of the stats
-	snapshot := *s
+	// Create a copy of the stats without the mutex
+	snapshot := CacheStatsSnapshot{
+		Hits:                  s.Hits,
+		Misses:                s.Misses,
+		TotalRequests:         s.TotalRequests,
+		HitRate:               s.HitRate,
+		Stores:                s.Stores,
+		Removals:              s.Removals,
+		Evictions:             s.Evictions,
+		CurrentSize:           s.CurrentSize,
+		MaxSize:               s.MaxSize,
+		BytesStored:           s.BytesStored,
+		BytesRetrieved:        s.BytesRetrieved,
+		BytesEvicted:          s.BytesEvicted,
+		AvgGetLatency:         s.AvgGetLatency,
+		AvgStoreLatency:       s.AvgStoreLatency,
+		TotalGetLatency:       s.TotalGetLatency,
+		TotalStoreLatency:     s.TotalStoreLatency,
+		StartTime:             s.StartTime,
+		LastReset:             s.LastReset,
+		MostPopularCID:        s.MostPopularCID,
+		MostPopularCount:      s.MostPopularCount,
+	}
 	
 	// Deep copy the popular blocks map
 	snapshot.PopularBlocks = make(map[string]int64)
@@ -353,8 +410,19 @@ func (c *StatisticsCache) Clear() {
 	c.stats.Reset()
 }
 
-// GetStats returns the current cache statistics
-func (c *StatisticsCache) GetStats() *CacheStats {
+// GetStats returns the cache-specific statistics (implements Cache interface)
+func (c *StatisticsCache) GetStats() *Stats {
+	snapshot := c.stats.GetSnapshot()
+	return &Stats{
+		Hits:      snapshot.Hits,
+		Misses:    snapshot.Misses,
+		Evictions: snapshot.Evictions,
+		Size:      int(snapshot.CurrentSize),
+	}
+}
+
+// GetDetailedStats returns the full cache statistics
+func (c *StatisticsCache) GetDetailedStats() *CacheStats {
 	return c.stats
 }
 

@@ -147,8 +147,13 @@ func TestIPFSOptimizationImpact(t *testing.T) {
 	for _, endpoint := range endpoints {
 		start := time.Now()
 
-		// Test connection to endpoint
-		_, err := ipfs.NewClient(endpoint)
+		// Test connection to endpoint using storage manager
+		storageConfig := storage.DefaultConfig()
+		if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
+			ipfsBackend.Connection.Endpoint = fmt.Sprintf("http://%s", endpoint)
+		}
+		
+		_, err := storage.NewManager(storageConfig)
 		if err != nil {
 			t.Logf("Could not connect to %s: %v", endpoint, err)
 			results[endpoint] = time.Duration(-1) // Mark as failed

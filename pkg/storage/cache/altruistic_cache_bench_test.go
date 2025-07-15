@@ -185,13 +185,14 @@ func BenchmarkAltruisticCache_Comparison(b *testing.B) {
 				cid := fmt.Sprintf("block-%d", j)
 				
 				// Mix of operations
-				if j%4 == 0 {
+				switch j % 4 {
+				case 0:
 					cache.StoreWithOrigin(cid, block, PersonalBlock)
-				} else if j%4 == 1 {
+				case 1:
 					cache.StoreWithOrigin(cid, block, AltruisticBlock)
-				} else if j%4 == 2 {
+				case 2:
 					cache.Get(cid)
-				} else {
+				default:
 					cache.GetAltruisticStats()
 				}
 			}

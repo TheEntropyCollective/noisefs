@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -88,6 +90,103 @@ func (m *mockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *
 	// For mock, just store the block
 	_, err := m.StoreBlock(block)
 	return err
+}
+
+// storage.Backend interface methods
+func (m *mockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
+	cid, err := m.StoreBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	return &storage.BlockAddress{
+		ID:          cid,
+		BackendType: "mock",
+		Size:        int64(len(block.Data)),
+		CreatedAt:   time.Now(),
+	}, nil
+}
+
+func (m *mockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
+	return m.RetrieveBlock(address.ID)
+}
+
+func (m *mockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
+	return m.HasBlock(address.ID)
+}
+
+func (m *mockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
+	delete(m.blocks, address.ID)
+	return nil
+}
+
+func (m *mockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
+	addresses := make([]*storage.BlockAddress, 0, len(blocks))
+	for _, block := range blocks {
+		addr, err := m.Put(ctx, block)
+		if err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, addr)
+	}
+	return addresses, nil
+}
+
+func (m *mockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
+	blocks := make([]*blocks.Block, 0, len(addresses))
+	for _, addr := range addresses {
+		block, err := m.Get(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, block)
+	}
+	return blocks, nil
+}
+
+func (m *mockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (m *mockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
+	return nil // Mock implementation
+}
+
+func (m *mockBlockStore) GetBackendInfo() *storage.BackendInfo {
+	return &storage.BackendInfo{
+		Name:         "mockBlockStore",
+		Type:         "mock",
+		Version:      "1.0",
+		Capabilities: []string{storage.CapabilityBatch},
+	}
+}
+
+func (m *mockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
+	return &storage.HealthStatus{
+		Healthy:   true,
+		Status:    "healthy",
+		LastCheck: time.Now(),
+	}
+}
+
+func (m *mockBlockStore) Connect(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockBlockStore) Disconnect(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockBlockStore) IsConnected() bool {
+	return true
+}
+
+// storage.Manager specific methods (for backward compatibility)
+func (m *mockBlockStore) Start(ctx context.Context) error {
+	return m.Connect(ctx)
+}
+
+func (m *mockBlockStore) Stop(ctx context.Context) error {
+	return m.Disconnect(ctx)
 }
 
 // simulateUpload simulates the complete file upload process
