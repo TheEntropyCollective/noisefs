@@ -2,18 +2,15 @@ package comparative_analysis
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 )
 
 // PerformanceMetrics tracks comprehensive performance data
@@ -411,14 +408,17 @@ type BenchmarkSuite struct {
 }
 
 func setupBenchmarkSuite(b *testing.B) *BenchmarkSuite {
-	// Create mock block store
-	blockStore := &MockBlockStore{blocks: make(map[string]*blocks.Block)}
+	// Create real test storage manager
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		b.Fatalf("Failed to create storage manager: %v", err)
+	}
 	
 	// Create cache with appropriate size for benchmarking
 	cacheInstance := cache.NewMemoryCache(100 * 1024 * 1024) // 100MB cache
 	
 	// Create NoiseFS client
-	client, err := noisefs.NewClient(blockStore, cacheInstance)
+	client, err := noisefs.NewClient(storageManager, cacheInstance)
 	if err != nil {
 		b.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
@@ -582,130 +582,3 @@ func saveMetrics(b *testing.B, metrics *PerformanceMetrics) {
 }
 
 // MockBlockStore for benchmarking (simplified version)
-type MockBlockStore struct {
-	blocks map[string]*blocks.Block
-}
-
-func (m *MockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
-	cid := fmt.Sprintf("bench_%s", block.ID)
-	m.blocks[cid] = block
-	return cid, nil
-}
-
-func (m *MockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
-	block, exists := m.blocks[cid]
-	if !exists {
-		return nil, fmt.Errorf("block not found: %s", cid)
-	}
-	return block, nil
-}
-
-func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
-	return m.RetrieveBlock(cid)
-}
-
-func (m *MockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
-	return m.StoreBlock(block)
-}
-
-func (m *MockBlockStore) HasBlock(cid string) (bool, error) {
-	_, exists := m.blocks[cid]
-	return exists, nil
-}
-
-// storage.Backend interface methods
-func (m *MockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
-	cid, err := m.StoreBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return &storage.BlockAddress{
-		ID:          cid,
-		BackendType: "mock",
-		Size:        int64(len(block.Data)),
-		CreatedAt:   time.Now(),
-	}, nil
-}
-
-func (m *MockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
-	return m.RetrieveBlock(address.ID)
-}
-
-func (m *MockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
-	return m.HasBlock(address.ID)
-}
-
-func (m *MockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
-	delete(m.blocks, address.ID)
-	return nil
-}
-
-func (m *MockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
-	addresses := make([]*storage.BlockAddress, 0, len(blocks))
-	for _, block := range blocks {
-		addr, err := m.Put(ctx, block)
-		if err != nil {
-			return nil, err
-		}
-		addresses = append(addresses, addr)
-	}
-	return addresses, nil
-}
-
-func (m *MockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
-	blocks := make([]*blocks.Block, 0, len(addresses))
-	for _, addr := range addresses {
-		block, err := m.Get(ctx, addr)
-		if err != nil {
-			return nil, err
-		}
-		blocks = append(blocks, block)
-	}
-	return blocks, nil
-}
-
-func (m *MockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *MockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *MockBlockStore) GetBackendInfo() *storage.BackendInfo {
-	return &storage.BackendInfo{
-		Name:         "MockBlockStore",
-		Type:         "mock",
-		Version:      "1.0",
-		Capabilities: []string{storage.CapabilityBatch},
-	}
-}
-
-func (m *MockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
-	return &storage.HealthStatus{
-		Healthy:   true,
-		Status:    "healthy",
-		LastCheck: time.Now(),
-	}
-}
-
-func (m *MockBlockStore) Connect(ctx context.Context) error {
-	return nil
-}
-
-func (m *MockBlockStore) Disconnect(ctx context.Context) error {
-	return nil
-}
-
-func (m *MockBlockStore) IsConnected() bool {
-	return true
-}
-
-// storage.Manager specific methods (for backward compatibility)
-func (m *MockBlockStore) Start(ctx context.Context) error {
-	return m.Connect(ctx)
-}
-
-func (m *MockBlockStore) Stop(ctx context.Context) error {
-	return m.Disconnect(ctx)
-}

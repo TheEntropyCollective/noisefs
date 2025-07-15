@@ -3,8 +3,6 @@ package integration
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -12,17 +10,15 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // E2ETestSuite provides comprehensive end-to-end testing
 type E2ETestSuite struct {
-	storageManager   *storagetesting.MockStorageManager
+	storageManager   *storage.Manager
 	memoryCache      cache.Cache
 	noisefsClient    *noisefs.Client
 	reuseClient      *reuse.ReuseAwareClient
@@ -30,165 +26,6 @@ type E2ETestSuite struct {
 	testConfig       *config.Config
 }
 
-type MockBlockStore struct {
-	blocks      map[string]*blocks.Block
-	peerManager *p2p.PeerManager
-}
-
-func NewMockBlockStore() *MockBlockStore {
-	return &MockBlockStore{
-		blocks: make(map[string]*blocks.Block),
-	}
-}
-
-func (m *MockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
-	if block == nil {
-		return "", errors.New("block cannot be nil")
-	}
-	cid := fmt.Sprintf("mock_%s", block.ID)
-	m.blocks[cid] = block
-	return cid, nil
-}
-
-func (m *MockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
-	block, exists := m.blocks[cid]
-	if !exists {
-		return nil, errors.New("block not found")
-	}
-	return block, nil
-}
-
-func (m *MockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
-	return m.RetrieveBlock(cid)
-}
-
-func (m *MockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
-	return m.StoreBlock(block)
-}
-
-func (m *MockBlockStore) HasBlock(cid string) (bool, error) {
-	_, exists := m.blocks[cid]
-	return exists, nil
-}
-
-// PeerAwareIPFSClient interface methods
-func (m *MockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
-	m.peerManager = manager
-}
-
-func (m *MockBlockStore) GetConnectedPeers() []peer.ID {
-	return []peer.ID{
-		peer.ID("mock_peer_1"),
-		peer.ID("mock_peer_2"),
-		peer.ID("mock_peer_3"),
-	}
-}
-
-func (m *MockBlockStore) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
-	return m.RetrieveBlock(cid)
-}
-
-func (m *MockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
-	_, err := m.StoreBlock(block)
-	return err
-}
-
-// storage.Backend interface methods
-func (m *MockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
-	cid, err := m.StoreBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return &storage.BlockAddress{
-		ID:          cid,
-		BackendType: "mock",
-		Size:        int64(len(block.Data)),
-		CreatedAt:   time.Now(),
-	}, nil
-}
-
-func (m *MockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
-	return m.RetrieveBlock(address.ID)
-}
-
-func (m *MockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
-	return m.HasBlock(address.ID)
-}
-
-func (m *MockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
-	delete(m.blocks, address.ID)
-	return nil
-}
-
-func (m *MockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
-	addresses := make([]*storage.BlockAddress, 0, len(blocks))
-	for _, block := range blocks {
-		addr, err := m.Put(ctx, block)
-		if err != nil {
-			return nil, err
-		}
-		addresses = append(addresses, addr)
-	}
-	return addresses, nil
-}
-
-func (m *MockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
-	blocks := make([]*blocks.Block, 0, len(addresses))
-	for _, addr := range addresses {
-		block, err := m.Get(ctx, addr)
-		if err != nil {
-			return nil, err
-		}
-		blocks = append(blocks, block)
-	}
-	return blocks, nil
-}
-
-func (m *MockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *MockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *MockBlockStore) GetBackendInfo() *storage.BackendInfo {
-	return &storage.BackendInfo{
-		Name:         "MockBlockStore",
-		Type:         "mock",
-		Version:      "1.0",
-		Capabilities: []string{storage.CapabilityBatch},
-	}
-}
-
-func (m *MockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
-	return &storage.HealthStatus{
-		Healthy:   true,
-		Status:    "healthy",
-		LastCheck: time.Now(),
-	}
-}
-
-func (m *MockBlockStore) Connect(ctx context.Context) error {
-	return nil
-}
-
-func (m *MockBlockStore) Disconnect(ctx context.Context) error {
-	return nil
-}
-
-func (m *MockBlockStore) IsConnected() bool {
-	return true
-}
-
-// storage.Manager specific methods (for backward compatibility)
-func (m *MockBlockStore) Start(ctx context.Context) error {
-	return m.Connect(ctx)
-}
-
-func (m *MockBlockStore) Stop(ctx context.Context) error {
-	return m.Disconnect(ctx)
-}
 
 // TestCompleteUploadDownloadWorkflow tests the entire file lifecycle
 func TestCompleteUploadDownloadWorkflow(t *testing.T) {
@@ -285,9 +122,8 @@ func TestMultiClientWorkflow(t *testing.T) {
 	suite := setupE2ETestSuite(t)
 
 	// Create a second client with shared storage but separate cache
-	secondBlockStore := suite.mockBlockStore              // Shared storage
 	secondCache := cache.NewMemoryCache(10 * 1024 * 1024) // 10MB cache
-	secondClient, err := noisefs.NewClient(secondBlockStore, secondCache)
+	secondClient, err := noisefs.NewClient(suite.storageManager, secondCache)
 	if err != nil {
 		t.Fatalf("Failed to create second client: %v", err)
 	}
@@ -500,26 +336,15 @@ func TestComplianceSystemIntegration(t *testing.T) {
 func TestErrorHandlingAndRecovery(t *testing.T) {
 	suite := setupE2ETestSuite(t)
 
-	// Test with corrupted block store
-	corruptedBlockStore := &CorruptedMockBlockStore{
-		blocks:      make(map[string]*blocks.Block),
-		failureRate: 0.3, // 30% failure rate
-	}
-
-	corruptedClient, err := noisefs.NewClient(corruptedBlockStore, suite.memoryCache)
-	if err != nil {
-		t.Fatalf("Failed to create corrupted client: %v", err)
-	}
-
-	testContent := []byte("Error handling test content")
-	reader := bytes.NewReader(testContent)
-
-	// This should handle retries and potentially fail gracefully
-	_, err = corruptedClient.Upload(reader, "error_test.txt")
-	if err != nil {
-		t.Logf("Upload with corrupted backend failed as expected: %v", err)
+	// For error testing, we'll use the existing storage manager but test with
+	// invalid data and non-existent CIDs instead of creating a corrupted manager
+	
+	// Test upload with nil content first
+	_, err := suite.noisefsClient.Upload(nil, "nil_test.txt")
+	if err == nil {
+		t.Error("Upload with nil content should have failed")
 	} else {
-		t.Log("Upload with corrupted backend succeeded despite errors")
+		t.Logf("Upload with nil content failed as expected: %v", err)
 	}
 
 	// Test download with non-existent CID
@@ -530,45 +355,40 @@ func TestErrorHandlingAndRecovery(t *testing.T) {
 		t.Logf("Download with non-existent CID failed as expected: %v", err)
 	}
 
-	// Test upload with nil content
-	_, err = suite.noisefsClient.Upload(nil, "nil_test.txt")
+	// Test upload with empty filename
+	testContent := []byte("Error handling test content")
+	reader := bytes.NewReader(testContent)
+	_, err = suite.noisefsClient.Upload(reader, "")
 	if err == nil {
-		t.Error("Upload with nil content should have failed")
+		t.Error("Upload with empty filename should have failed")
 	} else {
-		t.Logf("Upload with nil content failed as expected: %v", err)
+		t.Logf("Upload with empty filename failed as expected: %v", err)
 	}
 }
 
 // Helper functions
 
 func setupE2ETestSuite(t *testing.T) *E2ETestSuite {
-	// Create mock block store
-	mockBlockStore := NewMockBlockStore()
+	// Create real test storage manager
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
 
 	// Create memory cache
 	memoryCache := cache.NewMemoryCache(50 * 1024 * 1024) // 50MB
 
 	// Create NoiseFS client
-	noisefsClient, err := noisefs.NewClient(mockBlockStore, memoryCache)
+	noisefsClient, err := noisefs.NewClient(storageManager, memoryCache)
 	if err != nil {
 		t.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
 
 	// Try to create reuse client (may fail if not fully set up)
 	var reuseClient *reuse.ReuseAwareClient
-	reuseClient, err = reuse.NewReuseAwareClient(mockBlockStore, memoryCache)
+	reuseClient, err = reuse.NewReuseAwareClient(storageManager, memoryCache)
 	if err != nil {
 		t.Logf("Warning: Could not create reuse client: %v", err)
-	}
-
-	// Try to create storage manager (may fail if not configured)
-	var storageManager *storage.Manager
-	storageConfig := storage.DefaultConfig()
-	if storageConfig != nil {
-		storageManager, err = storage.NewManager(storageConfig)
-		if err != nil {
-			t.Logf("Warning: Could not create storage manager: %v", err)
-		}
 	}
 
 	// Try to create compliance system
@@ -582,11 +402,10 @@ func setupE2ETestSuite(t *testing.T) *E2ETestSuite {
 	testConfig := config.DefaultConfig()
 
 	return &E2ETestSuite{
-		mockBlockStore:   mockBlockStore,
+		storageManager:   storageManager,
 		memoryCache:      memoryCache,
 		noisefsClient:    noisefsClient,
 		reuseClient:      reuseClient,
-		storageManager:   storageManager,
 		complianceSystem: complianceSystem,
 		testConfig:       testConfig,
 	}
@@ -600,191 +419,3 @@ func generateTestData(size int) []byte {
 	return data
 }
 
-// CorruptedMockBlockStore simulates a unreliable storage backend
-type CorruptedMockBlockStore struct {
-	blocks         map[string]*blocks.Block
-	failureRate    float64
-	operationCount int
-	peerManager    *p2p.PeerManager
-}
-
-func (c *CorruptedMockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
-	c.operationCount++
-
-	// Simulate intermittent failures
-	if float64(c.operationCount%10) < c.failureRate*10 {
-		return "", errors.New("simulated storage failure")
-	}
-
-	if block == nil {
-		return "", errors.New("block cannot be nil")
-	}
-
-	cid := fmt.Sprintf("corrupted_%s", block.ID)
-	c.blocks[cid] = block
-	return cid, nil
-}
-
-func (c *CorruptedMockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
-	c.operationCount++
-
-	// Simulate intermittent failures
-	if float64(c.operationCount%10) < c.failureRate*10 {
-		return nil, errors.New("simulated retrieval failure")
-	}
-
-	block, exists := c.blocks[cid]
-	if !exists {
-		return nil, errors.New("block not found")
-	}
-	return block, nil
-}
-
-func (c *CorruptedMockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
-	return c.RetrieveBlock(cid)
-}
-
-func (c *CorruptedMockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
-	return c.StoreBlock(block)
-}
-
-func (c *CorruptedMockBlockStore) HasBlock(cid string) (bool, error) {
-	c.operationCount++
-
-	// Simulate intermittent failures
-	if float64(c.operationCount%10) < c.failureRate*10 {
-		return false, errors.New("simulated block existence check failure")
-	}
-
-	_, exists := c.blocks[cid]
-	return exists, nil
-}
-
-// PeerAwareIPFSClient interface methods
-func (c *CorruptedMockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
-	c.peerManager = manager
-}
-
-func (c *CorruptedMockBlockStore) GetConnectedPeers() []peer.ID {
-	return []peer.ID{
-		peer.ID("mock_peer_1"),
-		peer.ID("mock_peer_2"),
-		peer.ID("mock_peer_3"),
-	}
-}
-
-func (c *CorruptedMockBlockStore) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
-	return c.RetrieveBlock(cid)
-}
-
-func (c *CorruptedMockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
-	_, err := c.StoreBlock(block)
-	return err
-}
-
-// storage.Backend interface methods
-func (c *CorruptedMockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
-	cid, err := c.StoreBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return &storage.BlockAddress{
-		ID:          cid,
-		BackendType: "corrupted_mock",
-		Size:        int64(len(block.Data)),
-		CreatedAt:   time.Now(),
-	}, nil
-}
-
-func (c *CorruptedMockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
-	return c.RetrieveBlock(address.ID)
-}
-
-func (c *CorruptedMockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
-	return c.HasBlock(address.ID)
-}
-
-func (c *CorruptedMockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
-	delete(c.blocks, address.ID)
-	return nil
-}
-
-func (c *CorruptedMockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
-	addresses := make([]*storage.BlockAddress, 0, len(blocks))
-	for _, block := range blocks {
-		addr, err := c.Put(ctx, block)
-		if err != nil {
-			return nil, err
-		}
-		addresses = append(addresses, addr)
-	}
-	return addresses, nil
-}
-
-func (c *CorruptedMockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
-	blocks := make([]*blocks.Block, 0, len(addresses))
-	for _, addr := range addresses {
-		block, err := c.Get(ctx, addr)
-		if err != nil {
-			return nil, err
-		}
-		blocks = append(blocks, block)
-	}
-	return blocks, nil
-}
-
-func (c *CorruptedMockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (c *CorruptedMockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (c *CorruptedMockBlockStore) GetBackendInfo() *storage.BackendInfo {
-	return &storage.BackendInfo{
-		Name:         "CorruptedMockBlockStore",
-		Type:         "corrupted_mock",
-		Version:      "1.0",
-		Capabilities: []string{storage.CapabilityBatch},
-	}
-}
-
-func (c *CorruptedMockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
-	// Report as degraded due to simulated failures
-	return &storage.HealthStatus{
-		Healthy:   false,
-		Status:    "degraded",
-		ErrorRate: c.failureRate,
-		LastCheck: time.Now(),
-		Issues: []storage.HealthIssue{
-			{
-				Severity:    "warning",
-				Code:        "SIMULATED_FAILURES",
-				Description: fmt.Sprintf("Simulated failure rate: %.2f%%", c.failureRate*100),
-				Timestamp:   time.Now(),
-			},
-		},
-	}
-}
-
-func (c *CorruptedMockBlockStore) Connect(ctx context.Context) error {
-	return nil
-}
-
-func (c *CorruptedMockBlockStore) Disconnect(ctx context.Context) error {
-	return nil
-}
-
-func (c *CorruptedMockBlockStore) IsConnected() bool {
-	return true
-}
-
-// storage.Manager specific methods (for backward compatibility)
-func (c *CorruptedMockBlockStore) Start(ctx context.Context) error {
-	return c.Connect(ctx)
-}
-
-func (c *CorruptedMockBlockStore) Stop(ctx context.Context) error {
-	return c.Disconnect(ctx)
-}

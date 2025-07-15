@@ -3,191 +3,15 @@ package integration
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
-	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/libp2p/go-libp2p/core/peer"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 )
 
-// mockBlockStore provides a mock IPFS implementation that stores blocks in memory
-// and implements the full PeerAwareIPFSClient interface
-type mockBlockStore struct {
-	blocks      map[string]*blocks.Block
-	peerManager *p2p.PeerManager
-}
-
-func newMockBlockStore() *mockBlockStore {
-	return &mockBlockStore{
-		blocks: make(map[string]*blocks.Block),
-	}
-}
-
-func (m *mockBlockStore) StoreBlock(block *blocks.Block) (string, error) {
-	if block == nil {
-		return "", errors.New("block cannot be nil")
-	}
-
-	cid := "mock_" + block.ID // Use block ID as CID for consistency
-	m.blocks[cid] = block
-	return cid, nil
-}
-
-func (m *mockBlockStore) RetrieveBlock(cid string) (*blocks.Block, error) {
-	if cid == "" {
-		return nil, errors.New("CID cannot be empty")
-	}
-
-	block, exists := m.blocks[cid]
-	if !exists {
-		return nil, errors.New("block not found")
-	}
-
-	return block, nil
-}
-
-func (m *mockBlockStore) RetrieveBlockWithPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
-	// For mock, ignore peer hints and use regular retrieval
-	return m.RetrieveBlock(cid)
-}
-
-func (m *mockBlockStore) StoreBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
-	// For mock, ignore strategy and use regular storage
-	return m.StoreBlock(block)
-}
-
-func (m *mockBlockStore) HasBlock(cid string) (bool, error) {
-	_, exists := m.blocks[cid]
-	return exists, nil
-}
-
-// PeerAwareIPFSClient interface methods
-func (m *mockBlockStore) SetPeerManager(manager *p2p.PeerManager) {
-	m.peerManager = manager
-}
-
-func (m *mockBlockStore) GetConnectedPeers() []peer.ID {
-	// Return mock peer IDs for testing
-	return []peer.ID{
-		peer.ID("mock_peer_1"),
-		peer.ID("mock_peer_2"),
-		peer.ID("mock_peer_3"),
-	}
-}
-
-func (m *mockBlockStore) RequestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
-	// For mock, just use regular block retrieval
-	return m.RetrieveBlock(cid)
-}
-
-func (m *mockBlockStore) BroadcastBlock(ctx context.Context, cid string, block *blocks.Block) error {
-	// For mock, just store the block
-	_, err := m.StoreBlock(block)
-	return err
-}
-
-// storage.Backend interface methods
-func (m *mockBlockStore) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
-	cid, err := m.StoreBlock(block)
-	if err != nil {
-		return nil, err
-	}
-	return &storage.BlockAddress{
-		ID:          cid,
-		BackendType: "mock",
-		Size:        int64(len(block.Data)),
-		CreatedAt:   time.Now(),
-	}, nil
-}
-
-func (m *mockBlockStore) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
-	return m.RetrieveBlock(address.ID)
-}
-
-func (m *mockBlockStore) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
-	return m.HasBlock(address.ID)
-}
-
-func (m *mockBlockStore) Delete(ctx context.Context, address *storage.BlockAddress) error {
-	delete(m.blocks, address.ID)
-	return nil
-}
-
-func (m *mockBlockStore) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*storage.BlockAddress, error) {
-	addresses := make([]*storage.BlockAddress, 0, len(blocks))
-	for _, block := range blocks {
-		addr, err := m.Put(ctx, block)
-		if err != nil {
-			return nil, err
-		}
-		addresses = append(addresses, addr)
-	}
-	return addresses, nil
-}
-
-func (m *mockBlockStore) GetMany(ctx context.Context, addresses []*storage.BlockAddress) ([]*blocks.Block, error) {
-	blocks := make([]*blocks.Block, 0, len(addresses))
-	for _, addr := range addresses {
-		block, err := m.Get(ctx, addr)
-		if err != nil {
-			return nil, err
-		}
-		blocks = append(blocks, block)
-	}
-	return blocks, nil
-}
-
-func (m *mockBlockStore) Pin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *mockBlockStore) Unpin(ctx context.Context, address *storage.BlockAddress) error {
-	return nil // Mock implementation
-}
-
-func (m *mockBlockStore) GetBackendInfo() *storage.BackendInfo {
-	return &storage.BackendInfo{
-		Name:         "mockBlockStore",
-		Type:         "mock",
-		Version:      "1.0",
-		Capabilities: []string{storage.CapabilityBatch},
-	}
-}
-
-func (m *mockBlockStore) HealthCheck(ctx context.Context) *storage.HealthStatus {
-	return &storage.HealthStatus{
-		Healthy:   true,
-		Status:    "healthy",
-		LastCheck: time.Now(),
-	}
-}
-
-func (m *mockBlockStore) Connect(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockBlockStore) Disconnect(ctx context.Context) error {
-	return nil
-}
-
-func (m *mockBlockStore) IsConnected() bool {
-	return true
-}
-
-// storage.Manager specific methods (for backward compatibility)
-func (m *mockBlockStore) Start(ctx context.Context) error {
-	return m.Connect(ctx)
-}
-
-func (m *mockBlockStore) Stop(ctx context.Context) error {
-	return m.Disconnect(ctx)
-}
 
 // simulateUpload simulates the complete file upload process
 func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descriptors.Descriptor, error) {
@@ -323,9 +147,14 @@ func simulateDownload(client *noisefs.Client, desc *descriptors.Descriptor) ([]b
 
 func TestEndToEndUploadDownload(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(20)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -417,9 +246,14 @@ func TestEndToEndWithDifferentFileSizes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup fresh environment for each test
-			mockStore := newMockBlockStore()
+			storageManager, err := storagetesting.CreateRealTestStorageManager()
+			if err != nil {
+				t.Fatalf("Failed to create storage manager: %v", err)
+			}
+			defer storageManager.Stop(context.Background())
+			
 			cache := cache.NewMemoryCache(50)
-			client, err := noisefs.NewClient(mockStore, cache)
+			client, err := noisefs.NewClient(storageManager, cache)
 			if err != nil {
 				t.Fatalf("Failed to create client: %v", err)
 			}
@@ -446,9 +280,14 @@ func TestEndToEndWithDifferentFileSizes(t *testing.T) {
 
 func TestEndToEndDescriptorSerialization(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(20)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -489,9 +328,14 @@ func TestEndToEndDescriptorSerialization(t *testing.T) {
 
 func TestEndToEndBlockReuse(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(20)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -532,9 +376,14 @@ func TestEndToEndBlockReuse(t *testing.T) {
 
 func TestEndToEndCacheEfficiency(t *testing.T) {
 	// Setup with small cache to test eviction
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(3) // Very small cache to force eviction
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -580,9 +429,14 @@ func TestEndToEndCacheEfficiency(t *testing.T) {
 
 func TestEndToEndErrorRecovery(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(20)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -610,18 +464,26 @@ func TestEndToEndErrorRecovery(t *testing.T) {
 	// Remove from cache too
 	cache.Remove(firstBlockCID)
 
-	// Remove from mock store
-	delete(mockStore.blocks, firstBlockCID)
+	// Since we can't directly delete from the real storage manager,
+	// we'll test error recovery by trying to download with an invalid descriptor
+	// that references a non-existent block
+	invalidDesc := descriptors.NewDescriptor("invalid_test.txt", int64(len(originalData)), blockSize)
+	// Create a block info with non-existent content CID
+	// Note: We'll create the descriptor with a bad block that can't be retrieved
+	invalidDesc.Blocks = []descriptors.BlockPair{
+		{
+			DataCID:        "non_existent_block_cid",
+			RandomizerCID1: firstBlockCID, // Using real CID here
+			RandomizerCID2: firstBlockCID, // Using real CID here
+		},
+	}
 
 	// Download should fail due to missing block
-	_, err = simulateDownload(client, desc)
+	_, err = simulateDownload(client, invalidDesc)
 	if err == nil {
 		t.Error("Download should fail with missing block")
 		return
 	}
 
-	if err.Error() != "block not found" {
-		t.Logf("Expected 'block not found' error, got: %v", err)
-		// Still consider this a pass as it correctly failed, just different error message
-	}
+	t.Logf("Download correctly failed with error: %v", err)
 }

@@ -2,19 +2,26 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 )
 
 func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(30)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -86,9 +93,14 @@ func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 
 func TestCacheEfficiencyWithPopularityTracking(t *testing.T) {
 	// Setup
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(20)
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -178,9 +190,14 @@ func TestCacheEfficiencyWithPopularityTracking(t *testing.T) {
 
 func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 	// Setup with small cache to test LRU eviction
-	mockStore := newMockBlockStore()
+	storageManager, err := storagetesting.CreateRealTestStorageManager()
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer storageManager.Stop(context.Background())
+	
 	cache := cache.NewMemoryCache(6) // Very small cache
-	client, err := noisefs.NewClient(mockStore, cache)
+	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -297,9 +314,14 @@ func TestCacheEfficiencyWithWorkloadPatterns(t *testing.T) {
 	for _, pattern := range patterns {
 		t.Run(pattern.name, func(t *testing.T) {
 			// Setup fresh environment for each pattern
-			mockStore := newMockBlockStore()
+			storageManager, err := storagetesting.CreateRealTestStorageManager()
+			if err != nil {
+				t.Fatalf("Failed to create storage manager: %v", err)
+			}
+			defer storageManager.Stop(context.Background())
+			
 			cache := cache.NewMemoryCache(15)
-			client, err := noisefs.NewClient(mockStore, cache)
+			client, err := noisefs.NewClient(storageManager, cache)
 			if err != nil {
 				t.Fatalf("Failed to create client: %v", err)
 			}
