@@ -460,11 +460,19 @@ func (c *SampledStatisticsCache) Clear() {
 // GetStats returns the current cache statistics
 func (c *SampledStatisticsCache) GetStats() *Stats {
 	snapshot := c.stats.GetSnapshot()
+	
+	// Calculate hit rate
+	var hitRate float64
+	if snapshot.Hits+snapshot.Misses > 0 {
+		hitRate = float64(snapshot.Hits) / float64(snapshot.Hits+snapshot.Misses)
+	}
+	
 	return &Stats{
 		Hits:      snapshot.Hits,
 		Misses:    snapshot.Misses,
 		Evictions: snapshot.Evictions,
 		Size:      int(snapshot.CurrentSize),
+		HitRate:   hitRate,
 	}
 }
 

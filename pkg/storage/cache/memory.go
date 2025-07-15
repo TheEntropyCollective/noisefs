@@ -191,11 +191,18 @@ func (c *MemoryCache) GetStats() *Stats {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	
+	// Calculate hit rate
+	var hitRate float64
+	if c.stats.Hits+c.stats.Misses > 0 {
+		hitRate = float64(c.stats.Hits) / float64(c.stats.Hits+c.stats.Misses)
+	}
+	
 	// Create a copy to avoid data races
 	return &Stats{
 		Hits:      c.stats.Hits,
 		Misses:    c.stats.Misses,
 		Evictions: c.stats.Evictions,
 		Size:      len(c.blocks),
+		HitRate:   hitRate,
 	}
 }

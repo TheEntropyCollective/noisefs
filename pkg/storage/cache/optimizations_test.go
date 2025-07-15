@@ -216,8 +216,7 @@ func TestStatisticsCache(t *testing.T) {
 	}
 	
 	// Check statistics
-	statsCache := cache.(*StatisticsCache)
-	stats := statsCache.GetDetailedStats().GetSnapshot()
+	stats := cache.GetDetailedStats().GetSnapshot()
 	if stats.Stores != 1 {
 		t.Errorf("Expected 1 store, got %d", stats.Stores)
 	}

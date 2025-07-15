@@ -435,6 +435,7 @@ func (ac *AltruisticCache) GetStats() *Stats {
 		Misses:    baseStats.Misses,
 		Evictions: baseStats.Evictions,
 		Size:      baseStats.Size,
+		HitRate:   baseStats.HitRate,
 	}
 }
 

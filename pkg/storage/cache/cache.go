@@ -49,8 +49,9 @@ var ErrNotFound = errors.New("block not found in cache")
 
 // Stats holds cache statistics
 type Stats struct {
-	Hits   int64
-	Misses int64
+	Hits      int64
+	Misses    int64
 	Evictions int64
-	Size   int
+	Size      int
+	HitRate   float64
 }

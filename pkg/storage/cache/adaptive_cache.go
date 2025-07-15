@@ -1099,10 +1099,17 @@ func (ac *AdaptiveCache) GetStats() *Stats {
 	ac.stats.mutex.RLock()
 	defer ac.stats.mutex.RUnlock()
 	
+	// Calculate hit rate
+	var hitRate float64
+	if ac.stats.Hits+ac.stats.Misses > 0 {
+		hitRate = float64(ac.stats.Hits) / float64(ac.stats.Hits+ac.stats.Misses)
+	}
+	
 	return &Stats{
 		Hits:      ac.stats.Hits,
 		Misses:    ac.stats.Misses,
 		Evictions: ac.stats.Evictions,
 		Size:      len(ac.items),
+		HitRate:   hitRate,
 	}
 }

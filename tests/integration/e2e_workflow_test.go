@@ -16,16 +16,16 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // E2ETestSuite provides comprehensive end-to-end testing
 type E2ETestSuite struct {
-	mockBlockStore   *MockBlockStore
+	storageManager   *storagetesting.MockStorageManager
 	memoryCache      cache.Cache
 	noisefsClient    *noisefs.Client
 	reuseClient      *reuse.ReuseAwareClient
-	storageManager   *storage.Manager
 	complianceSystem *compliance.ComplianceAuditSystem
 	testConfig       *config.Config
 }
