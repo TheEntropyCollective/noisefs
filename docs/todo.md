@@ -1,10 +1,94 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Awaiting Next Phase Assignment
+## Current Milestone: Phase 3 - Performance Architecture & Comprehensive Testing Infrastructure
 
-**Status**: COMPLETED
+**Status**: PLANNING - Agent 4 (Testing & Validation) Active
 
-**Summary**: Ready for next phase assignment.
+**Summary**: Implement parallel block processing architecture to unlock system's performance potential while establishing comprehensive testing and validation infrastructure.
+
+**Analysis Complete**: Comprehensive architectural analysis reveals critical performance bottleneck - CLI processes all operations sequentially despite sophisticated concurrent backend infrastructure capable of 1000x concurrency. This creates 10-100x performance loss and security vulnerabilities through timing attacks and prolonged memory exposure.
+
+**Key Finding**: NoiseFS has enterprise-ready storage/cache layers with advanced concurrency patterns, performance monitoring, and streaming infrastructure, but main.go CLI completely ignores this sophistication and processes blocks one at a time.
+
+**Agent 4 Testing Plan**: Establish baseline performance measurements and comprehensive testing infrastructure to validate all optimizations, verify quality improvements from previous phases, and prepare validation framework for performance architecture work.
+
+### Sprint 1: Worker Pool Architecture Design & Implementation (HIGH PRIORITY)
+- [ ] Design generic worker pool pattern for reusable parallel processing
+- [ ] Create pkg/workers/pool.go with configurable concurrency and graceful shutdown
+- [ ] Implement Task interface for different operation types (XOR, Storage, Progress)
+- [ ] Add bounded channel pattern for memory-limited processing
+- [ ] Create error aggregation and partial failure handling
+- [ ] Add comprehensive unit tests for worker pool components
+
+### Sprint 2: Upload Parallelization (HIGH PRIORITY)
+- [ ] Replace sequential XOR operations (main.go lines 329-335) with parallel processing
+- [ ] Implement concurrent block storage operations (lines 344-353)
+- [ ] Maintain existing progress reporting patterns with parallel aggregation
+- [ ] Preserve error handling and transaction semantics
+- [ ] Add performance benchmarks comparing sequential vs parallel upload
+- [ ] Ensure memory usage remains bounded regardless of file size
+
+### Sprint 3: Download Parallelization (HIGH PRIORITY)
+- [ ] Parallelize data block retrieval phase (main.go lines 452-463)
+- [ ] Implement concurrent randomizer block retrieval (lines 474-510)
+- [ ] Add parallel XOR reconstruction with order preservation (lines 514-521)
+- [ ] Handle partial failures gracefully with retry mechanisms
+- [ ] Maintain streaming assembly for out-of-order block arrival
+- [ ] Comprehensive error handling for network timeouts and missing blocks
+
+### Sprint 4: Streaming Memory Management (HIGH PRIORITY)
+- [ ] Integrate existing streaming infrastructure (pkg/core/blocks/streaming.go) with main.go
+- [ ] Replace memory arrays with streaming processors for constant memory usage
+- [ ] Implement memory-bounded processing preventing OOM on large files
+- [ ] Add backpressure mechanisms when workers are overwhelmed
+- [ ] Create memory pool for block buffers to reduce GC pressure
+- [ ] Validate memory efficiency with large file tests (>1GB)
+
+### Sprint 5: Performance Validation & Optimization (MEDIUM PRIORITY)
+- [ ] Create comprehensive benchmarks for upload/download performance
+- [ ] Validate 10-100x performance improvements vs sequential baseline
+- [ ] Add cache-aware scheduling to maximize hit rates
+- [ ] Implement dynamic concurrency adjustment based on system resources
+- [ ] Profile and eliminate remaining bottlenecks
+- [ ] Document performance characteristics and tuning guidelines
+
+### ✅ Sprint 6: Testing Infrastructure & Baseline Measurements (Agent 4 - COMPLETED)
+- [x] Analyze existing test infrastructure and identify gaps
+- [x] Create comprehensive baseline performance measurements for current sequential implementation
+- [x] Validate Agent 1 atomic operations fix for race conditions in altruistic cache metrics
+- [x] Test Agent 2 configuration presets (QuickStart, Security, Performance) for correct functionality
+- [x] Establish automated performance regression detection framework
+- [x] Create integration test suite for cross-agent validation
+
+### Sprint 7: Cross-Phase Validation Framework (Agent 4 - HIGH PRIORITY)
+- [ ] Build comprehensive end-to-end test scenarios for complete system validation
+- [ ] Create performance comparison infrastructure (pre/post optimization testing)
+- [ ] Implement automated validation for Phase 1 quality improvements
+- [ ] Establish continuous performance monitoring and alerting
+- [ ] Design stress testing framework for parallel processing validation
+- [ ] Create comprehensive test reporting and metrics dashboard
+
+### Sprint 8: Performance Architecture Testing Preparation (Agent 4 - MEDIUM PRIORITY)
+- [ ] Design parallel processing validation test suite
+- [ ] Create memory usage and leak detection framework for streaming validation
+- [ ] Implement concurrency safety testing for worker pool validation
+- [ ] Build performance scalability test framework (1x to 1000x concurrency)
+- [ ] Create automated benchmark comparison and regression detection
+- [ ] Establish testing infrastructure for Phase 3 performance work validation
+
+**Architecture Goals:**
+- Utilize existing sophisticated concurrent infrastructure (storage manager, cache layer)
+- Maintain security guarantees while eliminating timing attack surfaces
+- Enable constant memory usage regardless of file size through streaming
+- Preserve existing error handling and progress reporting patterns
+- Create reusable worker pool pattern for future parallel operations
+
+**Expected Benefits:**
+- 10-100x performance improvement for large files
+- Reduced memory exposure time improving security posture
+- Better utilization of multi-core systems and network bandwidth
+- Elimination of memory constraints for large file processing
+- Architectural consistency between CLI and backend layers
 
 ## Completed Major Milestones
 
