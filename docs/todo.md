@@ -1,94 +1,89 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 3 - Performance Architecture & Comprehensive Testing Infrastructure
+## Current Milestone: Phase 3 - CLI Integration for Directory Support
 
-**Status**: ACTIVE - Agent 3 (Performance Architecture) - Sprint 1: Worker Pool Design & Implementation
+**Status**: ACTIVE - Agent 3 (CLI Integration) - Planning Phase
 
-**Summary**: Implement parallel block processing architecture to unlock system's performance potential while establishing comprehensive testing and validation infrastructure.
+**Summary**: Implement CLI integration for NoiseFS directory support, building on Agent 1's core infrastructure and Agent 2's storage integration. Add recursive directory upload/download, implement directory listing command, and enhance CLI UX with progress reporting and filtering.
 
-**Analysis Complete**: Comprehensive architectural analysis reveals critical performance bottleneck - CLI processes all operations sequentially despite sophisticated concurrent backend infrastructure capable of 1000x concurrency. This creates 10-100x performance loss and security vulnerabilities through timing attacks and prolonged memory exposure.
+**Analysis Complete**: Comprehensive CLI analysis reveals monolithic main.go structure with flag-based commands. Directory infrastructure exists (Agent 1's encrypted manifests) but Agent 2's processor/manager components are not yet implemented. Current upload/download functions only handle single files with sophisticated worker pool and streaming support.
 
-**Key Finding**: NoiseFS has enterprise-ready storage/cache layers with advanced concurrency patterns, performance monitoring, and streaming infrastructure, but main.go CLI completely ignores this sophistication and processes blocks one at a time.
+**Key Finding**: CLI integration can be implemented by enhancing existing upload/download functions with directory detection, creating new `ls` command following existing subcommand patterns, and leveraging existing worker pool infrastructure for parallel processing.
 
-**Agent 4 Testing Plan**: Establish baseline performance measurements and comprehensive testing infrastructure to validate all optimizations, verify quality improvements from previous phases, and prepare validation framework for performance architecture work.
+**Integration Strategy**: Enhance existing functions rather than complete restructure, add directory detection logic, implement minimal directory processor if needed, and prepare hooks for Agent 2's directory components.
 
-### ✅ Sprint 1: Worker Pool Architecture Design & Implementation (HIGH PRIORITY) 
-- [x] Design generic worker pool pattern for reusable parallel processing
-- [x] Create pkg/infrastructure/workers/ with configurable concurrency and graceful shutdown
-- [x] Implement SimpleWorkerPool for CPU-bound operations (XOR, Storage, Progress)
-- [x] Add semaphore pattern for memory-limited processing with configurable worker count
-- [x] Create error aggregation and parallel failure handling with context cancellation
-- [x] Add comprehensive unit tests and benchmarks validating 3.7x performance improvement
+### Sprint 1: Enhanced Upload Command with Directory Support (HIGH PRIORITY)
+- [ ] Add -r/--recursive flag to cmd/noisefs/main.go for directory uploads
+- [ ] Implement directory detection logic in uploadFile function
+- [ ] Create minimal directory processor for recursive file discovery
+- [ ] Integrate with existing worker pool infrastructure for parallel processing
+- [ ] Add progress reporting for directory operations (files processed, total files)
+- [ ] Support exclude patterns (--exclude "*.tmp,node_modules") for filtering
+- [ ] Handle nested directories with proper path resolution
+- [ ] Maintain file permissions and timestamps during upload
+- [ ] Add error handling for filesystem access and permission issues
 
-### ✅ Sprint 2: Upload Parallelization (HIGH PRIORITY) - COMPLETED
-- [x] Replace sequential XOR operations (main.go lines 329-335) with parallel processing
-- [x] Implement concurrent block storage operations (lines 344-353)
-- [x] Maintain existing progress reporting patterns with parallel aggregation
-- [x] Preserve error handling and transaction semantics
-- [x] Add performance benchmarks comparing sequential vs parallel upload
-- [x] Ensure memory usage remains bounded regardless of file size
+### Sprint 2: Directory Listing Command Implementation (HIGH PRIORITY)  
+- [ ] Create cmd/noisefs/commands/ls.go with ls command structure
+- [ ] Implement noisefs ls <descriptor> command following existing subcommand pattern
+- [ ] Add -l flag for detailed listing (size, date, type, permissions)
+- [ ] Support nested directory navigation and tree display
+- [ ] Add --json flag for JSON output format compatibility
+- [ ] Include directory/file type indicators in output
+- [ ] Implement descriptor validation and error handling
+- [ ] Add file filtering and pattern matching for listings
+- [ ] Support recursive listing with depth limits
 
-### ✅ Sprint 3: Download Parallelization (HIGH PRIORITY) - COMPLETED
-- [x] Parallelize data block retrieval phase (main.go lines 452-463)
-- [x] Implement concurrent randomizer block retrieval (lines 474-510)
-- [x] Add parallel XOR reconstruction with order preservation (lines 514-521)
-- [x] Handle partial failures gracefully with retry mechanisms
-- [x] Maintain streaming assembly for out-of-order block arrival
-- [x] Comprehensive error handling for network timeouts and missing blocks
+### Sprint 3: Enhanced Download Command with Directory Support (HIGH PRIORITY)
+- [ ] Enhance downloadFile function with directory detection
+- [ ] Add directory download support with structure preservation
+- [ ] Implement --include/--exclude patterns for selective downloads
+- [ ] Add progress reporting for directory reconstruction operations
+- [ ] Support --flatten flag for flattening directory structure
+- [ ] Handle partial directory downloads with error recovery
+- [ ] Add resume capability for interrupted directory downloads
+- [ ] Support streaming downloads for large directories
+- [ ] Maintain file permissions and timestamps during download
 
-### Sprint 4: Streaming Memory Management (HIGH PRIORITY)
-- [ ] Integrate existing streaming infrastructure (pkg/core/blocks/streaming.go) with main.go
-- [ ] Replace memory arrays with streaming processors for constant memory usage
-- [ ] Implement memory-bounded processing preventing OOM on large files
-- [ ] Add backpressure mechanisms when workers are overwhelmed
-- [ ] Create memory pool for block buffers to reduce GC pressure
-- [ ] Validate memory efficiency with large file tests (>1GB)
+### Sprint 4: CLI UX Improvements (MEDIUM PRIORITY)
+- [ ] Implement progress bars for long directory operations
+- [ ] Add performance metrics display (files/sec, MB/s) during operations
+- [ ] Enhance error handling with partial recovery options
+- [ ] Create consistent CLI patterns across all commands
+- [ ] Add verbose mode for detailed operation logging
+- [ ] Implement confirmation prompts for destructive operations
+- [ ] Add help text and usage examples for directory commands
+- [ ] Support configuration file options for default exclude patterns
+- [ ] Add completion hooks for shell auto-completion
 
-### Sprint 5: Performance Validation & Optimization (MEDIUM PRIORITY)
-- [ ] Create comprehensive benchmarks for upload/download performance
-- [ ] Validate 10-100x performance improvements vs sequential baseline
-- [ ] Add cache-aware scheduling to maximize hit rates
-- [ ] Implement dynamic concurrency adjustment based on system resources
-- [ ] Profile and eliminate remaining bottlenecks
-- [ ] Document performance characteristics and tuning guidelines
+### Sprint 5: Testing & Integration Validation (MEDIUM PRIORITY)
+- [ ] Create integration tests for directory upload/download workflows
+- [ ] Add unit tests for new CLI command functions
+- [ ] Test directory operations with large file counts (>1000 files)
+- [ ] Validate progress reporting accuracy and performance
+- [ ] Test exclude/include pattern matching with various scenarios
+- [ ] Add edge case testing (empty directories, special characters, symlinks)
+- [ ] Test CLI error handling and recovery mechanisms
+- [ ] Validate JSON output format consistency
+- [ ] Add performance benchmarks for directory CLI operations
 
-### ✅ Sprint 6: Testing Infrastructure & Baseline Measurements (Agent 4 - COMPLETED)
-- [x] Analyze existing test infrastructure and identify gaps
-- [x] Create comprehensive baseline performance measurements for current sequential implementation
-- [x] Validate Agent 1 atomic operations fix for race conditions in altruistic cache metrics
-- [x] Test Agent 2 configuration presets (QuickStart, Security, Performance) for correct functionality
-- [x] Establish automated performance regression detection framework
-- [x] Create integration test suite for cross-agent validation
-
-### Sprint 7: Cross-Phase Validation Framework (Agent 4 - HIGH PRIORITY)
-- [ ] Build comprehensive end-to-end test scenarios for complete system validation
-- [ ] Create performance comparison infrastructure (pre/post optimization testing)
-- [ ] Implement automated validation for Phase 1 quality improvements
-- [ ] Establish continuous performance monitoring and alerting
-- [ ] Design stress testing framework for parallel processing validation
-- [ ] Create comprehensive test reporting and metrics dashboard
-
-### Sprint 8: Performance Architecture Testing Preparation (Agent 4 - MEDIUM PRIORITY)
-- [ ] Design parallel processing validation test suite
-- [ ] Create memory usage and leak detection framework for streaming validation
-- [ ] Implement concurrency safety testing for worker pool validation
-- [ ] Build performance scalability test framework (1x to 1000x concurrency)
-- [ ] Create automated benchmark comparison and regression detection
-- [ ] Establish testing infrastructure for Phase 3 performance work validation
-
-**Architecture Goals:**
-- Utilize existing sophisticated concurrent infrastructure (storage manager, cache layer)
-- Maintain security guarantees while eliminating timing attack surfaces
-- Enable constant memory usage regardless of file size through streaming
-- Preserve existing error handling and progress reporting patterns
-- Create reusable worker pool pattern for future parallel operations
+**Architecture Integration Points:**
+- Enhance existing CLI structure (cmd/noisefs/main.go) with directory support
+- Leverage existing worker pool infrastructure (pkg/infrastructure/workers/) for parallel processing
+- Integrate with current storage manager architecture (pkg/storage/manager.go)
+- Build upon Agent 1's directory structures (pkg/core/descriptors/directory.go)
+- Use existing encryption functions (pkg/core/crypto/encryption.go)
+- Maintain compatibility with current client architecture and streaming support
+- Follow existing subcommand patterns (announce, subscribe, discover)
 
 **Expected Benefits:**
-- 10-100x performance improvement for large files
-- Reduced memory exposure time improving security posture
-- Better utilization of multi-core systems and network bandwidth
-- Elimination of memory constraints for large file processing
-- Architectural consistency between CLI and backend layers
+- User-friendly CLI with recursive directory upload/download
+- Intuitive directory listing with multiple output formats
+- Parallel file processing using existing worker pool infrastructure
+- Progress reporting and filtering for better user experience
+- Consistent CLI patterns across all commands
+- Integration with existing streaming and caching systems
+- Preparation for Agent 2's directory processor integration
 
 ## Completed Major Milestones
 
