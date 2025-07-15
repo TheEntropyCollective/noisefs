@@ -1,85 +1,80 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Legacy Code Removal
+## Current Milestone: Deprecated Function Removal
 
 **Status**: PLANNING COMPLETE
 
-**Summary**: Systematic removal of 2-tuple legacy code to simplify codebase and improve maintainability. The system currently supports both 2-tuple (legacy) and 3-tuple (current) formats for backward compatibility, but all new files use 3-tuple format.
+**Summary**: Systematic removal of deprecated functions and patterns across the codebase to simplify maintainability and prepare for v2.0 release.
 
 **Current Analysis**: 
-- 2-tuple uses single randomizer (data XOR randomizer)
-- 3-tuple uses two randomizers (data XOR randomizer1 XOR randomizer2)
-- Descriptor version "2.0" indicates 3-tuple format
-- Legacy versions indicate 2-tuple format
-- System can read both formats but creates only 3-tuple
-- ~500 lines of legacy code can be removed
+- Found deprecated functions in pkg/storage/cache/readahead_enhanced.go
+- Found deprecated constructor in pkg/core/descriptors/store.go (NewStore)
+- Found multiple legacy patterns marked with TODO: Remove
+- Found backward compatibility client constructors
+- ReadAheadIPFSClient alias needs removal
+- IntegrateReadAheadWithIPFS deprecated function exists
+- ~200+ lines of deprecated code can be removed
 
-### Sprint 1 - Quick Wins & Deprecation Warnings
-**Objective**: Remove unused legacy creation methods and add deprecation warnings
-
-**Tasks**:
-- [x] Remove `SelectRandomizer()` from client package
-- [x] Remove `AddBlockPair()` from descriptors package
-- [x] Add deprecation warnings to `XOR()` method in blocks package
-- [x] Update tests that use legacy methods
-- [x] Add logging warnings when legacy code paths are used
-
-**Success Criteria**:
-- No new 2-tuple descriptors can be created
-- Legacy methods show clear deprecation warnings
-- All tests pass with updated methods
-- Deprecation timeline communicated in warnings
-
-### Sprint 2 - Migration Tools Development
-**Objective**: Create tools to help users migrate from 2-tuple to 3-tuple format
+### Sprint 1 - Deprecated Function Identification & Removal
+**Objective**: Remove all functions marked as deprecated and legacy compatibility code
 
 **Tasks**:
-- [ ] Create `noisefs-migrate` command-line tool
-- [ ] Implement `scan` subcommand to find 2-tuple descriptors
-- [ ] Implement `convert` subcommand to upgrade descriptors
-- [ ] Implement `verify` subcommand to validate conversions
-- [ ] Add auto-upgrade prompt when reading 2-tuple descriptors
-- [ ] Create migration progress tracking
+- [ ] Remove deprecated `NewStore()` function from pkg/core/descriptors/store.go
+- [ ] Remove deprecated `IntegrateReadAheadWithIPFS()` function from pkg/storage/cache/readahead_enhanced.go
+- [ ] Remove deprecated type alias `ReadAheadIPFSClient` from pkg/storage/cache/readahead_enhanced.go
+- [ ] Search and remove all functions with "// Deprecated:" comments
+- [ ] Search and remove all functions with "// TODO: Remove" comments
+- [ ] Search and remove all functions with "// Legacy:" comments
 
 **Success Criteria**:
-- Users can easily identify all 2-tuple descriptors
-- Automated conversion preserves data integrity
-- Migration tool provides clear progress and verification
-- Auto-upgrade option available but not forced
+- No functions marked as deprecated remain in codebase
+- All deprecated type aliases removed
+- No TODO: Remove comments remain
 
-### Sprint 3 - Core Refactoring
-**Objective**: Simplify codebase by unifying XOR operations and descriptor structure
+### Sprint 2 - Legacy Pattern Cleanup
+**Objective**: Remove backward compatibility constructors and legacy patterns
 
 **Tasks**:
-- [x] Rename `XOR3()` to `XOR()` in blocks package
-- [ ] Remove original `XOR()` method
-- [x] Update all XOR method references throughout codebase
-- [x] Make `RandomizerCID2` required in descriptor structure
-- [x] Remove version checks and `IsThreeTuple()` method
-- [x] Simplify validation logic for 3-tuple only
+- [ ] Remove any Legacy* function names across codebase
+- [ ] Remove any functions with "Legacy" in the name
+- [ ] Clean up any NewXXXWithLegacy constructor patterns
+- [ ] Remove any backward compatibility client constructors
+- [ ] Update all references to removed functions
 
 **Success Criteria**:
-- Single XOR method for all operations
-- Simplified descriptor structure
-- No version-based branching in code
-- All tests pass with refactored code
+- No Legacy* named functions remain
+- No backward compatibility constructors exist
+- All function references updated to use current implementations
 
-### Sprint 4 - Final Cleanup & Documentation
-**Objective**: Remove all legacy support and update documentation
+### Sprint 3 - Import Cleanup & Validation
+**Objective**: Remove unused imports and validate compilation
 
 **Tasks**:
-- [ ] Remove all 2-tuple reading capability
-- [x] Clean up client methods (rename `SelectTwoRandomizers` to `SelectRandomizers`)
-- [ ] Update API documentation
-- [ ] Create migration guide for users
-- [ ] Update README and examples
-- [ ] Add breaking change notes for v2.0
+- [ ] Remove imports that are no longer needed after function removal
+- [ ] Fix any compilation errors from removed dependencies
+- [ ] Run full test suite to ensure no breakage
+- [ ] Update any tests that depend on deprecated functions
+- [ ] Validate all packages compile successfully
 
 **Success Criteria**:
-- No legacy code remains in codebase
-- Documentation reflects 3-tuple only system
-- Clear migration path documented
-- Version 2.0 release prepared
+- All packages compile without warnings
+- No unused imports remain
+- Full test suite passes
+- No compilation errors from missing dependencies
+
+### Sprint 4 - Documentation Update
+**Objective**: Update documentation to reflect deprecation removals
+
+**Tasks**:
+- [ ] Update API documentation to remove deprecated function references
+- [ ] Update README examples if they use deprecated functions
+- [ ] Create changelog entry documenting removed functions
+- [ ] Update migration notes for users upgrading to v2.0
+
+**Success Criteria**:
+- Documentation doesn't reference removed functions
+- Clear migration path documented for upgrading users
+- Changelog documents all breaking changes
 
 ### ✅ Sprint 1 - Enhanced Mock IPFS Client Infrastructure
 **Objective**: Create complete mock IPFS client with full interface compatibility

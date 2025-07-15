@@ -552,7 +552,7 @@ func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
 	}
 }
 
-// Convenience methods for legacy compatibility (work with CIDs directly)
+// Convenience methods (work with CIDs directly)
 
 // StoreBlock stores a block and returns its CID (convenience method)
 func (m *Manager) StoreBlock(block *blocks.Block) (string, error) {

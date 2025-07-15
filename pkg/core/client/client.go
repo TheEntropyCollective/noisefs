@@ -62,13 +62,11 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 }
 
 // NewClientWithStorageManager creates a NoiseFS client using the storage abstraction layer
-// This is kept for backward compatibility and delegates to NewClient
 func NewClientWithStorageManager(storageManager *storage.Manager, blockCache cache.Cache) (*Client, error) {
 	return NewClient(storageManager, blockCache)
 }
 
 // NewClientWithStorageManagerAndConfig creates a NoiseFS client with storage manager and custom config
-// This is kept for backward compatibility and delegates to NewClientWithConfig
 func NewClientWithStorageManagerAndConfig(storageManager *storage.Manager, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
 	return NewClientWithConfig(storageManager, blockCache, config)
 }
@@ -380,7 +378,7 @@ func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (s
 func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string]interface{}) {
 	// Determine if this is a personal block (requested by user)
 	// or an altruistic block (for network benefit)
-	isPersonal := true // Default to personal for backward compatibility
+	isPersonal := true // Default to personal
 	
 	// Check metadata for explicit origin
 	if origin, ok := metadata["requested_by_user"]; ok {

@@ -17,7 +17,7 @@ type HealthMonitor struct {
 	wg       sync.WaitGroup
 }
 
-// RelayHealthMonitor is an alias for compatibility
+// RelayHealthMonitor is an alias
 type RelayHealthMonitor = HealthMonitor
 
 // HealthCheck represents a health check operation

@@ -204,7 +204,7 @@ func (c *EncryptedPersistentCache) loadFromDisk() error {
 		if decrypted, err := c.tryDecryptCache(data); err == nil {
 			cacheData = decrypted
 		} else {
-			// Fallback to unencrypted for backward compatibility
+			// Fallback to unencrypted
 			cacheData = data
 		}
 	} else {

@@ -159,10 +159,10 @@ func (s *EncryptedStore) Load(cid string) (*Descriptor, error) {
 		}
 	}
 
-	// Fallback: try to parse as legacy unencrypted descriptor
+	// Fallback: try to parse as unencrypted descriptor
 	descriptor, err := FromJSON(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse descriptor (tried both encrypted and legacy formats): %w", err)
+		return nil, fmt.Errorf("failed to parse descriptor (tried both encrypted and unencrypted formats): %w", err)
 	}
 
 	return descriptor, nil
@@ -283,6 +283,6 @@ func (s *EncryptedStore) IsEncrypted(cid string) (bool, error) {
 		}
 	}
 
-	// Legacy format is always unencrypted
+	// Unencrypted format
 	return false, nil
 }

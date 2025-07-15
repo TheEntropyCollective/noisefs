@@ -26,7 +26,7 @@ type Descriptor struct {
 // NewDescriptor creates a new file descriptor
 func NewDescriptor(filename string, fileSize int64, blockSize int) *Descriptor {
 	return &Descriptor{
-		Version:   "2.0",
+		Version:   "3.0",
 		Filename:  filename,
 		FileSize:  fileSize,
 		BlockSize: blockSize,

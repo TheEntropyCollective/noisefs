@@ -173,7 +173,7 @@ func (client *ReuseAwareClient) DownloadFile(descriptorCID string) ([]byte, erro
 			return nil, fmt.Errorf("failed to retrieve data block %s: %w", blockPair.DataCID, err)
 		}
 		
-		// Retrieve randomizer block (use first randomizer for 2-tuple compatibility)
+		// Retrieve randomizer block
 		randBlock, err := client.baseClient.RetrieveBlockWithCache(blockPair.RandomizerCID1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve randomizer block %s: %w", blockPair.RandomizerCID1, err)

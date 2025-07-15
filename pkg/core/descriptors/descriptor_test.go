@@ -18,8 +18,8 @@ func TestNewDescriptor(t *testing.T) {
 		t.Fatal("NewDescriptor() returned nil")
 	}
 
-	if desc.Version != "2.0" {
-		t.Errorf("NewDescriptor() Version = %v, want 2.0", desc.Version)
+	if desc.Version != "3.0" {
+		t.Errorf("NewDescriptor() Version = %v, want 3.0", desc.Version)
 	}
 
 	if desc.Filename != filename {
@@ -55,7 +55,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "valid descriptor",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -125,7 +125,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "zero block size",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 0,
@@ -139,7 +139,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "no blocks",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -151,7 +151,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "empty data CID in block",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -165,7 +165,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "empty randomizer CID in block",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -179,7 +179,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "same data and randomizer CID",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -193,7 +193,7 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "empty second randomizer CID",
 			desc: &Descriptor{
-				Version:   "2.0",
+				Version:   "3.0",
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -272,7 +272,7 @@ func TestDescriptorToJSON(t *testing.T) {
 func TestDescriptorFromJSON(t *testing.T) {
 	// Create valid JSON for 3-tuple format
 	validJSON := `{
-		"version": "2.0",
+		"version": "3.0",
 		"filename": "test.txt",
 		"file_size": 1024,
 		"block_size": 128,

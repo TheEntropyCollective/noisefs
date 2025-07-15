@@ -69,7 +69,7 @@ func (eidx *EncryptedFileIndex) LoadIndex() error {
 		}
 	}
 	
-	// Try to load as unencrypted (backward compatibility)
+	// Try to load as unencrypted
 	if err := eidx.parseIndexData(data, false); err != nil {
 		if eidx.encrypted {
 			return fmt.Errorf("failed to load index (wrong password or corrupted file): %w", err)

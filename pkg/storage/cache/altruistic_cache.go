@@ -232,7 +232,7 @@ func (ac *AltruisticCache) createEvictionStrategy() EvictionStrategy {
 
 // Store adds a block to the cache with origin metadata
 func (ac *AltruisticCache) Store(cid string, block *blocks.Block) error {
-	// Default to personal block for backward compatibility
+	// Default to personal block
 	return ac.StoreWithOrigin(cid, block, PersonalBlock)
 }
 

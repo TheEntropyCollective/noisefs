@@ -299,14 +299,14 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 	})
 
 	// Use the enhanced sequential tracker if available
-	// For backward compatibility, we'll keep the simple implementation
-	// but log that the enhanced version should be used
+	// Using simple implementation
+	// Enhanced version available via EnhancedReadAheadWorker
 	
 	c.logger.Info("Using simplified read-ahead. Consider using EnhancedReadAheadWorker for better sequential detection", map[string]interface{}{
 		"base_cid": req.baseCID,
 	})
 	
-	// Simple implementation for backward compatibility
+	// Simple implementation
 	prefetchedCount := 0
 	cacheHits := 0
 
