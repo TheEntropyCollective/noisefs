@@ -1,172 +1,138 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Deprecated Function Removal
+## Current Milestone: Streaming Implementation
 
-**Status**: PLANNING COMPLETE
+**Status**: IN PROGRESS - Sprint 3
 
-**Summary**: Systematic removal of deprecated functions and patterns across the codebase to simplify maintainability and prepare for v2.0 release.
+**Summary**: Implement streaming client API for NoiseFS to enable constant memory usage regardless of file size.
 
 **Current Analysis**: 
-- Found deprecated functions in pkg/storage/cache/readahead_enhanced.go
-- Found deprecated constructor in pkg/core/descriptors/store.go (NewStore)
-- Found multiple legacy patterns marked with TODO: Remove
-- Found backward compatibility client constructors
-- ReadAheadIPFSClient alias needs removal
-- IntegrateReadAheadWithIPFS deprecated function exists
-- ~200+ lines of deprecated code can be removed
+- Existing streaming infrastructure completed in Sprints 1-2
+- Advanced cache system with ML-based predictions and tiered storage ready for streaming optimization
+- Need to optimize cache system for streaming workloads with predictive fetching and buffer management
+- Focus on bandwidth-aware controls and randomizer pre-caching for smooth streaming performance
 
-### Sprint 1 - Deprecated Function Identification & Removal
-**Objective**: Remove all functions marked as deprecated and legacy compatibility code
+### ✅ Sprint 1 - Streaming Infrastructure  
+**Objective**: Build streaming infrastructure for block splitting and assembly
 
 **Tasks**:
-- [ ] Remove deprecated `NewStore()` function from pkg/core/descriptors/store.go
-- [ ] Remove deprecated `IntegrateReadAheadWithIPFS()` function from pkg/storage/cache/readahead_enhanced.go
-- [ ] Remove deprecated type alias `ReadAheadIPFSClient` from pkg/storage/cache/readahead_enhanced.go
-- [ ] Search and remove all functions with "// Deprecated:" comments
-- [ ] Search and remove all functions with "// TODO: Remove" comments
-- [ ] Search and remove all functions with "// Legacy:" comments
-
-**Success Criteria**:
-- No functions marked as deprecated remain in codebase
-- All deprecated type aliases removed
-- No TODO: Remove comments remain
-
-### Sprint 2 - Legacy Pattern Cleanup
-**Objective**: Remove backward compatibility constructors and legacy patterns
-
-**Tasks**:
-- [ ] Remove any Legacy* function names across codebase
-- [ ] Remove any functions with "Legacy" in the name
-- [ ] Clean up any NewXXXWithLegacy constructor patterns
-- [ ] Remove any backward compatibility client constructors
-- [ ] Update all references to removed functions
-
-**Success Criteria**:
-- No Legacy* named functions remain
-- No backward compatibility constructors exist
-- All function references updated to use current implementations
-
-### Sprint 3 - Import Cleanup & Validation
-**Objective**: Remove unused imports and validate compilation
-
-**Tasks**:
-- [ ] Remove imports that are no longer needed after function removal
-- [ ] Fix any compilation errors from removed dependencies
-- [ ] Run full test suite to ensure no breakage
-- [ ] Update any tests that depend on deprecated functions
-- [ ] Validate all packages compile successfully
-
-**Success Criteria**:
-- All packages compile without warnings
-- No unused imports remain
-- Full test suite passes
-- No compilation errors from missing dependencies
-
-### Sprint 4 - Documentation Update
-**Objective**: Update documentation to reflect deprecation removals
-
-**Tasks**:
-- [ ] Update API documentation to remove deprecated function references
-- [ ] Update README examples if they use deprecated functions
-- [ ] Create changelog entry documenting removed functions
-- [ ] Update migration notes for users upgrading to v2.0
-
-**Success Criteria**:
-- Documentation doesn't reference removed functions
-- Clear migration path documented for upgrading users
-- Changelog documents all breaking changes
-
-### ✅ Sprint 1 - Enhanced Mock IPFS Client Infrastructure
-**Objective**: Create complete mock IPFS client with full interface compatibility
-
-**Tasks**:
-- [x] Analyze existing PeerAwareIPFSClient interface requirements
-- [x] Create comprehensive MockIPFSClient with all required methods
-- [x] Implement peer simulation and network behavior mocking
-- [x] Add test controls for simulating various IPFS conditions
-- [x] Create adapter for compatibility with existing storage backends
-- [x] Add comprehensive test validation
+- [x] Add StreamingSplitter to blocks package with io.Reader processing
+- [x] Add StreamingAssembler to blocks package with real-time XOR and writing
+- [x] Create callback-based block processing for memory efficiency
+- [x] Implement progressive descriptor building
+- [x] Maintain backward compatibility with existing APIs
 
 **Success Criteria**: ✅ COMPLETED
-- MockIPFSClient implements all PeerAwareIPFSClient interface methods
-- Can simulate peer behavior and network conditions  
-- Integrates seamlessly with existing storage abstraction
-- Provides test controls for error simulation and latency
+- StreamingSplitter processes files with constant memory usage
+- StreamingAssembler handles incremental writing and out-of-order blocks
+- 3-tuple XOR operations work progressively
+- Descriptor building supports streaming workflow
 
-**Key Deliverables**:
-- **MockIPFSClient** (`mock_ipfs_client.go`): Comprehensive PeerAwareBackend implementation with full IPFS simulation
-- **NetworkSimulator** (`network_simulation.go`): Realistic P2P network behavior with DHT, gossip, and byzantine fault simulation
-- **ConditionSimulator** (`test_conditions.go`): 10 predefined test conditions and 4 test scenarios for comprehensive IPFS condition simulation
-- **MockBackendAdapter** (`adapter.go`): Compatibility layer with factory functions for unit/integration/e2e testing
-- **Comprehensive Tests** (`validation_test.go`): Full test suite validating all components with benchmarks
-
-### Sprint 2 - Test Environment Controls and Configuration
-**Objective**: Implement environment variable controls and test mode management
+### ✅ Sprint 2 - Streaming Client API
+**Objective**: Implement streaming client methods and integration
 
 **Tasks**:
-- [ ] Add environment variable controls for test modes (NOISEFS_TEST_MODE)
-- [ ] Create test configuration management system
-- [ ] Implement test backend registration and selection
-- [ ] Add test isolation and cleanup mechanisms
-- [ ] Create test environment setup utilities
-- [ ] Add test debugging and monitoring capabilities
+- [x] Add streaming upload/download methods to client
+- [x] Integrate streaming components with storage layer
+- [x] Add progress tracking and error handling for streaming operations
+- [x] Create streaming-aware descriptor management
+- [x] Implement streaming validation and testing
 
-**Success Criteria**:
-- Tests can run in isolated test mode without external dependencies
-- Environment variables control test behavior consistently
-- Test backends can be registered and selected dynamically
-- Test environments are properly isolated and cleaned up
+**Success Criteria**: ✅ COMPLETED
+- Client supports streaming uploads with constant memory usage
+- Streaming downloads work with real-time assembly
+- Progress tracking provides user feedback
+- Full integration with existing storage backends
+- Comprehensive test coverage for streaming operations
 
-### Sprint 3 - Comprehensive Test Data Generators
-**Objective**: Create test data generators and fixtures for comprehensive testing
-
-**Tasks**:
-- [ ] Create test data generators for blocks, files, and descriptors
-- [ ] Implement realistic test scenarios and fixtures
-- [ ] Add edge case and corner case test data
-- [ ] Create performance test data generators
-- [ ] Implement test data validation and verification
-- [ ] Add test data persistence and reuse capabilities
-
-**Success Criteria**:
-- Comprehensive test data generation for all scenarios
-- Edge cases and corner cases properly covered
-- Performance test data available for benchmarking
-- Test data validation ensures correctness
-
-### Sprint 4 - Mock Network and Peer Components
-**Objective**: Implement mock peer manager and network components
+### Sprint 3 - Cache Integration & Read-Ahead
+**Objective**: Optimize cache system for streaming workloads with intelligent prefetching
 
 **Tasks**:
-- [ ] Create MockPeerManager with realistic peer behavior
-- [ ] Implement network simulation and latency modeling
-- [ ] Add peer discovery and connection simulation
-- [ ] Create network partition and failure simulation
-- [ ] Implement gossip protocol mocking
-- [ ] Add network health monitoring simulation
+- [ ] **Streaming-Aware Access Pattern Detection**
+  - Extend SequentialAccessTracker with streaming-specific metrics (playback position, seek patterns, buffer health)
+  - Add streaming access pattern detection to AdaptiveCache ML engine
+  - Implement playback state tracking per file/stream
+  - Add bandwidth and latency monitoring for adaptive behavior
+
+- [ ] **Enhanced Predictive Block Fetching**
+  - Enhance EnhancedReadAheadWorker with streaming-aware prefetching
+  - Implement adaptive read-ahead distance based on network conditions
+  - Add prediction confidence scoring for streaming blocks
+  - Create background prefetching queue with priority ordering
+
+- [ ] **Streaming Cache Policy Optimization**
+  - Create StreamingCachePolicy that extends existing eviction strategies
+  - Modify tier promotion logic to favor blocks near playback position
+  - Implement streaming-aware LRU that considers playback buffer needs
+  - Add cache warming for upcoming streaming blocks
+
+- [ ] **Read-Ahead Buffer Management**
+  - Implement StreamingBufferManager for smooth playback
+  - Add configurable buffer size and health thresholds
+  - Create buffer underrun prevention with emergency prefetching
+  - Implement memory pressure handling and adaptive buffer sizing
+
+- [ ] **Randomizer Caching for Streaming**
+  - Create dedicated RandomizerCache for frequently used XOR blocks
+  - Pre-fetch randomizers for upcoming streaming blocks
+  - Implement randomizer popularity tracking and smart caching
+  - Add randomizer cache warming to reduce XOR operation latency
+
+- [ ] **Bandwidth-Aware QoS Controls**
+  - Add network bandwidth monitoring and estimation
+  - Implement adaptive throttling during network congestion
+  - Create QoS priority system (critical vs nice-to-have prefetching)
+  - Add graceful degradation when bandwidth is limited
 
 **Success Criteria**:
-- Complete peer network simulation for testing
-- Network conditions can be simulated and controlled
-- Peer behavior is realistic and configurable
-- Network failures and partitions can be tested
+- Read-ahead system reduces streaming latency through intelligent prefetching
+- Cache policies are optimized for sequential access patterns vs random access
+- Smooth streaming performance maintained even on variable bandwidth networks
+- Buffer management prevents playback interruption and memory exhaustion
+- Randomizer pre-caching reduces XOR operation delays during streaming
+- Existing cache functionality remains unaffected for non-streaming workloads
 
-### Sprint 5 - Integration and Validation
-**Objective**: Integrate all mock components and validate comprehensive test coverage
+**Integration Points**:
+- Work with existing AdaptiveCache and ML prediction engine
+- Integrate with storage manager and streaming backends
+- Support both memory and disk caching tiers
+- Maintain compatibility with existing Cache interface
+
+### Sprint 4 - Streaming Performance Validation
+**Objective**: Validate and optimize streaming cache performance
 
 **Tasks**:
-- [ ] Integrate all mock components into unified test framework
-- [ ] Create comprehensive test suite using mock infrastructure
-- [ ] Validate unit tests can run without external dependencies
-- [ ] Optimize test performance (target: under 10 seconds)
-- [ ] Add test coverage monitoring and reporting
-- [ ] Create documentation for mock infrastructure usage
+- [ ] **Performance Benchmarking**
+  - Create comprehensive benchmarks for streaming cache operations
+  - Measure read-ahead hit rates and prefetch accuracy  
+  - Benchmark randomizer cache performance and hit rates
+  - Test cache performance under various network conditions
+
+- [ ] **Streaming Integration Testing**
+  - Test streaming cache with real file streaming scenarios
+  - Validate buffer management prevents playback interruption
+  - Test adaptive behavior under bandwidth fluctuations
+  - Verify memory usage remains constant during streaming
+
+- [ ] **Cache Policy Validation** 
+  - Verify streaming-aware eviction preserves playback buffers
+  - Test tier promotion prioritizes streaming-relevant blocks
+  - Validate cache warming improves streaming startup time
+  - Ensure non-streaming workloads remain unaffected
+
+- [ ] **Documentation and Examples**
+  - Document streaming cache configuration options
+  - Create examples showing optimal cache settings for streaming
+  - Add troubleshooting guide for streaming performance issues
+  - Update API documentation with streaming-specific features
 
 **Success Criteria**:
-- All unit tests run without external dependencies
-- Test suite completes in under 10 seconds
-- Comprehensive test coverage for all core components
-- Documentation enables easy mock infrastructure usage
+- Streaming cache demonstrates measurable performance improvements
+- Read-ahead reduces streaming latency by 20%+ in benchmarks  
+- Buffer management prevents playback interruption in stress tests
+- Memory usage remains constant regardless of stream duration
+- Comprehensive documentation enables easy configuration and tuning
 
 ## Completed Major Milestones
 
