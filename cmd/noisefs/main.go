@@ -14,6 +14,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/workers"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
@@ -31,7 +32,7 @@ func main() {
 	var (
 		configFile = flag.String("config", "", "Configuration file path")
 		ipfsAPI    = flag.String("api", "", "IPFS API endpoint (overrides config)")
-		upload     = flag.String("upload", "", "File to upload to NoiseFS")
+		upload     = flag.String("upload", "", "File to upload to NoiseFS (uses parallel processing)")
 		download   = flag.String("download", "", "Descriptor CID to download from NoiseFS")
 		output     = flag.String("output", "", "Output file path for download")
 		stats      = flag.Bool("stats", false, "Show NoiseFS statistics")
@@ -39,6 +40,7 @@ func main() {
 		jsonOutput = flag.Bool("json", false, "Output results in JSON format")
 		blockSize  = flag.Int("block-size", 0, "Block size in bytes (overrides config)")
 		cacheSize  = flag.Int("cache-size", 0, "Number of blocks to cache in memory (overrides config)")
+		workers    = flag.Int("workers", 0, "Number of parallel workers for upload/download (overrides config)")
 		// Altruistic cache flags
 		minPersonalCacheMB    = flag.Int("min-personal-cache", 0, "Minimum personal cache size in MB (overrides config)")
 		disableAltruistic     = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
@@ -98,6 +100,9 @@ func main() {
 	}
 	if *altruisticBandwidthMB > 0 {
 		cfg.Cache.AltruisticBandwidthMB = *altruisticBandwidthMB
+	}
+	if *workers > 0 {
+		cfg.Performance.MaxConcurrentOps = *workers
 	}
 
 	// Create storage backend (IPFS with abstraction layer)
@@ -194,7 +199,7 @@ func main() {
 			"file":       *upload,
 			"block_size": cfg.Performance.BlockSize,
 		})
-		if err := uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, logger); err != nil {
+		if err := uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger); err != nil {
 			logger.Error("Upload failed", map[string]interface{}{
 				"file":  *upload,
 				"error": err.Error(),
@@ -257,7 +262,10 @@ func loadConfig(configPath string) (*config.Config, error) {
 	return config.LoadConfig(configPath)
 }
 
-func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, logger *logging.Logger) error {
+func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+	// Track overall upload time
+	uploadStartTime := time.Now()
+	
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -324,30 +332,75 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		randomizer2CIDs[i] = cid2
 	}
 
-	// XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
-	anonymizedBlocks := make([]*blocks.Block, len(fileBlocks))
-	for i := range fileBlocks {
-		xorBlock, err := fileBlocks[i].XOR(randomizer1Blocks[i], randomizer2Blocks[i])
-		if err != nil {
-			return fmt.Errorf("failed to XOR blocks: %w", err)
-		}
-		anonymizedBlocks[i] = xorBlock
+	// Start performance timing
+	xorStartTime := time.Now()
+
+	// Create worker pool for parallel processing
+	workerCount := cfg.Performance.MaxConcurrentOps
+	if workerCount <= 0 {
+		workerCount = 10 // Default to 10 workers
+	}
+	pool := workers.NewPool(workers.Config{
+		WorkerCount: workerCount,
+		BufferSize:  workerCount * 2,
+		ShutdownTimeout: 30 * time.Second,
+	})
+	defer pool.Shutdown()
+	
+	// Start the worker pool
+	if err := pool.Start(); err != nil {
+		return fmt.Errorf("failed to start worker pool: %w", err)
 	}
 
-	// Store anonymized blocks in IPFS with caching
+	// Create block operation batch processor
+	blockOps := workers.NewBlockOperationBatch(pool)
+
+	// Parallel XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
+	logger.Info("Performing parallel XOR operations", map[string]interface{}{
+		"block_count": len(fileBlocks),
+		"worker_count": workerCount,
+	})
+
+	anonymizedBlocks, err := blockOps.ParallelXOR(context.Background(), fileBlocks, randomizer1Blocks, randomizer2Blocks)
+	if err != nil {
+		return fmt.Errorf("failed to perform parallel XOR: %w", err)
+	}
+
+	xorDuration := time.Since(xorStartTime)
+	logger.Info("XOR operations completed", map[string]interface{}{
+		"duration_ms": xorDuration.Milliseconds(),
+		"blocks_per_second": float64(len(fileBlocks)) / xorDuration.Seconds(),
+	})
+
+	// Store anonymized blocks in IPFS with caching (parallel)
+	storageStartTime := time.Now()
+
 	var uploadProgress *util.ProgressBar
 	if !quiet {
 		uploadProgress = util.NewProgressBar(int64(len(anonymizedBlocks)), "Uploading blocks", os.Stdout)
 	}
 
-	dataCIDs := make([]string, len(anonymizedBlocks))
-	for i, block := range anonymizedBlocks {
-		cid, err := client.StoreBlockWithCache(block)
-		if err != nil {
-			return fmt.Errorf("failed to store data block %d: %w", i, err)
-		}
-		dataCIDs[i] = cid
-		if uploadProgress != nil {
+	// Progress will be updated manually after parallel storage completes
+
+	logger.Info("Storing blocks in parallel", map[string]interface{}{
+		"block_count": len(anonymizedBlocks),
+		"worker_count": workerCount,
+	})
+
+	dataCIDs, err := blockOps.ParallelStorage(context.Background(), anonymizedBlocks, client)
+	if err != nil {
+		return fmt.Errorf("failed to perform parallel storage: %w", err)
+	}
+
+	storageDuration := time.Since(storageStartTime)
+	logger.Info("Storage operations completed", map[string]interface{}{
+		"duration_ms": storageDuration.Milliseconds(),
+		"blocks_per_second": float64(len(anonymizedBlocks)) / storageDuration.Seconds(),
+	})
+	
+	// Complete the progress bar
+	if uploadProgress != nil {
+		for i := 0; i < len(anonymizedBlocks); i++ {
 			uploadProgress.Add(1)
 		}
 	}
@@ -374,12 +427,19 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		return fmt.Errorf("failed to store descriptor: %w", err)
 	}
 
-	// Log upload completion
+	// Calculate total upload time
+	totalUploadDuration := time.Since(uploadStartTime)
+	
+	// Log upload completion with performance metrics
 	logger.Info("Upload completed successfully", map[string]interface{}{
 		"descriptor_cid": descriptorCID,
 		"file_name":      filepath.Base(filePath),
 		"file_size":      fileInfo.Size(),
 		"block_count":    len(fileBlocks),
+		"total_duration_ms": totalUploadDuration.Milliseconds(),
+		"throughput_mb_per_s": float64(fileInfo.Size()) / (1024 * 1024) / totalUploadDuration.Seconds(),
+		"xor_duration_ms": xorDuration.Milliseconds(),
+		"storage_duration_ms": storageDuration.Milliseconds(),
 	})
 
 	// Display results for user
@@ -397,6 +457,15 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	} else {
 		fmt.Println("\nUpload complete!")
 		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+			float64(fileInfo.Size())/(1024*1024)/totalUploadDuration.Seconds(),
+			totalUploadDuration.Seconds())
+		fmt.Printf("  - XOR operations: %.2fs (%d blocks/s)\n", 
+			xorDuration.Seconds(), 
+			int(float64(len(fileBlocks))/xorDuration.Seconds()))
+		fmt.Printf("  - Storage operations: %.2fs (%d blocks/s)\n", 
+			storageDuration.Seconds(),
+			int(float64(len(anonymizedBlocks))/storageDuration.Seconds()))
 	}
 
 	// Record upload metrics
