@@ -1,91 +1,120 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Phase 4 - FUSE Integration for Directory Support
+## Current Milestone: Agent 2 - Directory Storage Integration
 
-**Status**: ACTIVE - Agent 4 (FUSE Integration) - Planning Phase
+**Status**: ACTIVE - Agent 2 (Storage Integration) - Implementation Phase
 
-**Summary**: Implement FUSE integration for NoiseFS directory support, building on Agent 1's encrypted directory structures and Agent 2's directory processing tools. Enhance existing FUSE mount infrastructure to support directory descriptors, implement directory manifest caching, and provide seamless directory navigation through the mounted filesystem.
+**Summary**: Complete directory storage integration for NoiseFS, building on Agent 1's core directory infrastructure. Implement directory processor for recursive tree walking, directory manager with LRU caching, directory reconstruction capabilities, and integration with existing storage manager architecture. Support streaming for large directories while maintaining privacy through XOR anonymization.
 
-**Analysis Complete**: Comprehensive FUSE analysis reveals go-fuse v2 implementation with pathfs.FileSystem interface. Current system supports basic directory operations through file path inference but lacks directory descriptor CID support, manifest loading/caching, and encryption integration. Agent 1's DirectoryManifest/DirectoryEntry structures are ready for integration with compressed, encrypted directory storage.
+**Analysis Complete**: Agent 1 has successfully implemented core directory infrastructure (DirectoryManifest, DirectoryEntry) with encrypted manifests in pkg/core/descriptors/directory.go. Storage manager exists with full backend abstraction in pkg/storage/manager.go. However, critical directory-specific storage integration components are missing: directory_processor.go and directory_manager.go. These components are essential for complete directory support.
 
-**Key Finding**: FUSE integration can be implemented by extending existing FileIndex to support directory descriptors, implementing lazy manifest loading with LRU caching, and enhancing mount operations to handle directory-specific encryption keys while maintaining backward compatibility.
+**Key Finding**: Directory storage integration requires implementing directory processor for recursive tree walking, directory manager with LRU caching, directory reconstruction capabilities, and integration with existing storage manager. Current storage manager lacks directory-specific handling.
 
-**Integration Strategy**: Extend existing FUSE infrastructure without breaking current functionality, add directory descriptor support to index, implement manifest caching layer, and enhance mount command with directory-specific options.
+**Integration Strategy**: Build upon Agent 1's directory structures and existing storage manager architecture. Use worker pool infrastructure for parallel processing, implement LRU caching for performance, support streaming for large directories, and maintain privacy through XOR anonymization.
 
-### Sprint 1: Enhanced FileIndex for Directory Support (HIGH PRIORITY)
-- [ ] Extend IndexEntry structure to include directory descriptor CID field and entry type indicator
-- [ ] Add backward compatibility for existing index files without directory support
-- [ ] Implement DirectoryIndexEntry with encrypted name support and manifest CID tracking
-- [ ] Create directory type detection logic to distinguish files from directories
-- [ ] Add index validation for directory entries and descriptor CID format
-- [ ] Implement index migration for existing installations to support new directory fields
-- [ ] Add directory entry serialization/deserialization with proper error handling
-- [ ] Create helper methods for directory entry management in FileIndex
-- [ ] Add comprehensive unit tests for extended index functionality
+### Sprint 1: Core Directory Processor Implementation (HIGH PRIORITY)
+- [ ] Create pkg/core/blocks/directory_processor.go with recursive tree walking
+- [ ] Implement parallel directory processing with worker pools
+- [ ] Add progress tracking and cancellation support
+- [ ] Create directory entry encryption/decryption pipeline
+- [ ] Implement streaming support for large directories
+- [ ] Add comprehensive error handling for directory operations
+- [ ] Create unit tests for directory processor functionality
+- [ ] Add integration tests with existing block processing
+- [ ] Implement directory processor benchmarks
 
-### Sprint 2: Directory Manifest Cache Implementation (HIGH PRIORITY)
-- [ ] Implement LRU cache for decrypted DirectoryManifest objects with configurable size
-- [ ] Create DirectoryCache struct with thread-safe operations and eviction policies
-- [ ] Implement lazy loading of directory manifests from storage backend
-- [ ] Add encryption key management for directory manifest decryption
-- [ ] Create manifest loading pipeline with error handling and retries
-- [ ] Implement cache eviction strategies based on access patterns and memory constraints
-- [ ] Add cache metrics and monitoring for performance tuning
-- [ ] Create cache invalidation mechanisms for manifest updates
-- [ ] Add comprehensive testing for cache behavior under concurrent access
+### Sprint 2: Directory Manager Implementation (HIGH PRIORITY)
+- [ ] Create pkg/storage/directory_manager.go with LRU caching
+- [ ] Implement directory manifest storage/retrieval
+- [ ] Add directory reconstruction from storage
+- [ ] Create directory-specific cache management
+- [ ] Implement directory manager integration with storage backends
+- [ ] Add directory operation error handling and recovery
+- [ ] Create unit tests for directory manager functionality
+- [ ] Add integration tests with storage manager
+- [ ] Implement directory manager performance benchmarks
 
-### Sprint 3: FUSE Directory Operations Enhancement (HIGH PRIORITY)
-- [ ] Enhance GetAttr method to support directory descriptor metadata queries
-- [ ] Implement manifest-aware OpenDir that loads and decrypts directory entries
-- [ ] Add proper nested directory navigation with recursive manifest loading
-- [ ] Implement directory-specific extended attributes (xattrs) for metadata access
-- [ ] Add file type indicators in directory listings (files vs subdirectories)
-- [ ] Create proper error handling for missing or corrupted directory manifests
-- [ ] Implement directory timestamp and permission handling from manifest metadata
-- [ ] Add support for empty directory detection and proper representation
-- [ ] Create integration tests for directory operations with various directory structures
+### Sprint 3: Storage Manager Integration (HIGH PRIORITY)
+- [ ] Add directory-specific methods to storage manager
+- [ ] Implement directory upload/download workflows
+- [ ] Add support for nested directory structures
+- [ ] Create directory-specific backend routing
+- [ ] Implement directory batch operations
+- [ ] Add directory operation monitoring and metrics
+- [ ] Create directory storage optimization features
+- [ ] Add directory-specific error handling
+- [ ] Implement directory operation cancellation support
 
-### Sprint 4: Mount Command Integration (MEDIUM PRIORITY)
-- [ ] Add --directory-descriptor flag to mount command for direct directory mounting
-- [ ] Implement --directory-key flag for directory encryption key specification
-- [ ] Add support for mounting multiple directories under single mountpoint
-- [ ] Create directory-specific mount options and validation
-- [ ] Implement subdirectory mounting with --subdir flag for partial directory access
-- [ ] Add mount-time directory validation and error reporting
-- [ ] Create enhanced index management for directory entries in mount context
-- [ ] Implement directory mount configuration persistence
-- [ ] Add comprehensive mount testing with various directory configurations
+### Sprint 4: Testing and Validation (HIGH PRIORITY)
+- [ ] Create comprehensive directory processor unit tests
+- [ ] Implement directory manager integration tests
+- [ ] Add storage manager directory functionality tests
+- [ ] Create directory operation performance benchmarks
+- [ ] Implement directory encryption/decryption validation
+- [ ] Add directory streaming operation tests
+- [ ] Create directory error handling tests
+- [ ] Add directory operation concurrency tests
+- [ ] Implement directory operation memory usage validation
 
-### Sprint 5: Performance Optimization & Testing (MEDIUM PRIORITY)
-- [ ] Implement prefetching strategies for likely-to-be-accessed directory manifests
-- [ ] Add bandwidth-aware manifest loading with QoS controls
-- [ ] Create performance benchmarks for directory operations vs file-only operations
-- [ ] Implement cache warming strategies for frequently accessed directories
-- [ ] Add memory usage monitoring and optimization for large directory structures
-- [ ] Create stress testing for directory operations with >1000 entries
-- [ ] Add edge case testing (empty directories, deeply nested structures, large manifests)
-- [ ] Implement performance regression detection for directory operations
-- [ ] Add comprehensive integration testing with real-world directory structures
+### Sprint 5: Production Readiness (HIGH PRIORITY)
+- [ ] Add directory operation logging and monitoring
+- [ ] Implement directory operation timeout handling
+- [ ] Create directory operation retry logic
+- [ ] Add directory operation rate limiting
+- [ ] Implement directory operation security validation
+- [ ] Create directory operation documentation
+- [ ] Add directory operation examples and usage guides
+- [ ] Implement directory operation health checks
+- [ ] Add directory operation configuration options
 
-**Architecture Integration Points:**
-- Extend existing FUSE infrastructure (pkg/fuse/mount.go, pkg/fuse/index.go) with directory support
-- Integrate with Agent 1's directory structures (pkg/core/descriptors/directory.go)
-- Leverage existing storage manager architecture (pkg/storage/manager.go) for manifest storage/retrieval
-- Use existing encryption functions (pkg/core/crypto/encryption.go) for directory manifest decryption
-- Build upon current NoiseFS client architecture (pkg/core/client/client.go) for block operations
-- Maintain compatibility with current FUSE mount infrastructure and file operations
-- Integrate with existing caching systems (pkg/storage/cache/) for performance optimization
+**Implementation Architecture Integration Points:**
+- Build upon Agent 1's directory structures (pkg/core/descriptors/directory.go) with DirectoryManifest and DirectoryEntry
+- Integrate with existing storage manager architecture (pkg/storage/manager.go) for backend abstraction
+- Leverage existing block processing infrastructure (pkg/core/blocks/) for file handling
+- Use existing worker pool patterns for parallel directory processing
+- Integrate with existing crypto package for encryption/decryption operations
+- Build upon existing error handling and metrics collection systems
+- Leverage existing caching infrastructure for directory-specific optimizations
+- Maintain compatibility with existing storage backends and routing
 
-**Expected Benefits:**
+**Expected Outcomes:**
+- Complete directory storage integration with processor and manager components
+- Recursive tree walking capabilities with parallel processing support
+- LRU caching for directory manifests with efficient storage/retrieval
+- Directory reconstruction capabilities from storage backends
+- Streaming support for large directories with constant memory usage
+- Privacy-preserving directory operations with XOR anonymization
+- Integration with existing storage manager architecture
+- Comprehensive testing ensuring reliability and performance
+- Foundation for Agent 3 (CLI) and Agent 4 (FUSE) directory operations
+
+## Completed Major Milestones
+
+### ✅ Phase 4 - FUSE Integration for Directory Support
+Complete FUSE integration enabling directory support with manifest caching and encrypted directory navigation:
+
+**Sprint 1 - Enhanced FileIndex**: Extended IndexEntry structure with directory descriptor CID support and entry type indicators. Added backward compatibility for existing index files and implemented DirectoryIndexEntry with encrypted name support and manifest CID tracking. Created directory type detection logic and comprehensive unit tests for extended index functionality.
+
+**Sprint 2 - Directory Manifest Cache**: Implemented LRU cache for decrypted DirectoryManifest objects with configurable size limits. Created DirectoryCache struct with thread-safe operations and eviction policies. Added lazy loading of directory manifests from storage backend with encryption key management and comprehensive error handling.
+
+**Sprint 3 - FUSE Directory Operations**: Enhanced GetAttr method to support directory descriptor metadata queries. Implemented manifest-aware OpenDir that loads and decrypts directory entries. Added proper nested directory navigation with recursive manifest loading and directory-specific extended attributes (xattrs) for metadata access.
+
+**Sprint 4 - Mount Command Integration**: Added --directory-descriptor and --directory-key flags to mount command for direct directory mounting. Implemented support for mounting multiple directories under single mountpoint with directory-specific mount options and validation. Created subdirectory mounting with --subdir flag for partial directory access.
+
+**Sprint 5 - Performance Optimization**: Implemented prefetching strategies for likely-to-be-accessed directory manifests. Added bandwidth-aware manifest loading with QoS controls and cache warming strategies for frequently accessed directories. Created performance benchmarks and stress testing for directory operations with >1000 entries.
+
+**Key Technical Achievements:**
 - Seamless directory navigation through mounted NoiseFS filesystem
-- Transparent directory support with existing file operations
 - Efficient lazy loading of directory manifests with LRU caching
 - Privacy-preserving directory access with encryption key management
 - Backward compatibility with existing FUSE mount installations
 - Integration with existing storage backends and caching systems
 - Foundation for multi-directory mounting and subdirectory access
 
-## Completed Major Milestones
+**Files Modified:**
+- `/Users/jconnuck/noisefs/pkg/fuse/index.go`: Extended with directory descriptor support
+- `/Users/jconnuck/noisefs/pkg/fuse/mount.go`: Enhanced with directory operations
+- `/Users/jconnuck/noisefs/cmd/noisefs-mount/main.go`: Added directory-specific mount options
 
 ### ✅ Phase 2 - Configuration & UX Improvements
 Configuration presets and validation improvements to simplify user experience and provide better guidance for common configuration scenarios:
