@@ -537,7 +537,7 @@ func (c *Client) RecordDownload() {
 }
 
 // GetAdaptiveCacheStats returns adaptive cache statistics if enabled
-func (c *Client) GetAdaptiveCacheStats() *cache.AdaptiveCacheStats {
+func (c *Client) GetAdaptiveCacheStats() *cache.AdaptiveCacheStatsSnapshot {
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
 		return c.adaptiveCache.GetAdaptiveStats()
 	}
