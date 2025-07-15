@@ -615,22 +615,29 @@ func (c *Config) applyEnvironmentOverrides() {
 	}
 }
 
-// Validate validates the configuration
+// Validate validates the configuration and provides helpful suggestions
 func (c *Config) Validate() error {
 	// Validate IPFS configuration
 	if c.IPFS.APIEndpoint == "" {
-		return fmt.Errorf("IPFS API endpoint cannot be empty")
+		return fmt.Errorf("IPFS API endpoint cannot be empty. Set it to '127.0.0.1:5001' for local IPFS node or use a preset: 'quickstart', 'security', or 'performance'")
 	}
 	if c.IPFS.Timeout <= 0 {
-		return fmt.Errorf("IPFS timeout must be positive")
+		return fmt.Errorf("IPFS timeout must be positive (current: %d). Try setting it to 30 seconds for normal use, 60 seconds for Tor connections, or 15 seconds for performance optimization", c.IPFS.Timeout)
+	}
+	if c.IPFS.Timeout > 300 {
+		return fmt.Errorf("IPFS timeout is very high (%d seconds). Consider using a shorter timeout (15-60 seconds) to improve responsiveness", c.IPFS.Timeout)
 	}
 
 	// Validate cache configuration
 	if c.Cache.BlockCacheSize <= 0 {
-		return fmt.Errorf("block cache size must be positive")
+		return fmt.Errorf("block cache size must be positive (current: %d). Recommended values: 500 for quick start, 1000 for normal use, 2000+ for security/performance", c.Cache.BlockCacheSize)
 	}
 	if c.Cache.MemoryLimit <= 0 {
-		return fmt.Errorf("memory limit must be positive")
+		return fmt.Errorf("memory limit must be positive (current: %d MB). Recommended values: 256MB for quick start, 512MB for normal use, 1024MB+ for performance", c.Cache.MemoryLimit)
+	}
+	if c.Cache.MinPersonalCacheMB > c.Cache.MemoryLimit {
+		return fmt.Errorf("personal cache minimum (%d MB) cannot exceed total memory limit (%d MB). Set personal cache to at most %d MB", 
+			c.Cache.MinPersonalCacheMB, c.Cache.MemoryLimit, c.Cache.MemoryLimit/2)
 	}
 
 	// Validate logging configuration
@@ -638,41 +645,62 @@ func (c *Config) Validate() error {
 		"debug": true, "info": true, "warn": true, "error": true,
 	}
 	if !validLevels[c.Logging.Level] {
-		return fmt.Errorf("invalid log level: %s", c.Logging.Level)
+		return fmt.Errorf("invalid log level '%s'. Valid options: debug, info, warn, error. Use 'info' for normal operation, 'warn' for minimal output, or 'debug' for troubleshooting", c.Logging.Level)
 	}
 
 	validFormats := map[string]bool{
 		"text": true, "json": true,
 	}
 	if !validFormats[c.Logging.Format] {
-		return fmt.Errorf("invalid log format: %s", c.Logging.Format)
+		return fmt.Errorf("invalid log format '%s'. Valid options: text, json. Use 'text' for human-readable logs or 'json' for automated processing", c.Logging.Format)
 	}
 
 	validOutputs := map[string]bool{
 		"console": true, "file": true, "both": true,
 	}
 	if !validOutputs[c.Logging.Output] {
-		return fmt.Errorf("invalid log output: %s", c.Logging.Output)
+		return fmt.Errorf("invalid log output '%s'. Valid options: console, file, both. Use 'console' for development, 'file' for production, or 'both' for comprehensive logging", c.Logging.Output)
+	}
+	
+	// Check if file output is configured properly
+	if (c.Logging.Output == "file" || c.Logging.Output == "both") && c.Logging.File == "" {
+		return fmt.Errorf("log file path is required when output is set to '%s'. Set logging.file to a valid file path like '/var/log/noisefs.log'", c.Logging.Output)
 	}
 
 	// Validate performance configuration
 	if c.Performance.BlockSize <= 0 {
-		return fmt.Errorf("block size must be positive")
+		return fmt.Errorf("block size must be positive (current: %d). Use the default block size or a power of 2 value (e.g., 32768, 65536, 131072)", c.Performance.BlockSize)
+	}
+	if c.Performance.BlockSize < 1024 {
+		return fmt.Errorf("block size is very small (%d bytes), which may impact performance. Consider using at least 32KB for better efficiency", c.Performance.BlockSize)
 	}
 	if c.Performance.MaxConcurrentOps <= 0 {
-		return fmt.Errorf("max concurrent operations must be positive")
+		return fmt.Errorf("max concurrent operations must be positive (current: %d). Recommended values: 5 for stability, 10 for normal use, 50+ for high performance", c.Performance.MaxConcurrentOps)
+	}
+	if c.Performance.MaxConcurrentOps > 100 {
+		return fmt.Errorf("max concurrent operations is very high (%d), which may overwhelm system resources. Consider using 10-50 for most use cases", c.Performance.MaxConcurrentOps)
 	}
 
 	// Validate WebUI configuration
 	if c.WebUI.Host == "" {
-		return fmt.Errorf("WebUI host cannot be empty")
+		return fmt.Errorf("WebUI host cannot be empty. Use 'localhost' for local access only, '127.0.0.1' for strict localhost, or '0.0.0.0' for external access (not recommended)")
 	}
 	if c.WebUI.Port <= 0 || c.WebUI.Port > 65535 {
-		return fmt.Errorf("WebUI port must be between 1 and 65535")
+		return fmt.Errorf("WebUI port must be between 1 and 65535 (current: %d). Recommended ports: 8443 (default), 8080, or 3000", c.WebUI.Port)
+	}
+	if c.WebUI.Port < 1024 && c.WebUI.Port != 80 && c.WebUI.Port != 443 {
+		return fmt.Errorf("WebUI port %d is a privileged port. Use ports above 1024 (e.g., 8443, 8080) or run as administrator", c.WebUI.Port)
 	}
 	if c.WebUI.TLSEnabled && !c.WebUI.TLSAutoGen {
 		if c.WebUI.TLSCertFile == "" || c.WebUI.TLSKeyFile == "" {
-			return fmt.Errorf("TLS cert and key files required when TLS enabled and auto-generation disabled")
+			return fmt.Errorf("TLS cert and key files required when TLS enabled and auto-generation disabled. Provide valid paths or set tls_auto_gen to true")
+		}
+		// Check if files exist
+		if _, err := os.Stat(c.WebUI.TLSCertFile); os.IsNotExist(err) {
+			return fmt.Errorf("TLS certificate file does not exist: %s. Generate certificates or enable auto-generation", c.WebUI.TLSCertFile)
+		}
+		if _, err := os.Stat(c.WebUI.TLSKeyFile); os.IsNotExist(err) {
+			return fmt.Errorf("TLS key file does not exist: %s. Generate certificates or enable auto-generation", c.WebUI.TLSKeyFile)
 		}
 	}
 	
@@ -682,12 +710,20 @@ func (c *Config) Validate() error {
 			"1.0": true, "1.1": true, "1.2": true, "1.3": true,
 		}
 		if !validTLSVersions[c.WebUI.TLSMinVersion] {
-			return fmt.Errorf("invalid TLS minimum version: %s", c.WebUI.TLSMinVersion)
+			return fmt.Errorf("invalid TLS minimum version '%s'. Valid options: 1.2, 1.3. Use '1.2' for compatibility or '1.3' for maximum security", c.WebUI.TLSMinVersion)
 		}
 		// Warn about insecure TLS versions
 		if c.WebUI.TLSMinVersion == "1.0" || c.WebUI.TLSMinVersion == "1.1" {
-			return fmt.Errorf("TLS versions 1.0 and 1.1 are insecure and not allowed")
+			return fmt.Errorf("TLS versions 1.0 and 1.1 are insecure and not allowed. Use TLS 1.2 or 1.3 for security")
 		}
+	} else {
+		// Warning for disabled TLS, but don't make it an error to allow QuickStart preset
+		fmt.Fprintf(os.Stderr, "[SECURITY WARNING] TLS is disabled for WebUI, which is insecure. Enable TLS by setting tls_enabled to true or use the 'security' preset\n")
+	}
+	
+	// Validate host security
+	if c.WebUI.Host != "localhost" && c.WebUI.Host != "127.0.0.1" && !c.WebUI.TLSEnabled {
+		return fmt.Errorf("WebUI is accessible from external hosts (%s) without TLS encryption. Enable TLS or restrict host to 'localhost' for security", c.WebUI.Host)
 	}
 	
 	// Validate security configuration
@@ -726,33 +762,68 @@ func GetDefaultConfigPath() (string, error) {
 	return filepath.Join(homeDir, ".noisefs", "config.json"), nil
 }
 
-// ValidateSecuritySettings performs comprehensive security validation
+// ValidateSecuritySettings performs comprehensive security validation with helpful guidance
 func (c *Config) ValidateSecuritySettings() error {
-	// If encryption is disabled, warn about all the implications
+	// If encryption is disabled, provide clear guidance
 	if !c.Security.EnableEncryption {
-		// This is a critical security issue - should we allow it at all?
 		if c.Security.RequirePassword {
-			return fmt.Errorf("cannot require password when encryption is disabled")
+			return fmt.Errorf("cannot require password when encryption is disabled. Either enable encryption or disable password requirement. Use 'security' preset for maximum protection")
 		}
 		if c.Security.EncryptDescriptors || c.Security.EncryptLocalIndex {
-			return fmt.Errorf("cannot encrypt descriptors or index when encryption is disabled")
+			return fmt.Errorf("cannot encrypt descriptors or index when encryption is disabled. Enable master encryption (enable_encryption: true) or disable specific encryption features")
 		}
+		// Warn user about security implications
+		return fmt.Errorf("CRITICAL SECURITY WARNING: Encryption is completely disabled. All data will be stored in plaintext. Use 'security' or 'quickstart' preset for secure operation")
 	}
 	
-	// If password is required, ensure password prompting is enabled
+	// Validate password configuration
 	if c.Security.RequirePassword && !c.Security.PasswordPrompt {
-		// This might be okay if password is provided via environment or API
-		// But we should warn about it
+		return fmt.Errorf("password is required but prompting is disabled. Enable password_prompt or provide password via environment variable NOISEFS_PASSWORD")
+	}
+	
+	// Provide security best practice guidance
+	if !c.Security.RequirePassword && c.Security.EnableEncryption {
+		// This is a warning, not an error - encryption without password is still valid
+		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Password protection is disabled. Consider enabling require_password for better security\n")
+	}
+	
+	if !c.Security.EncryptLocalIndex && c.Security.EnableEncryption {
+		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Local index is not encrypted. Enable encrypt_local_index to protect file metadata\n")
+	}
+	
+	if !c.Security.SecureMemory && c.Security.EnableEncryption {
+		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Secure memory is disabled. Enable secure_memory to prevent sensitive data from being swapped to disk\n")
 	}
 	
 	// Validate Tor configuration if enabled
 	if c.Tor.Enabled {
 		if c.Tor.UploadJitterMin < 0 || c.Tor.UploadJitterMax < 0 {
-			return fmt.Errorf("Tor jitter values must be non-negative")
+			return fmt.Errorf("Tor jitter values must be non-negative (upload_jitter_min: %d, upload_jitter_max: %d). Use positive values like 1-5 seconds for basic anonymity", 
+				c.Tor.UploadJitterMin, c.Tor.UploadJitterMax)
 		}
 		if c.Tor.UploadJitterMin > c.Tor.UploadJitterMax {
-			return fmt.Errorf("Tor upload jitter min must be <= max")
+			return fmt.Errorf("Tor upload jitter min (%d) must be <= max (%d). Try setting min to 1 and max to 5 for basic timing obfuscation", 
+				c.Tor.UploadJitterMin, c.Tor.UploadJitterMax)
 		}
+		if c.Tor.UploadJitterMax > 60 {
+			return fmt.Errorf("Tor upload jitter max is very high (%d seconds), which may impact usability. Consider using 5-15 seconds for good anonymity without excessive delays", 
+				c.Tor.UploadJitterMax)
+		}
+		
+		// Check Tor proxy accessibility
+		if c.Tor.SOCKSProxy == "" {
+			return fmt.Errorf("Tor is enabled but SOCKS proxy is not configured. Set socks_proxy to '127.0.0.1:9050' for standard Tor setup")
+		}
+		
+		// Provide Tor usage guidance
+		if !c.Tor.UploadEnabled && !c.Tor.DownloadEnabled {
+			fmt.Fprintf(os.Stderr, "[SECURITY WARNING] Tor is enabled but both uploads and downloads are disabled. Enable upload_enabled for anonymity or disable Tor entirely\n")
+		}
+	}
+	
+	// Check for security/performance trade-offs
+	if c.Security.AntiForensics && (c.Performance.ReadAhead || c.Performance.WriteBack) {
+		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Anti-forensics is enabled with performance optimizations. This may reduce anti-forensic effectiveness\n")
 	}
 	
 	return nil
