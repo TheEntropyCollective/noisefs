@@ -47,6 +47,11 @@ func main() {
 		minPersonalCacheMB    = flag.Int("min-personal-cache", 0, "Minimum personal cache size in MB (overrides config)")
 		disableAltruistic     = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
 		altruisticBandwidthMB = flag.Int("altruistic-bandwidth", 0, "Bandwidth limit for altruistic operations in MB/s")
+		// Streaming flags
+		streaming            = flag.Bool("streaming", false, "Use streaming mode for upload/download with bounded memory")
+		memoryLimitMB        = flag.Int("memory-limit", 0, "Memory limit for streaming operations in MB (overrides config)")
+		streamBufferSize     = flag.Int("stream-buffer", 0, "Buffer size for streaming pipeline (overrides config)")
+		enableMemMonitoring  = flag.Bool("monitor-memory", false, "Enable memory monitoring during streaming operations")
 	)
 
 	// Check for subcommands first
@@ -105,6 +110,16 @@ func main() {
 	}
 	if *workers > 0 {
 		cfg.Performance.MaxConcurrentOps = *workers
+	}
+	// Apply streaming overrides
+	if *memoryLimitMB > 0 {
+		cfg.Performance.MemoryLimit = *memoryLimitMB
+	}
+	if *streamBufferSize > 0 {
+		cfg.Performance.StreamBufferSize = *streamBufferSize
+	}
+	if *enableMemMonitoring {
+		cfg.Performance.EnableMemoryMonitoring = true
 	}
 
 	// Create storage backend (IPFS with abstraction layer)
@@ -200,8 +215,15 @@ func main() {
 		logger.Info("Starting file upload", map[string]interface{}{
 			"file":       *upload,
 			"block_size": cfg.Performance.BlockSize,
+			"streaming":  *streaming,
 		})
-		if err := uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger); err != nil {
+		var err error
+		if *streaming {
+			err = streamingUploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
+		} else {
+			err = uploadFile(storageManager, client, *upload, cfg.Performance.BlockSize, *quiet, *jsonOutput, cfg, logger)
+		}
+		if err != nil {
 			logger.Error("Upload failed", map[string]interface{}{
 				"file":  *upload,
 				"error": err.Error(),
@@ -228,8 +250,15 @@ func main() {
 		logger.Info("Starting file download", map[string]interface{}{
 			"descriptor_cid": *download,
 			"output_file":    *output,
+			"streaming":      *streaming,
 		})
-		if err := downloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, logger); err != nil {
+		var err error
+		if *streaming {
+			err = streamingDownloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
+		} else {
+			err = downloadFile(storageManager, client, *download, *output, *quiet, *jsonOutput, logger)
+		}
+		if err != nil {
 			logger.Error("Download failed", map[string]interface{}{
 				"descriptor_cid": *download,
 				"output_file":    *output,

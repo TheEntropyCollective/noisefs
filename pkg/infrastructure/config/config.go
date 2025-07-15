@@ -73,10 +73,13 @@ type LoggingConfig struct {
 
 // PerformanceConfig holds performance-related configuration
 type PerformanceConfig struct {
-	BlockSize        int  `json:"block_size"`
-	ReadAhead        bool `json:"read_ahead"`
-	WriteBack        bool `json:"write_back"`
-	MaxConcurrentOps int  `json:"max_concurrent_ops"`
+	BlockSize              int  `json:"block_size"`
+	ReadAhead              bool `json:"read_ahead"`
+	WriteBack              bool `json:"write_back"`
+	MaxConcurrentOps       int  `json:"max_concurrent_ops"`
+	MemoryLimit            int  `json:"memory_limit_mb"`           // Memory limit for streaming operations in MB
+	StreamBufferSize       int  `json:"stream_buffer_size"`        // Buffer size for streaming pipeline
+	EnableMemoryMonitoring bool `json:"enable_memory_monitoring"`  // Enable memory usage monitoring
 }
 
 // WebUIConfig holds web UI server configuration
@@ -177,10 +180,13 @@ func DefaultConfig() *Config {
 			File:   "",
 		},
 		Performance: PerformanceConfig{
-			BlockSize:        blocks.DefaultBlockSize,
-			ReadAhead:        false,
-			WriteBack:        false,
-			MaxConcurrentOps: 10,
+			BlockSize:              blocks.DefaultBlockSize,
+			ReadAhead:              false,
+			WriteBack:              false,
+			MaxConcurrentOps:       10,
+			MemoryLimit:            512,  // 512MB default for streaming
+			StreamBufferSize:       10,   // Default buffer size
+			EnableMemoryMonitoring: false, // Disabled by default
 		},
 		WebUI: WebUIConfig{
 			Host:         "localhost",
@@ -248,10 +254,13 @@ func QuickStartConfig() *Config {
 			File:   "",
 		},
 		Performance: PerformanceConfig{
-			BlockSize:        blocks.DefaultBlockSize,
-			ReadAhead:        false,
-			WriteBack:        false,
-			MaxConcurrentOps: 5, // Conservative for stability
+			BlockSize:              blocks.DefaultBlockSize,
+			ReadAhead:              false,
+			WriteBack:              false,
+			MaxConcurrentOps:       5,    // Conservative for stability
+			MemoryLimit:            256,  // Conservative memory usage
+			StreamBufferSize:       5,    // Smaller buffer for quick start
+			EnableMemoryMonitoring: false,
 		},
 		WebUI: WebUIConfig{
 			Host:         "localhost",
