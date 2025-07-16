@@ -197,6 +197,9 @@ func (ipfs *IPFSBackend) Get(ctx context.Context, address *storage.BlockAddress)
 
 	// Update access time
 	address.AccessedAt = time.Now()
+	if address.Metadata == nil {
+		address.Metadata = make(map[string]interface{})
+	}
 	address.Metadata["get_duration"] = time.Since(startTime)
 
 	return block, nil
@@ -727,23 +730,6 @@ var _ storage.PeerAwareBackend = (*IPFSBackend)(nil)
 // init registers the IPFS backend constructor
 func init() {
 	storage.RegisterBackend(storage.BackendTypeIPFS, func(config *storage.BackendConfig) (storage.Backend, error) {
-		// Get endpoint from connection config
-		endpoint := "127.0.0.1:5001" // default
-		if config.Connection != nil && config.Connection.Endpoint != "" {
-			endpoint = config.Connection.Endpoint
-		}
-
-		// Create IPFS shell
-		sh := shell.NewShell(endpoint)
-
-		return &IPFSBackend{
-			config:          config,
-			shell:           sh,
-			errorClassifier: storage.NewErrorClassifier("ipfs"),
-			healthStatus: &storage.HealthStatus{
-				Healthy:   true,
-				LastCheck: time.Now(),
-			},
-		}, nil
+		return NewIPFSBackend(config)
 	})
 }

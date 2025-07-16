@@ -12,6 +12,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
@@ -32,10 +33,27 @@ func TestSimpleUploadDownload(t *testing.T) {
 		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
 	
+	// Disable health checks for test stability
+	storageConfig.HealthCheck.Enabled = false
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
+
+	// Start the storage manager
+	ctx := context.Background()
+	err = storageManager.Start(ctx)
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	
+	// Ensure proper cleanup
+	defer func() {
+		if err := storageManager.Stop(ctx); err != nil {
+			t.Logf("Warning: Failed to stop storage manager: %v", err)
+		}
+	}()
 
 	// Create cache
 	blockCache := cache.NewMemoryCache(100)
