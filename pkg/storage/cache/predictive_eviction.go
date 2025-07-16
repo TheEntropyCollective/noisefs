@@ -118,11 +118,26 @@ func (pe *PredictiveEvictor) PredictNextAccess(blockID string) (time.Time, float
 	
 	// Predict next access
 	lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-1]
-	predictedTime := lastAccess.Add(avgInterval)
+	now := time.Now()
+	
+	// If last access was recent, predict avgInterval from last access
+	// Otherwise, predict from now
+	var predictedTime time.Time
+	timeSinceLastAccess := now.Sub(lastAccess)
+	
+	if timeSinceLastAccess < avgInterval {
+		// Next access is avgInterval from last access
+		predictedTime = lastAccess.Add(avgInterval)
+	} else {
+		// We've already passed the expected time, predict soon
+		predictedTime = now.Add(avgInterval / 4)
+	}
 	
 	// Calculate confidence based on interval variance
 	variance := pe.calculateVariance(intervals, avgInterval)
-	confidence := 1.0 / (1.0 + variance)
+	// Ensure confidence stays in [0, 1] range
+	confidence := 1.0 / (1.0 + math.Max(0, variance))
+	confidence = math.Min(1.0, math.Max(0.0, confidence))
 	
 	return predictedTime, confidence
 }
@@ -255,11 +270,16 @@ func (pe *PredictiveEvictor) averageInterval(intervals []time.Duration) time.Dur
 
 func (pe *PredictiveEvictor) calculateVariance(intervals []time.Duration, mean time.Duration) float64 {
 	if len(intervals) < 2 {
-		return 1.0
+		return 10.0 // High variance for insufficient data
 	}
 	
 	variance := 0.0
 	meanSeconds := mean.Seconds()
+	
+	// Prevent division by zero
+	if meanSeconds == 0 {
+		return 10.0
+	}
 	
 	for _, interval := range intervals {
 		diff := interval.Seconds() - meanSeconds
@@ -267,7 +287,14 @@ func (pe *PredictiveEvictor) calculateVariance(intervals []time.Duration, mean t
 	}
 	
 	variance /= float64(len(intervals))
-	return math.Sqrt(variance) / meanSeconds // Coefficient of variation
+	coeffVariation := math.Sqrt(variance) / meanSeconds
+	
+	// For highly irregular patterns, return high variance
+	if coeffVariation > 1.0 {
+		return coeffVariation * 10.0
+	}
+	
+	return coeffVariation
 }
 
 func (pe *PredictiveEvictor) predictFromAverage() time.Time {
@@ -278,7 +305,7 @@ func (pe *PredictiveEvictor) predictFromAverage() time.Time {
 	maxAvg := 0.0
 	nextHour := (currentHour + 1) % 24
 	
-	for i := 0; i < 24; i++ {
+	for i := 1; i <= 24; i++ {
 		hour := (currentHour + i) % 24
 		if pe.hourlyAverages[hour] > maxAvg {
 			maxAvg = pe.hourlyAverages[hour]
@@ -286,13 +313,21 @@ func (pe *PredictiveEvictor) predictFromAverage() time.Time {
 		}
 	}
 	
+	// If no activity, predict 2 hours from now
+	if maxAvg == 0 {
+		return now.Add(2 * time.Hour)
+	}
+	
 	// Calculate time until that hour
 	hoursUntil := nextHour - currentHour
-	if hoursUntil < 0 {
+	if hoursUntil <= 0 {
 		hoursUntil += 24
 	}
 	
-	return now.Add(time.Duration(hoursUntil) * time.Hour)
+	// Return the beginning of that hour
+	nextTime := now.Add(time.Duration(hoursUntil) * time.Hour)
+	// Round to the start of the hour
+	return time.Date(nextTime.Year(), nextTime.Month(), nextTime.Day(), nextTime.Hour(), 0, 0, 0, nextTime.Location())
 }
 
 // PredictiveEvictionIntegration integrates predictive eviction with the cache

@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"math"
 	"sort"
 	"time"
 )
@@ -163,12 +164,15 @@ func (s *ValueBasedEvictionStrategy) Score(block *BlockMetadata, healthTracker *
 	frequencyScore := 1.0 / (1.0 + accessRate)
 	score += frequencyScore * s.FrequencyWeight
 	
-	// Health component (use inverse of block value)
+	// Health component (lower value = more likely to evict)
 	if healthTracker != nil {
 		// Use the stored hint from the health tracker
 		hint := healthTracker.GetBlockHint(block.CID)
 		blockValue := healthTracker.CalculateBlockValue(block.CID, hint)
-		healthScore := 1.0 / (1.0 + blockValue)
+		// Invert so that high-value blocks have low eviction scores
+		// Normalize blockValue to 0-1 range (assuming max value of ~10)
+		normalizedValue := math.Min(blockValue / 10.0, 1.0)
+		healthScore := 1.0 - normalizedValue
 		score += healthScore * s.HealthWeight
 	}
 	

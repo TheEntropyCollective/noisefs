@@ -168,6 +168,18 @@ func (of *OpportunisticFetcher) checkLoop() {
 
 // checkAndQueueBlocks evaluates blocks and queues valuable ones
 func (of *OpportunisticFetcher) checkAndQueueBlocks() {
+	of.mu.RLock()
+	if !of.running {
+		of.mu.RUnlock()
+		return
+	}
+	// Check for pause marker
+	if pauseTime, exists := of.recentFetches["__PAUSE__"]; exists && time.Now().Before(pauseTime) {
+		of.mu.RUnlock()
+		return
+	}
+	of.mu.RUnlock()
+	
 	// Check if we have spare capacity
 	stats := of.cache.GetAltruisticStats()
 	flexPoolFree := 1.0 - stats.FlexPoolUsage
@@ -207,8 +219,8 @@ func (of *OpportunisticFetcher) checkAndQueueBlocks() {
 		}
 		
 		// Check block value
-		health := of.healthTracker.blocks[cid]
-		if health != nil && health.Value < of.config.ValueThreshold {
+		blockValue := of.healthTracker.GetBlockValue(cid)
+		if blockValue < of.config.ValueThreshold {
 			continue
 		}
 		
@@ -250,6 +262,12 @@ func (of *OpportunisticFetcher) fetchBlock(cid string) {
 	of.mu.Lock()
 	of.recentFetches[cid] = time.Now()
 	of.mu.Unlock()
+	
+	// Check if fetcher is nil (for tests)
+	if of.fetcher == nil {
+		of.handleFetchError(cid, fmt.Errorf("fetcher not configured"))
+		return
+	}
 	
 	// Fetch block data
 	data, err := of.fetcher(fetchCtx, cid)
@@ -366,9 +384,9 @@ func (of *OpportunisticFetcher) PauseForDuration(d time.Duration) {
 	of.mu.Lock()
 	defer of.mu.Unlock()
 	
-	// Set all recent fetches to future time to pause
-	futureTime := time.Now().Add(d)
-	for cid := range of.recentFetches {
-		of.recentFetches[cid] = futureTime
-	}
+	// Set a pause marker to prevent all fetching
+	pauseEnd := time.Now().Add(d)
+	
+	// Add a special marker that will be checked in checkAndQueueBlocks
+	of.recentFetches["__PAUSE__"] = pauseEnd
 }

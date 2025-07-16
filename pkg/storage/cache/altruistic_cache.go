@@ -333,6 +333,15 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 		ac.altruisticSize += blockSize
 	}
 	
+	// Update health tracker with block info
+	if ac.healthTracker != nil {
+		hint := BlockHint{
+			Size:     int(blockSize),
+			LastSeen: time.Now(),
+		}
+		ac.healthTracker.UpdateBlockHealth(cid, hint)
+	}
+	
 	return nil
 }
 

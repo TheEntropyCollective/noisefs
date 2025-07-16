@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -219,7 +220,8 @@ func (nhm *NetworkHealthManager) calculateOverallScore(report *NetworkHealthRepo
 	
 	// Local health component (40% weight)
 	if report.LocalHealth != nil && report.LocalHealth.TrackedBlocks > 0 {
-		localScore := report.LocalHealth.AverageValue
+		// Normalize AverageValue to 0-1 range (assuming max value of ~10)
+		localScore := math.Min(report.LocalHealth.AverageValue / 10.0, 1.0)
 		score += localScore * 0.4
 		components++
 	}
