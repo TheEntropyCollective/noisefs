@@ -17,7 +17,7 @@ func NewAssembler() *Assembler {
 // Assemble reconstructs data from blocks
 func (a *Assembler) Assemble(blocks []*Block) ([]byte, error) {
 	if len(blocks) == 0 {
-		return nil, errors.New("no blocks to assemble")
+		return []byte{}, nil // Empty file
 	}
 	
 	var buffer bytes.Buffer
@@ -38,7 +38,7 @@ func (a *Assembler) Assemble(blocks []*Block) ([]byte, error) {
 // AssembleToWriter reconstructs data from blocks and writes to an io.Writer
 func (a *Assembler) AssembleToWriter(blocks []*Block, writer io.Writer) error {
 	if len(blocks) == 0 {
-		return errors.New("no blocks to assemble")
+		return nil // Empty file - nothing to write
 	}
 	
 	if writer == nil {
