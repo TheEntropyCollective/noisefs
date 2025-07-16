@@ -2,21 +2,21 @@ package search
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // ContentExtractor handles extracting content from files for indexing
 type ContentExtractor struct {
-	storage       *storage.Manager
+	storage        *storage.Manager
 	maxPreviewSize int
+	maxFileSize    int64
 	supportedTypes []string
 }
 
@@ -25,6 +25,7 @@ func NewContentExtractor(storage *storage.Manager, config SearchConfig) *Content
 	return &ContentExtractor{
 		storage:        storage,
 		maxPreviewSize: config.ContentPreview,
+		maxFileSize:    config.MaxFileSize,
 		supportedTypes: config.SupportedTypes,
 	}
 }
@@ -35,126 +36,148 @@ func (ce *ContentExtractor) ExtractContent(ctx context.Context, descriptorCID st
 	if !ce.shouldExtractContent(descriptorCID) {
 		return "", "", nil
 	}
-	
+
 	// Retrieve descriptor
 	descriptor, err := ce.retrieveDescriptor(ctx, descriptorCID)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to retrieve descriptor: %w", err)
 	}
-	
+
 	// Check file size
-	if descriptor.FileSize > ce.storage.GetConfig().Performance.MaxFileSize {
+	if descriptor.FileSize > ce.maxFileSize {
 		// File too large, only extract preview
 		return ce.extractPreview(ctx, descriptor)
 	}
-	
+
 	// Extract full content for small files
 	content, err := ce.extractFullContent(ctx, descriptor)
 	if err != nil {
 		return "", "", err
 	}
-	
+
 	// Create preview
 	preview := ce.createPreview(content)
-	
+
 	return content, preview, nil
 }
 
 // shouldExtractContent checks if content should be extracted based on file type
 func (ce *ContentExtractor) shouldExtractContent(path string) bool {
 	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(path), "."))
-	
+
 	for _, supported := range ce.supportedTypes {
 		if ext == supported {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 // retrieveDescriptor retrieves and parses a file descriptor
-func (ce *ContentExtractor) retrieveDescriptor(ctx context.Context, cid string) (*descriptors.FileDescriptor, error) {
+func (ce *ContentExtractor) retrieveDescriptor(ctx context.Context, cid string) (*descriptors.Descriptor, error) {
 	// Retrieve descriptor block
-	block, err := ce.storage.RetrieveBlock(cid)
+	backend, err := ce.storage.GetDefaultBackend()
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve descriptor block: %w", err)
+		return nil, fmt.Errorf("failed to get backend: %w", err)
 	}
 	
-	// Parse descriptor
-	descriptor, err := descriptors.ParseFileDescriptor(block.Data)
+	// Create a block address for the CID
+	address := &storage.BlockAddress{
+		ID: cid,
+	}
+	
+	block, err := backend.Get(ctx, address)
 	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve descriptor: %w", err)
+	}
+	
+	data := block.Data
+
+	// Parse descriptor
+	var descriptor descriptors.Descriptor
+	if err := json.Unmarshal(data, &descriptor); err != nil {
 		return nil, fmt.Errorf("failed to parse descriptor: %w", err)
 	}
-	
-	return descriptor, nil
+
+	return &descriptor, nil
 }
 
 // extractPreview extracts a preview from the beginning of a file
-func (ce *ContentExtractor) extractPreview(ctx context.Context, descriptor *descriptors.FileDescriptor) (string, string, error) {
+func (ce *ContentExtractor) extractPreview(ctx context.Context, descriptor *descriptors.Descriptor) (string, string, error) {
 	// Only extract from the first block for preview
 	if len(descriptor.Blocks) == 0 {
 		return "", "", nil
 	}
-	
+
 	// Get the first block
-	firstBlockCID := descriptor.Blocks[0].CID
-	block, err := ce.storage.RetrieveBlock(firstBlockCID)
+	firstBlockCID := descriptor.Blocks[0].DataCID
+	backend, err := ce.storage.GetDefaultBackend()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get backend: %w", err)
+	}
+	
+	address := &storage.BlockAddress{
+		ID: firstBlockCID,
+	}
+	
+	block, err := backend.Get(ctx, address)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to retrieve first block: %w", err)
 	}
 	
-	// Decrypt if necessary
-	if descriptor.IsEncrypted && descriptor.EncryptionKey != nil {
-		decrypted, err := blocks.DecryptBlock(block, descriptor.EncryptionKey)
-		if err != nil {
-			return "", "", fmt.Errorf("failed to decrypt block: %w", err)
-		}
-		block = decrypted
-	}
-	
+	blockData := block.Data
+
+	// For now, skip encryption handling since it's not in the descriptor
+	// TODO: Add encryption support when available
+
 	// Extract preview from block data
-	preview := string(block.Data)
+	preview := string(blockData)
 	if len(preview) > ce.maxPreviewSize {
 		preview = preview[:ce.maxPreviewSize]
 	}
-	
+
 	// Clean up the preview (remove non-printable characters)
 	preview = ce.cleanText(preview)
-	
+
 	return "", preview, nil
 }
 
 // extractFullContent extracts the complete content from a file
-func (ce *ContentExtractor) extractFullContent(ctx context.Context, descriptor *descriptors.FileDescriptor) (string, error) {
+func (ce *ContentExtractor) extractFullContent(ctx context.Context, descriptor *descriptors.Descriptor) (string, error) {
 	var contentBuilder strings.Builder
 	contentBuilder.Grow(int(descriptor.FileSize))
-	
-	// Retrieve and decrypt all blocks
-	for _, blockInfo := range descriptor.Blocks {
-		block, err := ce.storage.RetrieveBlock(blockInfo.CID)
-		if err != nil {
-			return "", fmt.Errorf("failed to retrieve block %s: %w", blockInfo.CID, err)
-		}
-		
-		// Decrypt if necessary
-		if descriptor.IsEncrypted && descriptor.EncryptionKey != nil {
-			decrypted, err := blocks.DecryptBlock(block, descriptor.EncryptionKey)
-			if err != nil {
-				return "", fmt.Errorf("failed to decrypt block: %w", err)
-			}
-			block = decrypted
-		}
-		
-		// Append to content
-		contentBuilder.Write(block.Data)
+
+	backend, err := ce.storage.GetDefaultBackend()
+	if err != nil {
+		return "", fmt.Errorf("failed to get backend: %w", err)
 	}
-	
+
+	// Retrieve all blocks
+	for _, blockPair := range descriptor.Blocks {
+		address := &storage.BlockAddress{
+			ID: blockPair.DataCID,
+		}
+		
+		block, err := backend.Get(ctx, address)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve block %s: %w", blockPair.DataCID, err)
+		}
+		
+		blockData := block.Data
+
+		// For now, skip encryption handling since it's not in the descriptor
+		// TODO: Add encryption support when available
+
+		// Append to content
+		contentBuilder.Write(blockData)
+	}
+
 	content := contentBuilder.String()
-	
+
 	// Clean up the content
 	content = ce.cleanText(content)
-	
+
 	return content, nil
 }
 
@@ -163,25 +186,25 @@ func (ce *ContentExtractor) createPreview(content string) string {
 	if len(content) <= ce.maxPreviewSize {
 		return content
 	}
-	
+
 	// Find a good break point (end of sentence or paragraph)
 	preview := content[:ce.maxPreviewSize]
-	
+
 	// Look for sentence end
 	lastPeriod := strings.LastIndex(preview, ". ")
 	lastNewline := strings.LastIndex(preview, "\n")
-	
+
 	breakPoint := ce.maxPreviewSize
 	if lastPeriod > ce.maxPreviewSize*3/4 {
 		breakPoint = lastPeriod + 1
 	} else if lastNewline > ce.maxPreviewSize*3/4 {
 		breakPoint = lastNewline
 	}
-	
+
 	if breakPoint < len(preview) {
 		preview = preview[:breakPoint]
 	}
-	
+
 	return strings.TrimSpace(preview) + "..."
 }
 
@@ -189,10 +212,10 @@ func (ce *ContentExtractor) createPreview(content string) string {
 func (ce *ContentExtractor) cleanText(text string) string {
 	// Replace tabs with spaces
 	text = strings.ReplaceAll(text, "\t", " ")
-	
+
 	// Replace multiple spaces with single space
 	text = strings.Join(strings.Fields(text), " ")
-	
+
 	// Remove non-printable characters
 	var cleaned strings.Builder
 	for _, r := range text {
@@ -200,7 +223,7 @@ func (ce *ContentExtractor) cleanText(text string) string {
 			cleaned.WriteRune(r)
 		}
 	}
-	
+
 	return cleaned.String()
 }
 
@@ -225,7 +248,7 @@ func (ip *IndexingPipeline) ProcessBatch(ctx context.Context, requests []IndexRe
 	// Group requests by operation
 	adds := make([]IndexRequest, 0)
 	deletes := make([]IndexRequest, 0)
-	
+
 	for _, req := range requests {
 		switch req.Operation {
 		case "add", "update":
@@ -234,7 +257,7 @@ func (ip *IndexingPipeline) ProcessBatch(ctx context.Context, requests []IndexRe
 			deletes = append(deletes, req)
 		}
 	}
-	
+
 	// Process deletes first (they're usually faster)
 	for _, req := range deletes {
 		if err := ip.manager.processIndexRequest(req); err != nil {
@@ -242,7 +265,7 @@ func (ip *IndexingPipeline) ProcessBatch(ctx context.Context, requests []IndexRe
 			continue
 		}
 	}
-	
+
 	// Process adds/updates with content extraction
 	for _, req := range adds {
 		// Extract content if not provided
@@ -257,27 +280,27 @@ func (ip *IndexingPipeline) ProcessBatch(ctx context.Context, requests []IndexRe
 				req.Metadata["preview"] = preview
 			}
 		}
-		
+
 		// Process the request
 		if err := ip.manager.processIndexRequest(req); err != nil {
 			// Log error but continue processing
 			continue
 		}
 	}
-	
+
 	return nil
 }
 
 // FileWatcher watches for file changes and triggers indexing
 type FileWatcher struct {
-	manager     *SearchManager
-	fileIndex   *fuse.FileIndex
-	lastCheck   time.Time
+	manager       *SearchManager
+	fileIndex     FileIndexInterface
+	lastCheck     time.Time
 	checkInterval time.Duration
 }
 
 // NewFileWatcher creates a new file watcher
-func NewFileWatcher(manager *SearchManager, fileIndex *fuse.FileIndex) *FileWatcher {
+func NewFileWatcher(manager *SearchManager, fileIndex FileIndexInterface) *FileWatcher {
 	return &FileWatcher{
 		manager:       manager,
 		fileIndex:     fileIndex,
@@ -290,7 +313,7 @@ func NewFileWatcher(manager *SearchManager, fileIndex *fuse.FileIndex) *FileWatc
 func (fw *FileWatcher) Watch(ctx context.Context) {
 	ticker := time.NewTicker(fw.checkInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -304,19 +327,29 @@ func (fw *FileWatcher) Watch(ctx context.Context) {
 // checkForChanges checks for new or modified files
 func (fw *FileWatcher) checkForChanges() {
 	files := fw.fileIndex.ListFiles()
-	
-	for path, entry := range files {
+
+	for path, entryData := range files {
+		// Type assert the interface{} to a map
+		entryMap, ok := entryData.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// Extract fields from the map
+		descriptorCID, _ := entryMap["DescriptorCID"].(string)
+		modifiedAt, _ := entryMap["ModifiedAt"].(time.Time)
+
 		// Check if file was modified since last check
-		if entry.ModifiedAt.After(fw.lastCheck) {
+		if modifiedAt.After(fw.lastCheck) {
 			// Queue for indexing
 			req := IndexRequest{
 				Operation: "update",
 				Path:      path,
-				CID:       entry.DescriptorCID,
+				CID:       descriptorCID,
 				Priority:  5,
 				Timestamp: time.Now(),
 			}
-			
+
 			select {
 			case fw.manager.indexQueue <- req:
 				// Successfully queued
@@ -325,7 +358,7 @@ func (fw *FileWatcher) checkForChanges() {
 			}
 		}
 	}
-	
+
 	fw.lastCheck = time.Now()
 }
 
@@ -348,7 +381,7 @@ func NewQueuePrioritizer(size int) *QueuePrioritizer {
 // Add adds a request to the appropriate priority queue
 func (qp *QueuePrioritizer) Add(req IndexRequest) error {
 	var targetQueue chan IndexRequest
-	
+
 	if req.Priority >= 8 {
 		targetQueue = qp.highQueue
 	} else if req.Priority <= 3 {
@@ -356,7 +389,7 @@ func (qp *QueuePrioritizer) Add(req IndexRequest) error {
 	} else {
 		targetQueue = qp.queue
 	}
-	
+
 	select {
 	case targetQueue <- req:
 		return nil
@@ -373,14 +406,14 @@ func (qp *QueuePrioritizer) Next() (IndexRequest, bool) {
 		return req, true
 	default:
 	}
-	
+
 	// Then normal priority
 	select {
 	case req := <-qp.queue:
 		return req, true
 	default:
 	}
-	
+
 	// Finally low priority
 	select {
 	case req := <-qp.lowQueue:

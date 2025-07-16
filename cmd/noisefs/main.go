@@ -60,7 +60,7 @@ func main() {
 	// Check for subcommands first
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "announce", "subscribe", "discover", "ls":
+		case "announce", "subscribe", "discover", "ls", "search":
 			handleSubcommand(os.Args[1], os.Args[2:])
 			return
 		}
@@ -1395,6 +1395,10 @@ func handleSubcommand(cmd string, args []string) {
 		err = subscribeCommand(args, storageManager, ipfsShell, quiet, jsonOutput)
 	case "ls":
 		err = lsCommand(args, storageManager, quiet, jsonOutput)
+	case "search":
+		// Search command handles its own args parsing
+		handleSearchCommand(args)
+		return
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
@@ -1528,7 +1532,11 @@ func lsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonO
 		util.PrintJSONSuccess(result)
 	} else if quiet {
 		for _, entry := range entries {
-			fmt.Printf("%s\t%s\t%s\n", entry.CID, entry.Type, entry.Name)
+			typeStr := "file"
+			if entry.Type == blocks.DirectoryType {
+				typeStr = "directory"
+			}
+			fmt.Printf("%s\t%s\t%s\n", entry.CID, typeStr, entry.Name)
 		}
 	} else {
 		fmt.Printf("Directory: %s\n", directoryCID)

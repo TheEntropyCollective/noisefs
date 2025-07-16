@@ -309,11 +309,11 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 
 	// Mount options
 	opts := fuse.MountOptions{
-		MountPath:           mountPath,
-		VolumeName:          volumeName,
-		ReadOnly:            readOnly,
-		AllowOther:          allowOther,
-		Debug:               debug,
+		MountPath:  mountPath,
+		VolumeName: volumeName,
+		ReadOnly:   readOnly,
+		AllowOther: allowOther,
+		Debug:      debug,
 		DirectoryDescriptor: directoryDescriptor,
 		DirectoryKey:        directoryKey,
 		Subdir:              subdir,

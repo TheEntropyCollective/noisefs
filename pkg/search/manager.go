@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/analysis/analyzer/standard"
@@ -30,7 +29,7 @@ type SearchManager struct {
 	// Core components
 	config      SearchConfig
 	bleveIndex  bleve.Index
-	fileIndex   *fuse.FileIndex
+	fileIndex   FileIndexInterface
 	storage     *storage.Manager
 	
 	// Async processing
@@ -60,7 +59,7 @@ type SearchMetrics struct {
 }
 
 // NewSearchManager creates a new search manager instance
-func NewSearchManager(config SearchConfig, fileIndex *fuse.FileIndex, storage *storage.Manager) (*SearchManager, error) {
+func NewSearchManager(config SearchConfig, fileIndex FileIndexInterface, storage *storage.Manager) (*SearchManager, error) {
 	// Validate configuration
 	if config.IndexPath == "" {
 		config = DefaultSearchConfig()
@@ -298,23 +297,46 @@ func (sm *SearchManager) processIndexRequest(req IndexRequest) error {
 // indexDocument indexes a single document
 func (sm *SearchManager) indexDocument(req IndexRequest) error {
 	// Get file metadata from FileIndex
-	entry, exists := sm.fileIndex.GetFile(req.Path)
+	fileEntry, exists := sm.fileIndex.GetFile(req.Path)
 	if !exists {
 		// Check if it's a directory
-		entry, exists = sm.fileIndex.GetDirectory(req.Path)
-		if !exists {
+		dirEntries, dirExists := sm.fileIndex.GetDirectory(req.Path)
+		if !dirExists {
 			return fmt.Errorf("file not found in index: %s", req.Path)
 		}
+		// For directories, just create a basic entry
+		doc := map[string]interface{}{
+			"path":           req.Path,
+			"filename":       filepath.Base(req.Path),
+			"is_directory":   true,
+			"children_count": len(dirEntries),
+		}
+		// Add metadata if provided
+		for k, v := range req.Metadata {
+			doc[k] = v
+		}
+		// Index the document
+		if err := sm.bleveIndex.Index(req.Path, doc); err != nil {
+			return fmt.Errorf("failed to index directory: %w", err)
+		}
+		return nil
+	}
+	
+	// Extract fields from the interface{}
+	entryMap, ok := fileEntry.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected file entry type: %T", fileEntry)
 	}
 	
 	// Create document for indexing
 	doc := map[string]interface{}{
 		"path":           req.Path,
 		"filename":       filepath.Base(req.Path),
-		"size":           entry.FileSize,
-		"modified":       entry.ModifiedAt,
-		"descriptor_cid": entry.DescriptorCID,
-		"directory":      entry.Directory,
+		"size":           entryMap["FileSize"],
+		"modified":       entryMap["ModifiedAt"],
+		"descriptor_cid": entryMap["DescriptorCID"],
+		"directory":      filepath.Dir(req.Path),
+		"is_directory":   false,
 	}
 	
 	// Add metadata if provided

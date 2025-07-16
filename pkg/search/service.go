@@ -1,14 +1,13 @@
 package search
 
 import (
-	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
-	"github.com/blevesearch/bleve/v2/search"
 	"github.com/blevesearch/bleve/v2/search/query"
 )
 
@@ -83,10 +82,12 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 			// For recursive search, use prefix query
 			prefixQuery := bleve.NewPrefixQuery(options.Directory)
 			prefixQuery.SetField("directory")
-			dirQuery = bleve.NewDisjunctionQuery(dirQuery, prefixQuery)
+			// Create a disjunction query for the directory
+			disjunctionQuery := bleve.NewDisjunctionQuery(dirQuery, prefixQuery)
+			q = bleve.NewConjunctionQuery(q, disjunctionQuery)
+		} else {
+			q = bleve.NewConjunctionQuery(q, dirQuery)
 		}
-		
-		q = bleve.NewConjunctionQuery(q, dirQuery)
 	}
 	
 	// Create search request
@@ -102,17 +103,10 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 	// Set sorting
 	if options.SortBy != "" {
 		sortField := string(options.SortBy)
-		desc := options.SortOrder == SortDesc
-		searchRequest.SortBy([]string{sortField})
-		if desc {
-			searchRequest.SortByCustom(search.SortOrder{
-				{
-					Type:    search.SortFieldAuto,
-					Field:   sortField,
-					Desc:    true,
-					Missing: search.SortFieldMissingLast,
-				},
-			})
+		if options.SortOrder == SortDesc {
+			searchRequest.SortBy([]string{"-" + sortField})
+		} else {
+			searchRequest.SortBy([]string{sortField})
 		}
 	}
 	
@@ -189,10 +183,11 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 			}
 		}
 		
-		// Set filename and other derived fields
-		result.Filename = filepath.Base(result.Path)
-		result.FileType = strings.TrimPrefix(filepath.Ext(result.Path), ".")
-		result.IndexedAt = time.Now() // This should come from the index
+		// Set file type from path if not already set
+		if result.FileType == "" {
+			result.FileType = strings.TrimPrefix(filepath.Ext(result.Path), ".")
+		}
+		// TODO: IndexedAt should come from the index
 		
 		results.Results = append(results.Results, result)
 	}
@@ -302,18 +297,11 @@ func (sm *SearchManager) SearchMetadata(filters MetadataFilters) (*SearchResults
 		options.Recursive = filters.Recursive
 	}
 	
-	// Build final query
-	var finalQuery query.Query
-	if len(queries) == 0 {
-		finalQuery = bleve.NewMatchAllQuery()
-	} else if len(queries) == 1 {
-		finalQuery = queries[0]
-	} else {
-		finalQuery = bleve.NewConjunctionQuery(queries...)
+	// Use the regular search with appropriate query
+	queryStr := ""
+	if filters.NamePattern != "" {
+		queryStr = filters.NamePattern
 	}
-	
-	// Use the regular search with metadata query
-	queryStr := "metadata:" + filters.NamePattern // Simplified query string
 	return sm.Search(queryStr, options)
 }
 
@@ -383,10 +371,18 @@ func (sm *SearchManager) RebuildIndex() error {
 	
 	// Queue each file for indexing
 	for path, entry := range files {
+		// Extract descriptor CID from entry
+		descriptorCID := ""
+		if entryMap, ok := entry.(map[string]interface{}); ok {
+			if cid, ok := entryMap["DescriptorCID"].(string); ok {
+				descriptorCID = cid
+			}
+		}
+		
 		req := IndexRequest{
 			Operation: "add",
 			Path:      path,
-			CID:       entry.DescriptorCID,
+			CID:       descriptorCID,
 			Priority:  1, // Low priority for rebuild
 			Timestamp: time.Now(),
 		}
