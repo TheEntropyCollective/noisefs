@@ -494,9 +494,12 @@ func (sm *SearchManager) GetIndexStats() (*IndexStats, error) {
 		return nil, fmt.Errorf("failed to get document count: %w", err)
 	}
 	
-	// Get metrics
+	// Get metrics (copy individual fields to avoid copying the mutex)
 	sm.metrics.mutex.RLock()
-	metrics := sm.metrics
+	indexingErrors := sm.metrics.IndexingErrors
+	searchQueries := sm.metrics.SearchQueries
+	avgSearchTimeMs := sm.metrics.AvgSearchTimeMs
+	lastIndexTime := sm.metrics.LastIndexTime
 	sm.metrics.mutex.RUnlock()
 	
 	// Calculate index size (approximate)
@@ -513,14 +516,14 @@ func (sm *SearchManager) GetIndexStats() (*IndexStats, error) {
 		DocumentCount:   int64(docCount),
 		IndexSize:       indexSize,
 		IndexSizeHuman:  formatBytes(indexSize),
-		LastIndexTime:   metrics.LastIndexTime,
-		SearchCount:     metrics.SearchQueries,
-		AvgSearchTime:   time.Duration(metrics.AvgSearchTimeMs * float64(time.Millisecond)),
+		LastIndexTime:   lastIndexTime,
+		SearchCount:     searchQueries,
+		AvgSearchTime:   time.Duration(avgSearchTimeMs * float64(time.Millisecond)),
 		QueueSize:       len(sm.indexQueue),
 		Workers:         sm.config.Workers,
 		BatchSize:       sm.config.BatchSize,
 		LastOptimized:   time.Now(), // TODO: Track this properly
-		ErrorCount:      metrics.IndexingErrors,
+		ErrorCount:      indexingErrors,
 		CacheStats:      &cacheStats,
 	}
 	

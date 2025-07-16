@@ -25,11 +25,12 @@ type DirectoryProcessor struct {
 	cancelFunc     context.CancelFunc
 	ctx            context.Context
 	
-	// Internal state
+	// Internal state (protected by stateMux)
 	processedFiles int64
 	processedBytes int64
 	totalFiles     int64
 	totalBytes     int64
+	stateMux       sync.RWMutex // Protects progress state fields
 	
 	// Worker pool management
 	workerPool chan struct{}
@@ -77,6 +78,7 @@ type DirectoryManifest struct {
 	Entries    []DirectoryEntry `json:"entries"`
 	CreatedAt  time.Time        `json:"created"`
 	ModifiedAt time.Time        `json:"modified"`
+	mu         sync.Mutex       // Protects concurrent access to Entries
 }
 
 // NewDirectoryManifest creates a new empty directory manifest
@@ -102,15 +104,49 @@ func (m *DirectoryManifest) AddEntry(entry DirectoryEntry) error {
 		return errors.New("invalid entry type")
 	}
 	
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
 	m.Entries = append(m.Entries, entry)
 	m.ModifiedAt = time.Now()
 	return nil
 }
 
+// GetEntriesCopy returns a thread-safe copy of the directory entries
+func (m *DirectoryManifest) GetEntriesCopy() []DirectoryEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	// Create a deep copy of the entries
+	entriesCopy := make([]DirectoryEntry, len(m.Entries))
+	copy(entriesCopy, m.Entries)
+	return entriesCopy
+}
+
+// GetSnapshot returns a thread-safe snapshot of the manifest
+func (m *DirectoryManifest) GetSnapshot() DirectoryManifest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	// Create a deep copy of the entries
+	entriesCopy := make([]DirectoryEntry, len(m.Entries))
+	copy(entriesCopy, m.Entries)
+	
+	return DirectoryManifest{
+		Version:    m.Version,
+		Entries:    entriesCopy,
+		CreatedAt:  m.CreatedAt,
+		ModifiedAt: m.ModifiedAt,
+	}
+}
+
 // EncryptManifest encrypts a directory manifest
 func EncryptManifest(manifest *DirectoryManifest, key *crypto.EncryptionKey) ([]byte, error) {
+	// Get a thread-safe snapshot
+	snapshot := manifest.GetSnapshot()
+	
 	// Serialize manifest as JSON
-	data, err := json.Marshal(manifest)
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
@@ -194,9 +230,12 @@ func (dp *DirectoryProcessor) ProcessDirectory(rootPath string, processor Direct
 	// Process the directory tree
 	resultList := make([]*ProcessResult, 0)
 	var resultsMux sync.Mutex
+	var collectorDone sync.WaitGroup
 	
 	// Start result collector
+	collectorDone.Add(1)
 	go func() {
+		defer collectorDone.Done()
 		for result := range dp.results {
 			resultsMux.Lock()
 			resultList = append(resultList, &result)
@@ -212,6 +251,9 @@ func (dp *DirectoryProcessor) ProcessDirectory(rootPath string, processor Direct
 	// Wait for all workers to complete
 	dp.wg.Wait()
 	close(dp.results)
+	
+	// Wait for result collector to finish
+	collectorDone.Wait()
 	
 	// Check for errors
 	dp.resultsMux.RLock()
@@ -368,7 +410,7 @@ func (dp *DirectoryProcessor) processFileEntry(filePath string, entry os.DirEntr
 		atomic.AddInt64(&dp.processedBytes, info.Size())
 		
 		if dp.progressFn != nil {
-			dp.progressFn(atomic.LoadInt64(&dp.processedFiles), dp.totalFiles, filePath)
+			dp.progressFn(atomic.LoadInt64(&dp.processedFiles), atomic.LoadInt64(&dp.totalFiles), filePath)
 		}
 		
 		// Derive directory-specific key
@@ -495,7 +537,7 @@ func (dp *DirectoryProcessor) Cancel() {
 
 // GetProgress returns current progress
 func (dp *DirectoryProcessor) GetProgress() (processed, total int64) {
-	return atomic.LoadInt64(&dp.processedFiles), dp.totalFiles
+	return atomic.LoadInt64(&dp.processedFiles), atomic.LoadInt64(&dp.totalFiles)
 }
 
 // DirectoryBlockProcessor interface for handling processed blocks

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
@@ -283,16 +284,19 @@ func TestDirectoryProcessor_ProgressCallback(t *testing.T) {
 	testDir := createTestDirectoryHelper(t, tempDir)
 	
 	// Track progress
-	progressCalls := 0
+	var progressCalls int64
 	var lastFile string
+	var progressMux sync.Mutex
 	
 	config := &ProcessorConfig{
 		BlockSize:     1024,
 		MaxWorkers:    3,
 		EncryptionKey: createEncryptionKeyHelper(t),
 		ProgressCallback: func(processed, total int64, currentFile string) {
-			progressCalls++
+			atomic.AddInt64(&progressCalls, 1)
+			progressMux.Lock()
 			lastFile = currentFile
+			progressMux.Unlock()
 		},
 	}
 	
@@ -310,11 +314,15 @@ func TestDirectoryProcessor_ProgressCallback(t *testing.T) {
 	}
 	
 	// Verify progress was called
-	if progressCalls == 0 {
+	if atomic.LoadInt64(&progressCalls) == 0 {
 		t.Error("Expected progress callback to be called")
 	}
 	
-	if lastFile == "" {
+	progressMux.Lock()
+	finalLastFile := lastFile
+	progressMux.Unlock()
+	
+	if finalLastFile == "" {
 		t.Error("Expected current file to be set")
 	}
 }

@@ -253,10 +253,16 @@ func TestSearchConcurrency(t *testing.T) {
 		go func(worker int) {
 			for j := 0; j < 100; j++ {
 				path := fmt.Sprintf("worker%d/file%d.txt", worker, j)
+				descriptorCID := fmt.Sprintf("Qm%d%d", worker, j)
+				fileSize := int64(1024)
+				
+				// First add the file to the file index
+				fileIndex.AddFile(path, descriptorCID, fileSize)
+				
 				metadata := FileMetadata{
 					Path:          path,
-					DescriptorCID: fmt.Sprintf("Qm%d%d", worker, j),
-					Size:          int64(1024),
+					DescriptorCID: descriptorCID,
+					Size:          fileSize,
 					ModifiedAt:    time.Now(),
 				}
 
@@ -374,10 +380,17 @@ func TestSearchMemoryUsage(t *testing.T) {
 	}
 
 	// Index large file
+	path := "large/file.txt"
+	descriptorCID := "QmLarge"
+	fileSize := int64(len(largeContent))
+	
+	// First add the file to the file index
+	fileIndex.AddFile(path, descriptorCID, fileSize)
+	
 	metadata := FileMetadata{
-		Path:           "large/file.txt",
-		DescriptorCID:  "QmLarge",
-		Size:           int64(len(largeContent)),
+		Path:           path,
+		DescriptorCID:  descriptorCID,
+		Size:           fileSize,
 		ModifiedAt:     time.Now(),
 		Content:        string(largeContent[:config.ContentPreview]), // Only preview
 		ContentPreview: string(largeContent[:config.ContentPreview]),
