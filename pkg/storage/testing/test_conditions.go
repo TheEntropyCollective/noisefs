@@ -279,27 +279,7 @@ func (c *ConditionSimulator) ApplyCondition(conditionID string) error {
 func (c *ConditionSimulator) RemoveCondition(conditionID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	condition, exists := c.activeConditions[conditionID]
-	if !exists {
-		return fmt.Errorf("condition %s is not active", conditionID)
-	}
-
-	err := c.removeConditionEffects(condition)
-	if err != nil {
-		c.recordConditionEvent(conditionID, "removal_failed", map[string]interface{}{
-			"error": err.Error(),
-		}, false, err.Error())
-		return err
-	}
-
-	delete(c.activeConditions, conditionID)
-	
-	c.recordConditionEvent(conditionID, "removed", map[string]interface{}{
-		"actual_duration": time.Since(condition.StartTime),
-	}, true, "")
-
-	return nil
+	return c.removeConditionUnlocked(conditionID)
 }
 
 // ScheduleCondition schedules a condition to be applied at a future time
@@ -401,7 +381,7 @@ func (c *ConditionSimulator) Stop() {
 
 	// Remove all active conditions
 	for conditionID := range c.activeConditions {
-		c.RemoveCondition(conditionID)
+		c.removeConditionUnlocked(conditionID)
 	}
 }
 
@@ -546,7 +526,7 @@ func (c *ConditionSimulator) resetEffect(effect ConditionEffect) error {
 // Private methods
 
 func (c *ConditionSimulator) run() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(time.Millisecond * 100)
 	defer ticker.Stop()
 
 	for {
@@ -567,7 +547,7 @@ func (c *ConditionSimulator) processQueuedConditions() {
 	now := time.Now()
 	for _, queued := range c.conditionQueue {
 		if !queued.Executed && now.After(queued.StartAt) {
-			err := c.ApplyCondition(queued.Condition.ID)
+			err := c.applyConditionUnlocked(queued.Condition)
 			queued.Executed = true
 			if err != nil {
 				// Log error but continue
@@ -600,13 +580,15 @@ func (c *ConditionSimulator) checkExpiredConditions() {
 	}
 
 	for _, conditionID := range expired {
-		c.RemoveCondition(conditionID)
+		c.removeConditionUnlocked(conditionID)
 	}
 }
 
 func (c *ConditionSimulator) scheduleConditionRemoval(conditionID string, duration time.Duration) {
 	time.Sleep(duration)
-	c.RemoveCondition(conditionID)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.removeConditionUnlocked(conditionID)
 }
 
 func (c *ConditionSimulator) cloneCondition(condition *TestCondition) *TestCondition {
@@ -618,6 +600,62 @@ func (c *ConditionSimulator) cloneCondition(condition *TestCondition) *TestCondi
 	clone.Effects = make([]ConditionEffect, len(condition.Effects))
 	copy(clone.Effects, condition.Effects)
 	return &clone
+}
+
+// applyConditionUnlocked applies a condition without acquiring the mutex
+func (c *ConditionSimulator) applyConditionUnlocked(condition *TestCondition) error {
+	// Clone the condition to avoid modifying the original
+	activeCondition := c.cloneCondition(condition)
+	activeCondition.StartTime = time.Now()
+	activeCondition.EndTime = activeCondition.StartTime.Add(activeCondition.Duration)
+	activeCondition.Active = true
+
+	// Apply the condition effects
+	err := c.applyConditionEffects(activeCondition)
+	if err != nil {
+		c.failedConditions++
+		c.recordConditionEvent(activeCondition.ID, "failed", map[string]interface{}{
+			"error": err.Error(),
+		}, false, err.Error())
+		return err
+	}
+
+	c.activeConditions[activeCondition.ID] = activeCondition
+	c.appliedConditions++
+	
+	c.recordConditionEvent(activeCondition.ID, "applied", map[string]interface{}{
+		"duration": activeCondition.Duration,
+		"severity": activeCondition.Severity,
+	}, true, "")
+
+	// Schedule automatic removal
+	go c.scheduleConditionRemoval(activeCondition.ID, activeCondition.Duration)
+
+	return nil
+}
+
+// removeConditionUnlocked removes a condition without acquiring the mutex
+func (c *ConditionSimulator) removeConditionUnlocked(conditionID string) error {
+	condition, exists := c.activeConditions[conditionID]
+	if !exists {
+		return fmt.Errorf("condition %s is not active", conditionID)
+	}
+
+	err := c.removeConditionEffects(condition)
+	if err != nil {
+		c.recordConditionEvent(conditionID, "removal_failed", map[string]interface{}{
+			"error": err.Error(),
+		}, false, err.Error())
+		return err
+	}
+
+	delete(c.activeConditions, conditionID)
+	
+	c.recordConditionEvent(conditionID, "removed", map[string]interface{}{
+		"actual_duration": time.Since(condition.StartTime),
+	}, true, "")
+
+	return nil
 }
 
 func (c *ConditionSimulator) recordConditionEvent(conditionID, action string, details map[string]interface{}, success bool, errorMsg string) {

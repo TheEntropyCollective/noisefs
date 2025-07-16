@@ -490,7 +490,7 @@ func TestConditionSimulator(t *testing.T) {
 		}
 
 		// Wait for initial condition to be applied
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 200)
 
 		// Check that at least one condition is active
 		activeConditions := conditionSim.GetActiveConditions()

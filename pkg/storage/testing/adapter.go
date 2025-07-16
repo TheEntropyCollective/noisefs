@@ -89,6 +89,9 @@ func NewMockBackendAdapter(config *TestEnvironmentConfig) *MockBackendAdapter {
 	mockClient := NewMockIPFSClient()
 	networkSim := NewNetworkSimulator()
 	conditionSim := NewConditionSimulator(mockClient, networkSim)
+	
+	// Link components for block synchronization
+	mockClient.SetNetworkSimulator(networkSim)
 
 	// Configure mock client
 	mockClient.SetLatency(config.DefaultLatency)
@@ -103,6 +106,15 @@ func NewMockBackendAdapter(config *TestEnvironmentConfig) *MockBackendAdapter {
 		// Add default peers
 		for _, peerID := range config.DefaultPeers {
 			networkSim.AddPeer(peerID)
+		}
+		
+		// Add a default broadcaster peer
+		broadcaster := networkSim.AddPeer("broadcaster")
+		if broadcaster != nil {
+			// Establish connections from broadcaster to other peers
+			for _, peerID := range config.DefaultPeers {
+				networkSim.EstablishConnection("broadcaster", peerID)
+			}
 		}
 	}
 

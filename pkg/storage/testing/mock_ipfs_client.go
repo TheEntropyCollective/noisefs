@@ -50,6 +50,9 @@ type MockIPFSClient struct {
 	// State persistence (for complex testing scenarios)
 	statePersistence bool
 	stateFilePath    string
+	
+	// Network simulator integration
+	networkSim *NetworkSimulator
 }
 
 // OperationRecord tracks individual operations for debugging
@@ -62,6 +65,13 @@ type OperationRecord struct {
 	Error       string
 	Duration    time.Duration
 	Metadata    map[string]interface{}
+}
+
+// SetNetworkSimulator links this client with a network simulator for block sync
+func (m *MockIPFSClient) SetNetworkSimulator(networkSim *NetworkSimulator) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.networkSim = networkSim
 }
 
 // NewMockIPFSClient creates a new mock IPFS client with default settings
@@ -114,6 +124,11 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 	m.blocks[cid] = block
 	m.currentStorage += blockSize
 	m.operationCount["put"]++
+	
+	// Sync with network simulator if available
+	if m.networkSim != nil {
+		m.networkSim.SyncBlockFromClient(cid, block)
+	}
 
 	address := &storage.BlockAddress{
 		ID:          cid,

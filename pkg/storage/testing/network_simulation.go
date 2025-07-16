@@ -561,6 +561,24 @@ func (n *NetworkSimulator) ClearEventHistory() {
 	n.eventHistory = make([]NetworkEvent, 0)
 }
 
+// SyncBlockFromClient adds a block from MockIPFSClient to all online peers
+func (n *NetworkSimulator) SyncBlockFromClient(blockID string, block *blocks.Block) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	
+	// Add block to all online peers for realism
+	for _, peer := range n.peers {
+		if peer.Online {
+			peer.StoredBlocks[blockID] = block
+		}
+	}
+	
+	n.recordEvent("block_sync", "mock_client", "", map[string]interface{}{
+		"block_id": blockID,
+		"synced_peers": len(n.peers),
+	}, true, "")
+}
+
 // Reset resets the network simulation to initial state
 func (n *NetworkSimulator) Reset() {
 	n.mu.Lock()
