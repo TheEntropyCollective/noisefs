@@ -2,6 +2,7 @@ package cache
 
 import (
 	"math"
+	"sort"
 	"sync"
 	"time"
 )
@@ -79,6 +80,12 @@ func (pe *PredictiveEvictor) RecordAccess(blockID string, accessTime time.Time) 
 	}
 	
 	pattern.AccessTimes = append(pattern.AccessTimes, accessTime)
+	
+	// Sort access times to ensure chronological order
+	sort.Slice(pattern.AccessTimes, func(i, j int) bool {
+		return pattern.AccessTimes[i].Before(pattern.AccessTimes[j])
+	})
+	
 	hour := accessTime.Hour()
 	pattern.AccessCounts[hour]++
 	
@@ -135,8 +142,9 @@ func (pe *PredictiveEvictor) PredictNextAccess(blockID string) (time.Time, float
 	
 	// Calculate confidence based on interval variance
 	variance := pe.calculateVariance(intervals, avgInterval)
-	// Ensure confidence stays in [0, 1] range
-	confidence := 1.0 / (1.0 + math.Max(0, variance))
+	// Use exponential decay for confidence based on variance
+	// Higher variance = much lower confidence
+	confidence := math.Exp(-variance)
 	confidence = math.Min(1.0, math.Max(0.0, confidence))
 	
 	return predictedTime, confidence
@@ -167,7 +175,14 @@ func (pe *PredictiveEvictor) GetEvictionCandidates(blocks map[string]*BlockMetad
 		}
 		
 		// Score based on time until access and confidence
-		score := timeUntilAccess * confidence
+		// Higher score = more likely to evict
+		// Blocks with longer time until access should have higher scores
+		// But if confidence is low, we should be more conservative
+		score := timeUntilAccess
+		if confidence < 0.3 {
+			// Low confidence - reduce score to avoid premature eviction
+			score *= 0.5
+		}
 		
 		predictions = append(predictions, prediction{
 			blockID:    blockID,

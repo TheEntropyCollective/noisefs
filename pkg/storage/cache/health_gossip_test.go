@@ -2,6 +2,7 @@ package cache
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -386,9 +387,14 @@ func TestLaplaceNoise_Properties(t *testing.T) {
 		mean := sum / float64(len(samples))
 		variance := sumSquared/float64(len(samples)) - mean*mean
 		
-		// Mean should be near 0
-		if mean > 0.1 || mean < -0.1 {
-			t.Errorf("Epsilon %f: Mean %f too far from 0", epsilon, mean)
+		// Mean should be near 0 (allow for statistical variation)
+		// For 10000 samples, standard error of mean is roughly sqrt(variance/n)
+		// For Laplace distribution with scale=1/epsilon, variance = 2/epsilon^2
+		// So standard error = sqrt(2/epsilon^2/10000) = sqrt(2)/(epsilon*100)
+		// Use 3 standard errors as tolerance for 99.7% confidence
+		tolerance := 3.0 * math.Sqrt(2) / (epsilon * 100)
+		if math.Abs(mean) > tolerance {
+			t.Errorf("Epsilon %f: Mean %f too far from 0 (tolerance %f)", epsilon, mean, tolerance)
 		}
 		
 		// Variance should be approximately 2 * (scale^2) = 2 * (1/epsilon)^2

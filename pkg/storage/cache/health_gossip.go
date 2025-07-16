@@ -334,9 +334,27 @@ func (hg *HealthGossiper) calculateAggregateStats(
 		stats.AveragePopularity = hg.noiseGenerator.AddNoiseFloat64(stats.AveragePopularity)
 		stats.AverageEntropy = hg.noiseGenerator.AddNoiseFloat64(stats.AverageEntropy)
 		
+		// Ensure counts don't go negative (clamp to 0)
+		if stats.TotalBlocks < 0 {
+			stats.TotalBlocks = 0
+		}
+		if stats.LowReplicationCount < 0 {
+			stats.LowReplicationCount = 0
+		}
+		if stats.MediumReplicationCount < 0 {
+			stats.MediumReplicationCount = 0
+		}
+		if stats.HighReplicationCount < 0 {
+			stats.HighReplicationCount = 0
+		}
+		
 		// Add noise to region counts
 		for region := range stats.RegionCounts {
 			stats.RegionCounts[region] = hg.noiseGenerator.AddNoiseInt64(stats.RegionCounts[region])
+			// Ensure region counts don't go negative
+			if stats.RegionCounts[region] < 0 {
+				stats.RegionCounts[region] = 0
+			}
 		}
 	}
 	
@@ -522,10 +540,18 @@ func (ln *LaplaceNoise) AddNoiseFloat64(value float64) float64 {
 
 // generateLaplace generates a sample from Laplace distribution
 func (ln *LaplaceNoise) generateLaplace() float64 {
-	// Generate uniform random in (0, 1)
+	// Generate uniform random in (0, 1), avoiding 0 and 1
 	max := big.NewInt(1 << 53)
 	n, _ := rand.Int(rand.Reader, max)
 	u := float64(n.Int64()) / float64(max.Int64())
+	
+	// Ensure u is in (0, 1) to avoid log(0)
+	if u == 0.0 {
+		u = 1e-10
+	}
+	if u == 1.0 {
+		u = 1.0 - 1e-10
+	}
 	
 	// Transform to Laplace distribution
 	// scale = sensitivity / epsilon

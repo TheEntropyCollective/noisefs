@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -153,6 +154,11 @@ func TestOpportunisticFetcher_ErrorHandling(t *testing.T) {
 		MaxErrorRetries:  3,
 		ErrorBackoff:     200 * time.Millisecond,
 		FetchCooldown:    100 * time.Millisecond,
+		ValueThreshold:   2.0,
+		BatchSize:        20,
+		MaxConcurrent:    3,
+		MaxBlockSize:     16 * 1024 * 1024,
+		MaxBandwidthMBps: 10,
 	}
 	
 	of := NewOpportunisticFetcher(cache, healthTracker, fetcher, config)
@@ -313,14 +319,25 @@ func TestOpportunisticFetcher_PauseResume(t *testing.T) {
 	healthTracker := NewBlockHealthTracker(nil)
 	
 	fetchTimes := make(map[time.Time]bool)
+	var fetchTimesMutex sync.RWMutex
 	fetcher := func(ctx context.Context, cid string) ([]byte, error) {
+		fetchTimesMutex.Lock()
 		fetchTimes[time.Now()] = true
+		fetchTimesMutex.Unlock()
 		return make([]byte, 1024), nil
 	}
 	
 	config := &OpportunisticConfig{
-		MinFlexPoolFree: 0.1,
-		CheckInterval:   50 * time.Millisecond,
+		MinFlexPoolFree:  0.1,
+		CheckInterval:    50 * time.Millisecond,
+		MaxErrorRetries:  3,
+		ErrorBackoff:     200 * time.Millisecond,
+		FetchCooldown:    100 * time.Millisecond,
+		ValueThreshold:   2.0,
+		BatchSize:        20,
+		MaxConcurrent:    3,
+		MaxBlockSize:     16 * 1024 * 1024,
+		MaxBandwidthMBps: 10,
 	}
 	
 	of := NewOpportunisticFetcher(cache, healthTracker, fetcher, config)
@@ -348,11 +365,13 @@ func TestOpportunisticFetcher_PauseResume(t *testing.T) {
 	
 	// Check no fetches during pause
 	fetchesDuringPause := 0
+	fetchTimesMutex.RLock()
 	for fetchTime := range fetchTimes {
 		if fetchTime.After(pauseTime) && fetchTime.Before(pauseTime.Add(150*time.Millisecond)) {
 			fetchesDuringPause++
 		}
 	}
+	fetchTimesMutex.RUnlock()
 	
 	if fetchesDuringPause > 0 {
 		t.Error("Should not fetch during pause")
