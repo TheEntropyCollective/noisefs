@@ -225,7 +225,7 @@ func (c *ConditionSimulator) GetPredefinedConditions() map[string]*TestCondition
 	// Set default duration for all conditions
 	for _, condition := range conditions {
 		if condition.Duration == 0 {
-			condition.Duration = time.Minute * 5 // Default 5 minutes
+			condition.Duration = time.Second * 10 // Default 10 seconds
 		}
 	}
 
@@ -332,22 +332,22 @@ func (c *ConditionSimulator) getPredefinedScenarios() map[string][]ScenarioStep 
 	return map[string][]ScenarioStep{
 		"network_stress": {
 			{ConditionID: "high_latency", Delay: 0},
-			{ConditionID: "packet_loss", Delay: time.Second * 30},
-			{ConditionID: "bandwidth_limit", Delay: time.Minute * 1},
+			{ConditionID: "packet_loss", Delay: time.Second * 2},
+			{ConditionID: "bandwidth_limit", Delay: time.Second * 5},
 		},
 		"peer_instability": {
 			{ConditionID: "peer_churn", Delay: 0},
-			{ConditionID: "connection_instability", Delay: time.Second * 10},
-			{ConditionID: "slow_peer_response", Delay: time.Second * 30},
+			{ConditionID: "connection_instability", Delay: time.Second * 2},
+			{ConditionID: "slow_peer_response", Delay: time.Second * 5},
 		},
 		"security_stress": {
 			{ConditionID: "byzantine_peers", Delay: 0},
-			{ConditionID: "dht_partitioning", Delay: time.Second * 20},
+			{ConditionID: "dht_partitioning", Delay: time.Second * 3},
 		},
 		"resource_pressure": {
 			{ConditionID: "storage_pressure", Delay: 0},
-			{ConditionID: "bandwidth_limit", Delay: time.Second * 15},
-			{ConditionID: "random_failures", Delay: time.Second * 30},
+			{ConditionID: "bandwidth_limit", Delay: time.Second * 2},
+			{ConditionID: "random_failures", Delay: time.Second * 4},
 		},
 	}
 }
