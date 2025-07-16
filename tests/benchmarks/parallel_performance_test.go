@@ -20,54 +20,7 @@ import (
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 )
 
-// ParallelPerformanceMetrics tracks detailed metrics for parallel operations
-type ParallelPerformanceMetrics struct {
-	TestName            string                `json:"test_name"`
-	Implementation      string                `json:"implementation"` // "sequential" or "parallel"
-	Timestamp           time.Time             `json:"timestamp"`
-	
-	// Operation timings
-	TotalDuration       time.Duration         `json:"total_duration"`
-	SplitDuration       time.Duration         `json:"split_duration"`
-	XORDuration         time.Duration         `json:"xor_duration"`
-	StorageDuration     time.Duration         `json:"storage_duration"`
-	RetrievalDuration   time.Duration         `json:"retrieval_duration"`
-	AssemblyDuration    time.Duration         `json:"assembly_duration"`
-	
-	// Throughput metrics
-	FileSize            int64                 `json:"file_size"`
-	BlockCount          int                   `json:"block_count"`
-	BlockSize           int                   `json:"block_size"`
-	ThroughputMBps      float64               `json:"throughput_mbps"`
-	BlocksPerSecond     float64               `json:"blocks_per_second"`
-	
-	// Parallelism metrics
-	WorkerCount         int                   `json:"worker_count"`
-	CPUUtilization      float64               `json:"cpu_utilization"`
-	ParallelEfficiency  float64               `json:"parallel_efficiency"`
-	SpeedupFactor       float64               `json:"speedup_factor"`
-	
-	// Memory metrics
-	PeakMemoryMB        float64               `json:"peak_memory_mb"`
-	AvgMemoryMB         float64               `json:"avg_memory_mb"`
-	MemoryPerWorkerMB   float64               `json:"memory_per_worker_mb"`
-	
-	// Detailed operation breakdown
-	XORMetrics          *OperationBreakdown   `json:"xor_metrics"`
-	StorageMetrics      *OperationBreakdown   `json:"storage_metrics"`
-	RetrievalMetrics    *OperationBreakdown   `json:"retrieval_metrics"`
-}
-
-type OperationBreakdown struct {
-	Count               int                   `json:"count"`
-	AvgLatency          time.Duration         `json:"avg_latency"`
-	MinLatency          time.Duration         `json:"min_latency"`
-	MaxLatency          time.Duration         `json:"max_latency"`
-	P50Latency          time.Duration         `json:"p50_latency"`
-	P95Latency          time.Duration         `json:"p95_latency"`
-	P99Latency          time.Duration         `json:"p99_latency"`
-	ConcurrentOps       int                   `json:"concurrent_ops"`
-}
+// Types are now defined in types.go
 
 // BenchmarkUploadPerformanceComparison compares sequential vs parallel upload
 func BenchmarkUploadPerformanceComparison(b *testing.B) {
@@ -162,7 +115,7 @@ func benchmarkUploadSequential(b *testing.B, fileSize int64, blockSize int) {
 		// Sequential storage
 		storageStart := time.Now()
 		for _, block := range anonymizedBlocks {
-			if err := storageManager.Put(context.Background(), block); err != nil {
+			if _, err := storageManager.Put(context.Background(), block); err != nil {
 				b.Fatalf("Storage failed: %v", err)
 			}
 		}
@@ -173,7 +126,7 @@ func benchmarkUploadSequential(b *testing.B, fileSize int64, blockSize int) {
 		metrics.BlocksPerSecond = float64(len(fileBlocks)) / metrics.TotalDuration.Seconds()
 
 		// Log key metrics
-		logger.Info("Sequential upload completed", logging.Fields{
+		logger.Info("Sequential upload completed", map[string]interface{}{
 			"duration_ms":     metrics.TotalDuration.Milliseconds(),
 			"throughput_mbps": metrics.ThroughputMBps,
 			"blocks_per_sec":  metrics.BlocksPerSecond,
@@ -258,9 +211,9 @@ func benchmarkUploadParallel(b *testing.B, fileSize int64, blockSize int, worker
 		for _, block := range anonymizedBlocks {
 			go func(b *blocks.Block) {
 				defer wg.Done()
-				if err := storageManager.Put(ctx, b); err != nil {
+				if _, err := storageManager.Put(ctx, b); err != nil {
 					// Log error but don't fail the benchmark
-					logger.Error("Failed to store block", logging.Fields{"error": err})
+					logger.Error("Failed to store block", map[string]interface{}{"error": err})
 				}
 			}(block)
 		}
@@ -272,7 +225,7 @@ func benchmarkUploadParallel(b *testing.B, fileSize int64, blockSize int, worker
 		metrics.BlocksPerSecond = float64(len(fileBlocks)) / metrics.TotalDuration.Seconds()
 
 		// Log key metrics
-		logger.Info("Parallel upload completed", logging.Fields{
+		logger.Info("Parallel upload completed", map[string]interface{}{
 			"workers":         workerCount,
 			"duration_ms":     metrics.TotalDuration.Milliseconds(),
 			"throughput_mbps": metrics.ThroughputMBps,
@@ -407,7 +360,7 @@ func benchmarkDownloadSequential(b *testing.B, descriptor *descriptors.Descripto
 		metrics.BlocksPerSecond = float64(len(descriptor.Blocks)*3) / metrics.RetrievalDuration.Seconds() // *3 for all block types
 
 		// Log key metrics
-		logger.Info("Sequential download completed", logging.Fields{
+		logger.Info("Sequential download completed", map[string]interface{}{
 			"duration_ms":      metrics.TotalDuration.Milliseconds(),
 			"throughput_mbps":  metrics.ThroughputMBps,
 			"blocks_per_sec":   metrics.BlocksPerSecond,
@@ -544,7 +497,7 @@ func benchmarkDownloadParallel(b *testing.B, descriptor *descriptors.Descriptor,
 		metrics.ParallelEfficiency = sequentialEstimate / metrics.RetrievalDuration.Seconds() / float64(workerCount)
 
 		// Log key metrics
-		logger.Info("Parallel download completed", logging.Fields{
+		logger.Info("Parallel download completed", map[string]interface{}{
 			"workers":           workerCount,
 			"duration_ms":       metrics.TotalDuration.Milliseconds(),
 			"throughput_mbps":   metrics.ThroughputMBps,
@@ -616,7 +569,7 @@ func benchmarkRegularMemoryUsage(b *testing.B, fileSize int64, blockSize int) {
 		runtime.ReadMemStats(&m)
 		peakAlloc := m.Alloc - startAlloc
 
-		logger.Info("Regular memory usage", logging.Fields{
+		logger.Info("Regular memory usage", map[string]interface{}{
 			"file_size_mb":    fileSize / (1024 * 1024),
 			"peak_memory_mb":  peakAlloc / (1024 * 1024),
 			"descriptor_cid":  descriptorCID,
@@ -656,7 +609,7 @@ func benchmarkStreamingMemoryUsage(b *testing.B, fileSize int64, blockSize int) 
 		runtime.ReadMemStats(&m)
 		peakAlloc := m.Alloc - startAlloc
 
-		logger.Info("Streaming memory usage", logging.Fields{
+		logger.Info("Streaming memory usage", map[string]interface{}{
 			"file_size_mb":    fileSize / (1024 * 1024),
 			"peak_memory_mb":  peakAlloc / (1024 * 1024),
 			"descriptor_cid":  descriptorCID,
@@ -709,8 +662,7 @@ func prepareTestDescriptor(b *testing.B, fileSize int64, blockSize int) *descrip
 	
 	blockCount := int((fileSize + int64(blockSize) - 1) / int64(blockSize))
 	for i := 0; i < blockCount; i++ {
-		blockInfo := descriptors.Block{
-			Index:          i,
+		blockInfo := descriptors.BlockPair{
 			DataCID:        fmt.Sprintf("data-cid-%d", i),
 			RandomizerCID1: fmt.Sprintf("rand1-cid-%d", i),
 			RandomizerCID2: fmt.Sprintf("rand2-cid-%d", i),
