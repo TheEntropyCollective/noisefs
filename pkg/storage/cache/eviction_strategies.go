@@ -165,7 +165,9 @@ func (s *ValueBasedEvictionStrategy) Score(block *BlockMetadata, healthTracker *
 	
 	// Health component (use inverse of block value)
 	if healthTracker != nil {
-		blockValue := healthTracker.CalculateBlockValue(block.CID, BlockHint{})
+		// Use the stored hint from the health tracker
+		hint := healthTracker.GetBlockHint(block.CID)
+		blockValue := healthTracker.CalculateBlockValue(block.CID, hint)
 		healthScore := 1.0 / (1.0 + blockValue)
 		score += healthScore * s.HealthWeight
 	}

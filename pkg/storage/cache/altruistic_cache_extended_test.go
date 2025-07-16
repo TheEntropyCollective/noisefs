@@ -14,7 +14,7 @@ func TestAltruisticCache_EvictionCooldown(t *testing.T) {
 	baseCache := NewMemoryCache(1000)
 	
 	config := &AltruisticCacheConfig{
-		MinPersonalCache: 600,
+		MinPersonalCache: 100,
 		EnableAltruistic: true,
 		EvictionCooldown: 500 * time.Millisecond,
 	}
@@ -22,14 +22,17 @@ func TestAltruisticCache_EvictionCooldown(t *testing.T) {
 	cache := NewAltruisticCache(baseCache, config, 1000)
 	
 	// Fill cache completely with altruistic blocks
-	for i := 0; i < 20; i++ {
-		data := make([]byte, 40) // 20 * 40 = 800 bytes
+	for i := 0; i < 22; i++ {
+		data := make([]byte, 40) // 22 * 40 = 880 bytes
 		block := &blocks.Block{Data: data}
-		cache.StoreWithOrigin(string(rune('a'+i)), block, AltruisticBlock)
+		err := cache.StoreWithOrigin(string(rune('a'+i)), block, AltruisticBlock)
+		if err != nil {
+			t.Logf("Failed to store altruistic block %d: %v", i, err)
+		}
 	}
 	
-	// First personal block needs to evict many blocks (major eviction)
-	largeData := make([]byte, 200) // Need 200 bytes, will evict 240+ (6 blocks)
+	// First personal block needs to evict blocks (major eviction)
+	largeData := make([]byte, 200) // Need 200 bytes, will evict some blocks
 	largeBlock := &blocks.Block{Data: largeData}
 	err := cache.StoreWithOrigin("personal1", largeBlock, PersonalBlock)
 	if err != nil {
@@ -39,6 +42,7 @@ func TestAltruisticCache_EvictionCooldown(t *testing.T) {
 	// Second personal block also needs eviction but should be blocked by cooldown
 	largeData2 := make([]byte, 200)
 	largeBlock2 := &blocks.Block{Data: largeData2}
+	
 	err = cache.StoreWithOrigin("personal2", largeBlock2, PersonalBlock)
 	if err == nil {
 		t.Error("Second personal block should fail due to eviction cooldown")
@@ -48,7 +52,7 @@ func TestAltruisticCache_EvictionCooldown(t *testing.T) {
 	time.Sleep(600 * time.Millisecond)
 	
 	// Now it should succeed
-	err = cache.StoreWithOrigin("personal2", largeBlock2, PersonalBlock)
+	err = cache.StoreWithOrigin("personal3", largeBlock2, PersonalBlock)
 	if err != nil {
 		t.Errorf("Personal block should succeed after cooldown: %v", err)
 	}

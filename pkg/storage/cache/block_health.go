@@ -177,6 +177,21 @@ func (bht *BlockHealthTracker) CalculateBlockValue(cid string, hint BlockHint) f
 	return bht.calculateBlockValueInternal(hint)
 }
 
+// GetBlockHint returns the stored hint for a block
+func (bht *BlockHealthTracker) GetBlockHint(cid string) BlockHint {
+	bht.mu.RLock()
+	defer bht.mu.RUnlock()
+	
+	if health, exists := bht.blocks[cid]; exists {
+		return health.Hint
+	}
+	
+	// Return empty hint if not found
+	return BlockHint{
+		ReplicationBucket: ReplicationUnknown,
+	}
+}
+
 // calculateBlockValueInternal computes block value from hints
 func (bht *BlockHealthTracker) calculateBlockValueInternal(hint BlockHint) float64 {
 	value := 0.0

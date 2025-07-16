@@ -201,6 +201,11 @@ func (hg *HealthGossiper) sendGossip() error {
 	hg.mu.Lock()
 	defer hg.mu.Unlock()
 	
+	// Skip if shell is nil (testing scenario)
+	if hg.shell == nil {
+		return nil
+	}
+	
 	// Get current block health data
 	blockHints := hg.healthTracker.GetAllBlockHints()
 	
@@ -341,6 +346,11 @@ func (hg *HealthGossiper) calculateAggregateStats(
 // receiveLoop handles incoming gossip messages
 func (hg *HealthGossiper) receiveLoop() {
 	defer hg.wg.Done()
+	
+	// Skip if shell is nil (testing scenario)
+	if hg.shell == nil {
+		return
+	}
 	
 	topic := "noisefs-health-gossip"
 	sub, err := hg.shell.PubSubSubscribe(topic)

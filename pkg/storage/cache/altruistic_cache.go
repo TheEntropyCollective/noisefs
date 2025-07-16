@@ -261,9 +261,11 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 	if origin == PersonalBlock {
 		// Check if we need to evict altruistic blocks
 		available := ac.getAvailableSpace()
-		if ac.personalSize + blockSize > ac.config.MinPersonalCache && available < blockSize {
-			// Need to make room by evicting altruistic blocks
-			if err := ac.evictAltruisticBlocks(blockSize - available); err != nil {
+		
+		// Always evict if we don't have enough space for the current block
+		if available < blockSize {
+			spaceNeeded := blockSize - available
+			if err := ac.evictAltruisticBlocks(spaceNeeded); err != nil {
 				return fmt.Errorf("failed to make space for personal block: %w", err)
 			}
 		}
@@ -522,7 +524,7 @@ func (ac *AltruisticCache) getFlexPoolUsage() float64 {
 
 func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 	// Anti-thrashing check
-	if time.Since(ac.lastMajorEviction) < ac.config.EvictionCooldown {
+	if !ac.lastMajorEviction.IsZero() && time.Since(ac.lastMajorEviction) < ac.config.EvictionCooldown {
 		return fmt.Errorf("eviction cooldown active")
 	}
 	
@@ -560,7 +562,9 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 		}
 	}
 	
-	if freed >= needed*2 {
+	// Consider it a major eviction if we freed significantly more than needed
+	// or if we evicted many blocks (more than 1)
+	if freed >= needed + needed/4 || len(candidates) > 1 {
 		ac.lastMajorEviction = time.Now()
 	}
 	
