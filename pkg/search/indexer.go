@@ -23,7 +23,7 @@ type ContentExtractor struct {
 // NewContentExtractor creates a new content extractor
 func NewContentExtractor(storage *storage.Manager, config SearchConfig) *ContentExtractor {
 	return &ContentExtractor{
-		storage:        storage,
+		storage:        storage, // Can be nil for metadata-only operations
 		maxPreviewSize: config.ContentPreview,
 		maxFileSize:    config.MaxFileSize,
 		supportedTypes: config.SupportedTypes,
@@ -32,6 +32,11 @@ func NewContentExtractor(storage *storage.Manager, config SearchConfig) *Content
 
 // ExtractContent extracts indexable content from a file
 func (ce *ContentExtractor) ExtractContent(ctx context.Context, descriptorCID string) (string, string, error) {
+	// If no storage manager, skip content extraction (metadata-only mode)
+	if ce.storage == nil {
+		return "", "", nil
+	}
+	
 	// Check if we should extract content based on file type
 	if !ce.shouldExtractContent(descriptorCID) {
 		return "", "", nil

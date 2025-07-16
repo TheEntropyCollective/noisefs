@@ -147,30 +147,9 @@ func handleSearchCommand(args []string) {
 		os.Exit(1)
 	}
 	
-	// Initialize storage manager (required for search)
-	// Use mock backend to avoid IPFS dependency for search testing
-	storageConfig := &storage.Config{
-		DefaultBackend: "mock",
-		Backends: map[string]*storage.BackendConfig{
-			"mock": {
-				Type:    "mock",
-				Enabled: true,
-				Priority: 100,
-				Connection: &storage.ConnectionConfig{
-					Endpoint: "memory://mock",
-				},
-			},
-		},
-		HealthCheck: &storage.HealthCheckConfig{
-			Enabled: false, // Disable health checks for mock
-		},
-	}
-	
-	storageManager, err := storage.NewManager(storageConfig)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating storage manager: %v\n", err)
-		os.Exit(1)
-	}
+	// For search operations that only use indexed metadata, we don't need a real storage manager
+	// This avoids IPFS dependencies and health check issues
+	var storageManager *storage.Manager = nil
 	
 	// Initialize search manager
 	searchConfig := search.DefaultSearchConfig()

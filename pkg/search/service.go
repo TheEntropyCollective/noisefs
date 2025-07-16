@@ -19,6 +19,12 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 		return nil, fmt.Errorf("search manager not started")
 	}
 	
+	// Check cache first
+	cacheKey := GenerateCacheKey(queryStr, options)
+	if cachedResult, found := sm.resultCache.Get(cacheKey); found {
+		return cachedResult, nil
+	}
+	
 	startTime := time.Now()
 	
 	// Build the search query
@@ -219,6 +225,9 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 	// Update search metrics
 	sm.updateSearchMetrics(time.Since(startTime))
 	
+	// Cache the results
+	sm.resultCache.Put(cacheKey, results)
+	
 	return results, nil
 }
 
@@ -226,6 +235,12 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 func (sm *SearchManager) SearchMetadata(filters MetadataFilters) (*SearchResults, error) {
 	if !sm.started {
 		return nil, fmt.Errorf("search manager not started")
+	}
+	
+	// Check cache first
+	cacheKey := GenerateMetadataCacheKey(filters)
+	if cachedResult, found := sm.resultCache.Get(cacheKey); found {
+		return cachedResult, nil
 	}
 	
 	// Convert metadata filters to search options
@@ -302,7 +317,16 @@ func (sm *SearchManager) SearchMetadata(filters MetadataFilters) (*SearchResults
 	if filters.NamePattern != "" {
 		queryStr = filters.NamePattern
 	}
-	return sm.Search(queryStr, options)
+	
+	results, err := sm.Search(queryStr, options)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Cache the metadata search results separately
+	sm.resultCache.Put(cacheKey, results)
+	
+	return results, nil
 }
 
 // UpdateIndex updates the search index for a specific file
@@ -328,6 +352,9 @@ func (sm *SearchManager) UpdateIndex(path string, metadata FileMetadata) error {
 		Timestamp: time.Now(),
 	}
 	
+	// Invalidate cache when content changes
+	sm.resultCache.Clear()
+	
 	// Queue the request
 	select {
 	case sm.indexQueue <- req:
@@ -350,6 +377,9 @@ func (sm *SearchManager) RemoveFromIndex(path string) error {
 		Priority:  10, // High priority for deletes
 		Timestamp: time.Now(),
 	}
+	
+	// Invalidate cache when content changes
+	sm.resultCache.Clear()
 	
 	// Queue the request
 	select {
@@ -424,6 +454,9 @@ func (sm *SearchManager) GetIndexStats() (*IndexStats, error) {
 		indexSize = sm.calculateDirSize(sm.indexPath)
 	}
 	
+	// Get cache stats
+	cacheStats := sm.resultCache.GetStats()
+	
 	stats := &IndexStats{
 		DocumentCount:   int64(docCount),
 		IndexSize:       indexSize,
@@ -436,6 +469,7 @@ func (sm *SearchManager) GetIndexStats() (*IndexStats, error) {
 		BatchSize:       sm.config.BatchSize,
 		LastOptimized:   time.Now(), // TODO: Track this properly
 		ErrorCount:      metrics.IndexingErrors,
+		CacheStats:      &cacheStats,
 	}
 	
 	return stats, nil

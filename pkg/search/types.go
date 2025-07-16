@@ -203,6 +203,9 @@ type IndexStats struct {
 	QueueSize       int               `json:"queue_size"`
 	ProcessingFiles int               `json:"processing_files"`
 	BackgroundTasks int               `json:"background_tasks"`
+	
+	// Cache statistics
+	CacheStats      *CacheStats       `json:"cache_stats,omitempty"`
 }
 
 // Supporting types

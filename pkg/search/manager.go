@@ -43,6 +43,9 @@ type SearchManager struct {
 	started     bool
 	indexPath   string
 	
+	// Caching
+	resultCache *SearchResultCache
+	
 	// Metrics
 	metrics     SearchMetrics
 }
@@ -65,6 +68,9 @@ func NewSearchManager(config SearchConfig, fileIndex FileIndexInterface, storage
 		config = DefaultSearchConfig()
 	}
 	
+	// Storage manager is optional for metadata-only search operations
+	// Content extraction will be disabled if storage is nil
+	
 	// Expand home directory
 	indexPath := config.IndexPath
 	if indexPath[:2] == "~/" {
@@ -85,14 +91,15 @@ func NewSearchManager(config SearchConfig, fileIndex FileIndexInterface, storage
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	sm := &SearchManager{
-		config:     config,
-		fileIndex:  fileIndex,
-		storage:    storage,
-		indexQueue: make(chan IndexRequest, config.BatchSize*2),
-		ctx:        ctx,
-		cancel:     cancel,
-		indexPath:  indexPath,
-		metrics:    SearchMetrics{},
+		config:      config,
+		fileIndex:   fileIndex,
+		storage:     storage,
+		indexQueue:  make(chan IndexRequest, config.BatchSize*2),
+		ctx:         ctx,
+		cancel:      cancel,
+		indexPath:   indexPath,
+		resultCache: NewSearchResultCache(config.CacheSize, config.CacheTTL),
+		metrics:     SearchMetrics{},
 	}
 	
 	return sm, nil
