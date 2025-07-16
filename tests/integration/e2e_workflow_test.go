@@ -236,8 +236,7 @@ func TestReuseSystemIntegration(t *testing.T) {
 	}
 
 	// Test download through reuse client
-	baseClient := suite.reuseClient.GetBaseClient()
-	downloadedData, err := baseClient.Download(result.DescriptorCID)
+	downloadedData, err := suite.reuseClient.DownloadFile(result.DescriptorCID)
 	if err != nil {
 		t.Errorf("Download through reuse client failed: %v", err)
 	} else if !bytes.Equal(testContent, downloadedData) {

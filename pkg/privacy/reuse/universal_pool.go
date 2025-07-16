@@ -1,8 +1,8 @@
 package reuse
 
 import (
+	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -285,10 +285,18 @@ func (pool *UniversalBlockPool) generatePublicDomainContent(dataset *bootstrap.D
 
 // storeBlock stores a block in IPFS and returns its CID
 func (pool *UniversalBlockPool) storeBlock(block *blocks.Block) (string, error) {
-	// In full implementation, this would store in IPFS
-	// For now, generate a deterministic CID based on content
-	hash := sha256.Sum256(block.Data)
-	return hex.EncodeToString(hash[:16]), nil // Use first 16 bytes as CID
+	if pool.storageBackend == nil {
+		return "", fmt.Errorf("storage backend not initialized")
+	}
+
+	// Store in the backend
+	ctx := context.Background()
+	address, err := pool.storageBackend.Put(ctx, block)
+	if err != nil {
+		return "", fmt.Errorf("failed to store block in backend: %w", err)
+	}
+
+	return address.ID, nil
 }
 
 // addBlockToPool adds a block to the pool data structures

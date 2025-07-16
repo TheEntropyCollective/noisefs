@@ -1,6 +1,7 @@
 package reuse
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -47,7 +48,7 @@ func NewReuseAwareClient(storageManager *storage.Manager, blockCache cache.Cache
 	pool := NewUniversalBlockPool(DefaultPoolConfig(), backend)
 	pool.StorageManager = storageManager // Store manager reference for descriptors
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
-	mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
+	mixer := NewPublicDomainMixer(pool, DefaultMixerConfig(), storageManager)
 
 	client := &ReuseAwareClient{
 		baseClient: baseClient,
@@ -167,20 +168,57 @@ func (client *ReuseAwareClient) DownloadFile(descriptorCID string) ([]byte, erro
 	fileData := make([]byte, 0, len(descriptor.Blocks)*128*1024) // Pre-allocate approximate size
 	
 	for _, blockPair := range descriptor.Blocks {
-		// Retrieve data block
-		dataBlock, err := client.baseClient.RetrieveBlockWithCache(blockPair.DataCID)
+		// Retrieve raw blocks directly through storage manager to avoid base client XOR operations
+		ctx := context.Background()
+		
+		// Retrieve data block (anonymized)
+		dataAddress := &storage.BlockAddress{ID: blockPair.DataCID}
+		dataBlock, err := client.pool.StorageManager.Get(ctx, dataAddress)
 		if err != nil {
 			return nil, fmt.Errorf("failed to retrieve data block %s: %w", blockPair.DataCID, err)
 		}
 		
-		// Retrieve randomizer block
-		randBlock, err := client.baseClient.RetrieveBlockWithCache(blockPair.RandomizerCID1)
+		// Retrieve randomizer1 block
+		rand1Address := &storage.BlockAddress{ID: blockPair.RandomizerCID1}
+		randBlock1, err := client.pool.StorageManager.Get(ctx, rand1Address)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retrieve randomizer block %s: %w", blockPair.RandomizerCID1, err)
+			return nil, fmt.Errorf("failed to retrieve randomizer1 block %s: %w", blockPair.RandomizerCID1, err)
 		}
 		
-		// XOR to reconstruct original
-		originalData := xorData(dataBlock.Data, randBlock.Data)
+		// Retrieve randomizer2 block
+		rand2Address := &storage.BlockAddress{ID: blockPair.RandomizerCID2}
+		randBlock2, err := client.pool.StorageManager.Get(ctx, rand2Address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer2 block %s: %w", blockPair.RandomizerCID2, err)
+		}
+		
+		// XOR to reconstruct original: original = anonymized XOR randomizer1 XOR randomizer2
+		fileSize := len(dataBlock.Data)
+		
+		// Ensure randomizer blocks are trimmed to match data block size
+		rand1Data := randBlock1.Data
+		if len(rand1Data) > fileSize {
+			rand1Data = rand1Data[:fileSize]
+		}
+		
+		rand2Data := randBlock2.Data
+		if len(rand2Data) > fileSize {
+			rand2Data = rand2Data[:fileSize]
+		}
+		
+		// Verify we have enough data for XOR operations
+		if len(rand1Data) < fileSize {
+			return nil, fmt.Errorf("randomizer1 block too small: need %d bytes, have %d bytes", fileSize, len(rand1Data))
+		}
+		if len(rand2Data) < fileSize {
+			return nil, fmt.Errorf("randomizer2 block too small: need %d bytes, have %d bytes", fileSize, len(rand2Data))
+		}
+		
+		originalData := make([]byte, fileSize)
+		for i := 0; i < fileSize; i++ {
+			originalData[i] = dataBlock.Data[i] ^ rand1Data[i] ^ rand2Data[i]
+		}
+		
 		fileData = append(fileData, originalData...)
 	}
 	

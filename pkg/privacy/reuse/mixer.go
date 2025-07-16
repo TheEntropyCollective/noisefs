@@ -1,6 +1,7 @@
 package reuse
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // PublicDomainMixer ensures every file includes public domain content
@@ -16,6 +18,7 @@ type PublicDomainMixer struct {
 	config          *MixerConfig
 	mixingStrategy  MixingStrategy
 	verifier        *MixingVerifier
+	storageManager  *storage.Manager
 	mutex           sync.RWMutex
 }
 
@@ -158,14 +161,15 @@ func DefaultMixerConfig() *MixerConfig {
 }
 
 // NewPublicDomainMixer creates a new public domain mixer
-func NewPublicDomainMixer(pool *UniversalBlockPool, config *MixerConfig) *PublicDomainMixer {
+func NewPublicDomainMixer(pool *UniversalBlockPool, config *MixerConfig, storageManager *storage.Manager) *PublicDomainMixer {
 	if config == nil {
 		config = DefaultMixerConfig()
 	}
 
 	mixer := &PublicDomainMixer{
-		pool:   pool,
-		config: config,
+		pool:           pool,
+		config:         config,
+		storageManager: storageManager,
 		verifier: &MixingVerifier{
 			config: config,
 			pool:   pool,
@@ -308,8 +312,19 @@ func (mixer *PublicDomainMixer) executeMixingPlan(fileBlocks []*blocks.Block, pl
 			randomizer2CID = block2.CID
 		}
 
-		// Store anonymized data block
-		dataCID, err := mixer.storeAnonymizedBlock(fileBlock)
+		// Retrieve randomizer blocks for XOR
+		randomizer1Block, err := mixer.retrieveBlockFromPool(randomizer1CID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
+		}
+		
+		randomizer2Block, err := mixer.retrieveBlockFromPool(randomizer2CID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
+		}
+
+		// Store anonymized data block with XOR operations
+		dataCID, err := mixer.storeAnonymizedBlock(fileBlock, randomizer1Block, randomizer2Block)
 		if err != nil {
 			return nil, fmt.Errorf("failed to store anonymized block: %w", err)
 		}
@@ -323,12 +338,76 @@ func (mixer *PublicDomainMixer) executeMixingPlan(fileBlocks []*blocks.Block, pl
 	return descriptor, nil
 }
 
-// storeAnonymizedBlock stores an anonymized version of the file block
-func (mixer *PublicDomainMixer) storeAnonymizedBlock(block *blocks.Block) (string, error) {
-	// For now, simulate storing the block and return a CID
-	// In full implementation, this would XOR with randomizers and store in IPFS
-	hash := sha256.Sum256(block.Data)
-	return fmt.Sprintf("data-%x", hash[:16]), nil
+// retrieveBlockFromPool retrieves a block from the universal pool
+func (mixer *PublicDomainMixer) retrieveBlockFromPool(cid string) (*blocks.Block, error) {
+	if !mixer.pool.IsInitialized() {
+		return nil, fmt.Errorf("universal block pool not initialized")
+	}
+
+	mixer.pool.mutex.RLock()
+	poolBlock := mixer.pool.blocks[cid]
+	mixer.pool.mutex.RUnlock()
+
+	if poolBlock == nil {
+		return nil, fmt.Errorf("block not found in pool: %s", cid)
+	}
+
+	if poolBlock.Block == nil {
+		return nil, fmt.Errorf("block data is nil for CID: %s", cid)
+	}
+
+	return poolBlock.Block, nil
+}
+
+// storeAnonymizedBlock stores an anonymized version of the file block using XOR operations
+func (mixer *PublicDomainMixer) storeAnonymizedBlock(fileBlock, randomizer1, randomizer2 *blocks.Block) (string, error) {
+	if mixer.storageManager == nil {
+		return "", fmt.Errorf("storage manager not initialized")
+	}
+
+	fileSize := len(fileBlock.Data)
+	
+	// Trim randomizer blocks to match file block size
+	rand1Data := randomizer1.Data
+	if len(rand1Data) > fileSize {
+		rand1Data = rand1Data[:fileSize]
+	}
+	
+	rand2Data := randomizer2.Data
+	if len(rand2Data) > fileSize {
+		rand2Data = rand2Data[:fileSize]
+	}
+
+	// Ensure all blocks have the same size for XOR operations
+	if len(rand1Data) < fileSize || len(rand2Data) < fileSize {
+		return "", fmt.Errorf("randomizer blocks too small: file=%d, rand1=%d, rand2=%d", 
+			fileSize, len(rand1Data), len(rand2Data))
+	}
+
+	// Perform XOR operations: anonymized = fileBlock XOR randomizer1 XOR randomizer2
+	anonymizedData := make([]byte, fileSize)
+	for i := 0; i < fileSize; i++ {
+		anonymizedData[i] = fileBlock.Data[i] ^ rand1Data[i] ^ rand2Data[i]
+	}
+
+	// Create anonymized block
+	anonymizedBlock := &blocks.Block{
+		Data: anonymizedData,
+	}
+
+	// Store in IPFS via storage manager
+	ctx := context.Background()
+	backend, err := mixer.storageManager.GetDefaultBackend()
+	if err != nil {
+		return "", fmt.Errorf("failed to get default backend: %w", err)
+	}
+
+	address, err := backend.Put(ctx, anonymizedBlock)
+	if err != nil {
+		return "", fmt.Errorf("failed to store anonymized block: %w", err)
+	}
+
+	return address.ID, nil
 }
 
 // generateLegalAttestation creates legal documentation for the mixing
