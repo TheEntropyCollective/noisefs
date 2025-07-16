@@ -90,6 +90,13 @@ func (tb *testBackend) GetBackendInfo() *BackendInfo {
 		Name:    "test-backend",
 		Type:    "test",
 		Version: "1.0.0",
+		Capabilities: []string{
+			CapabilityContentAddress,
+			CapabilityBatch,
+		},
+		Config: map[string]interface{}{
+			"type": "test",
+		},
 	}
 }
 
