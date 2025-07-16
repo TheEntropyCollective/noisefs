@@ -475,8 +475,8 @@ func TestDirectoryManager_ReconstructDirectory(t *testing.T) {
 		t.Fatalf("Failed to store manifest: %v", err)
 	}
 	
-	// Reconstruct directory
-	targetPath := "/reconstructed/directory"
+	// Reconstruct directory (use same path as when created to derive correct key)
+	targetPath := dirPath
 	result, err := manager.ReconstructDirectory(ctx, manifestCID, targetPath)
 	if err != nil {
 		t.Fatalf("Failed to reconstruct directory: %v", err)

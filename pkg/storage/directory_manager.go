@@ -402,8 +402,15 @@ func (dc *DirectoryCache) removeEntry(entry *DirectoryCacheEntry) {
 
 // moveToHead moves entry to head of list
 func (dc *DirectoryCache) moveToHead(entry *DirectoryCacheEntry) {
-	dc.removeEntry(entry)
-	dc.addToHead(entry)
+	// Remove from current position in list
+	entry.prev.next = entry.next
+	entry.next.prev = entry.prev
+	
+	// Add to head
+	entry.prev = dc.head
+	entry.next = dc.head.next
+	dc.head.next.prev = entry
+	dc.head.next = entry
 }
 
 // removeTail removes entry from tail of list
