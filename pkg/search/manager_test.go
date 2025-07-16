@@ -41,7 +41,16 @@ func TestSearchManager(t *testing.T) {
 			"mock": {
 				Type:    "mock",
 				Enabled: true,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "memory://mock",
+				},
 			},
+		},
+		HealthCheck: &storage.HealthCheckConfig{
+			Enabled: false, // Disable health checks for tests
+		},
+		Distribution: &storage.DistributionConfig{
+			Strategy: "single",
 		},
 	}
 	storageManager, err := storage.NewManager(storageConfig)
@@ -97,7 +106,7 @@ func TestSearchManager(t *testing.T) {
 		}
 
 		// Wait for indexing to complete
-		time.Sleep(100 * time.Millisecond)
+		searchManager.WaitForIndexing()
 
 		// Check index stats
 		stats, err := searchManager.GetIndexStats()
@@ -105,6 +114,7 @@ func TestSearchManager(t *testing.T) {
 			t.Fatalf("Failed to get index stats: %v", err)
 		}
 
+		
 		if stats.DocumentCount != 3 {
 			t.Errorf("Expected 3 documents, got %d", stats.DocumentCount)
 		}
@@ -127,6 +137,7 @@ func TestSearchManager(t *testing.T) {
 
 		if len(results.Results) != 1 {
 			t.Errorf("Expected 1 result item, got %d", len(results.Results))
+			return // Prevent panic on next line
 		}
 
 		if results.Results[0].Path != "documents/readme.txt" {
@@ -158,7 +169,7 @@ func TestSearchManager(t *testing.T) {
 		}
 
 		// Wait for removal to complete
-		time.Sleep(100 * time.Millisecond)
+		searchManager.WaitForIndexing()
 
 		// Search again
 		results, err := searchManager.Search("readme", SearchOptions{MaxResults: 10})
@@ -231,7 +242,16 @@ func TestContentExtractor(t *testing.T) {
 			"mock": {
 				Type:    "mock",
 				Enabled: true,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "memory://mock",
+				},
 			},
+		},
+		HealthCheck: &storage.HealthCheckConfig{
+			Enabled: false, // Disable health checks for tests
+		},
+		Distribution: &storage.DistributionConfig{
+			Strategy: "single",
 		},
 	}
 	storageManager, err := storage.NewManager(storageConfig)

@@ -37,7 +37,16 @@ func BenchmarkSearchIndexing(b *testing.B) {
 			"mock": {
 				Type:    "mock",
 				Enabled: true,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "memory://mock",
+				},
 			},
+		},
+		HealthCheck: &storage.HealthCheckConfig{
+			Enabled: false, // Disable health checks for tests
+		},
+		Distribution: &storage.DistributionConfig{
+			Strategy: "single",
 		},
 	}
 	storageManager, _ := storage.NewManager(storageConfig)
@@ -83,7 +92,7 @@ func BenchmarkSearchIndexing(b *testing.B) {
 		}
 
 		// Wait for indexing to complete
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	})
 }
 
@@ -133,7 +142,7 @@ func BenchmarkSearchQueries(b *testing.B) {
 	}
 
 	// Wait for indexing
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	// Benchmark different query types
 	b.Run("SimpleTextSearch", func(b *testing.B) {
@@ -320,7 +329,7 @@ func TestSearchMemoryUsage(t *testing.T) {
 	}
 
 	// Wait for indexing
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 
 	// Search and verify preview
 	results, err := searchManager.Search("file", SearchOptions{MaxResults: 10})

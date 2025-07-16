@@ -32,11 +32,40 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 	if queryStr == "" {
 		q = bleve.NewMatchAllQuery()
 	} else {
-		q = bleve.NewQueryStringQuery(queryStr)
+		// Create a disjunction (OR) query that searches multiple fields
+		// This is more reliable than QueryStringQuery with our custom mapping
+		queries := []query.Query{}
+		
+		// Search in filename (uses standard analyzer)
+		filenameMatch := bleve.NewMatchQuery(queryStr)
+		filenameMatch.SetField("filename")
+		queries = append(queries, filenameMatch)
+		
+		// Also try prefix search on filename for partial matches
+		filenamePrefix := bleve.NewPrefixQuery(queryStr)
+		filenamePrefix.SetField("filename")
+		queries = append(queries, filenamePrefix)
+		
+		// Search in path (uses keyword analyzer, so try prefix match)
+		pathPrefix := bleve.NewPrefixQuery(queryStr)
+		pathPrefix.SetField("path")
+		queries = append(queries, pathPrefix)
+		
+		// Search in content and preview (if they have content)
+		contentMatch := bleve.NewMatchQuery(queryStr)
+		contentMatch.SetField("content")
+		queries = append(queries, contentMatch)
+		
+		previewMatch := bleve.NewMatchQuery(queryStr)
+		previewMatch.SetField("preview")
+		queries = append(queries, previewMatch)
+		
+		// Combine all queries with OR logic
+		q = bleve.NewDisjunctionQuery(queries...)
 	}
 	
 	// Apply filters if provided
-	if len(options.Filters) > 0 || options.TimeRange != nil || options.SizeRange != nil {
+	if len(options.Filters) > 0 || options.TimeRange != nil || options.SizeRange != nil || len(options.FileTypes) > 0 {
 		queries := []query.Query{q}
 		
 		// Add filter queries
@@ -73,6 +102,19 @@ func (sm *SearchManager) Search(queryStr string, options SearchOptions) (*Search
 			)
 			sizeQuery.SetField("size")
 			queries = append(queries, sizeQuery)
+		}
+		
+		// Add file type filter
+		if len(options.FileTypes) > 0 {
+			// Create a disjunction (OR) query for file types
+			fileTypeQueries := make([]query.Query, len(options.FileTypes))
+			for i, fileType := range options.FileTypes {
+				termQuery := bleve.NewTermQuery(fileType)
+				termQuery.SetField("file_type")
+				fileTypeQueries[i] = termQuery
+			}
+			fileTypeQuery := bleve.NewDisjunctionQuery(fileTypeQueries...)
+			queries = append(queries, fileTypeQuery)
 		}
 		
 		// Combine all queries
@@ -428,6 +470,16 @@ func (sm *SearchManager) RebuildIndex() error {
 	}
 	
 	return nil
+}
+
+// WaitForIndexing waits for all pending indexing operations to complete
+func (sm *SearchManager) WaitForIndexing() {
+	// Wait for queue to be empty
+	for len(sm.indexQueue) > 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	// Give workers a bit more time to process the last items
+	time.Sleep(100 * time.Millisecond)
 }
 
 // GetIndexStats returns statistics about the search index
