@@ -356,6 +356,19 @@ func (pool *UniversalBlockPool) GetRandomizerBlock(size int) (*PoolBlock, error)
 	}
 
 	blocks := pool.blocksBySize[size]
+	
+	// If no exact match, try larger blocks (can be trimmed)
+	if len(blocks) == 0 {
+		for blockSize := range pool.blocksBySize {
+			if blockSize >= size {
+				blocks = pool.blocksBySize[blockSize]
+				if len(blocks) > 0 {
+					break // Use blocks from the smallest size that works
+				}
+			}
+		}
+	}
+	
 	if len(blocks) == 0 {
 		return nil, fmt.Errorf("no blocks available for size %d", size)
 	}
@@ -393,9 +406,27 @@ func (pool *UniversalBlockPool) GetPublicDomainBlock(size int) (*PoolBlock, erro
 
 	// Filter to public domain blocks only
 	var publicBlocks []string
+	
+	// First try exact size match
 	for _, cid := range pool.blocksBySize[size] {
 		if pool.publicDomainCIDs[cid] {
 			publicBlocks = append(publicBlocks, cid)
+		}
+	}
+	
+	// If no exact match, try larger blocks (can be trimmed)
+	if len(publicBlocks) == 0 {
+		for blockSize := range pool.blocksBySize {
+			if blockSize >= size {
+				for _, cid := range pool.blocksBySize[blockSize] {
+					if pool.publicDomainCIDs[cid] {
+						publicBlocks = append(publicBlocks, cid)
+					}
+				}
+				if len(publicBlocks) > 0 {
+					break // Use blocks from the smallest size that works
+				}
+			}
 		}
 	}
 

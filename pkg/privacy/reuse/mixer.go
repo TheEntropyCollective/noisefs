@@ -519,11 +519,14 @@ func (strategy *DeterministicMixingStrategy) SelectPublicDomainBlocks(fileSize i
 func (strategy *DeterministicMixingStrategy) DetermineOptimalMixing(fileBlocks []*blocks.Block) (*MixingPlan, error) {
 	totalBlocks := len(fileBlocks)
 	publicBlocks := int(float64(totalBlocks) * strategy.config.MinPublicDomainRatio)
+	if publicBlocks < 1 {
+		publicBlocks = 1 // Always have at least one public domain block
+	}
 
 	plan := &MixingPlan{
-		TotalBlocks:        totalBlocks,
+		TotalBlocks:        totalBlocks + publicBlocks,
 		PublicDomainBlocks: publicBlocks,
-		UserDataBlocks:     totalBlocks - publicBlocks,
+		UserDataBlocks:     totalBlocks,
 		MixingPositions:    make([]int, 0, publicBlocks),
 		BlockAssignments:   make(map[int]*PoolBlock),
 	}
@@ -591,14 +594,17 @@ func (strategy *OptimalMixingStrategy) DetermineOptimalMixing(fileBlocks []*bloc
 	totalBlocks := len(fileBlocks)
 	// Use higher ratio for optimal legal protection
 	publicBlocks := int(float64(totalBlocks) * (strategy.config.MinPublicDomainRatio + 0.1))
+	if publicBlocks < 1 {
+		publicBlocks = 1 // Always have at least one public domain block
+	}
 	if publicBlocks > totalBlocks {
 		publicBlocks = totalBlocks
 	}
 
 	plan := &MixingPlan{
-		TotalBlocks:        totalBlocks,
+		TotalBlocks:        totalBlocks + publicBlocks,
 		PublicDomainBlocks: publicBlocks,
-		UserDataBlocks:     totalBlocks - publicBlocks,
+		UserDataBlocks:     totalBlocks,
 		MixingPositions:    make([]int, 0, publicBlocks),
 		BlockAssignments:   make(map[int]*PoolBlock),
 	}
