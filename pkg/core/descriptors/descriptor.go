@@ -111,16 +111,16 @@ func (d *Descriptor) Validate() error {
 
 // validateFile validates file-specific fields
 func (d *Descriptor) validateFile() error {
-	if d.FileSize < 0 {
-		return errors.New("file size cannot be negative")
+	if d.FileSize <= 0 {
+		return errors.New("file size must be positive")
 	}
 	
 	if d.BlockSize <= 0 {
 		return errors.New("block size must be positive")
 	}
 	
-	if len(d.Blocks) == 0 && d.FileSize > 0 {
-		return errors.New("descriptor must contain at least one block for non-empty files")
+	if len(d.Blocks) == 0 {
+		return errors.New("must contain at least one block")
 	}
 	
 	for i, block := range d.Blocks {
