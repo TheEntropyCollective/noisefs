@@ -161,7 +161,10 @@ func TestBlockHealthTracker_GetMostValuableBlocks(t *testing.T) {
 }
 
 func TestBlockHealthTracker_RequestTracking(t *testing.T) {
-	tracker := NewBlockHealthTracker(nil)
+	config := &BlockHealthConfig{
+		PrivacyEpsilon: 0.0, // Disable noise for testing
+	}
+	tracker := NewBlockHealthTracker(config)
 	
 	// Record multiple requests
 	for i := 0; i < 10; i++ {

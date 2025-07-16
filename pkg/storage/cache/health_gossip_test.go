@@ -100,7 +100,7 @@ func TestHealthGossiper_DifferentialPrivacy(t *testing.T) {
 	})
 	
 	// Run multiple times to verify noise is added
-	originalValue := int64(100)
+	originalValue := int64(1) // Only one block with low replication
 	variations := make(map[int64]int)
 	
 	for i := 0; i < 100; i++ {
@@ -123,7 +123,7 @@ func TestHealthGossiper_DifferentialPrivacy(t *testing.T) {
 	// Most values should be near the original
 	nearOriginal := 0
 	for value, count := range variations {
-		if value >= originalValue-10 && value <= originalValue+10 {
+		if value >= originalValue-3 && value <= originalValue+3 {
 			nearOriginal += count
 		}
 	}

@@ -1,8 +1,11 @@
 package cache
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -282,9 +285,17 @@ func (bht *BlockHealthTracker) AddDifferentialPrivacyNoise(trueValue float64) fl
 
 // generateLaplaceNoise generates Laplace-distributed noise
 func (bht *BlockHealthTracker) generateLaplaceNoise(scale float64) float64 {
-	// Simplified for example - use crypto/rand in production
-	uniform := float64(time.Now().UnixNano()%1000) / 1000.0
-	uniform = uniform*2 - 1 // Convert to [-1, 1]
+	// Use crypto/rand for cryptographically secure randomness
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		// If crypto/rand fails, this is a critical system issue
+		panic(fmt.Sprintf("crypto/rand failed for differential privacy: %v", err))
+	}
+	
+	// Convert bytes to uniform float in [-1, 1]
+	val := binary.LittleEndian.Uint64(buf)
+	uniform := float64(val)/float64(^uint64(0)) // [0, 1]
+	uniform = uniform*2 - 1 // [-1, 1]
 	
 	// Laplace distribution
 	if uniform > 0 {

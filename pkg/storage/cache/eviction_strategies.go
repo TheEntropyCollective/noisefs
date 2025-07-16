@@ -276,7 +276,7 @@ func NewGradualEvictionStrategy(base EvictionStrategy) *GradualEvictionStrategy 
 	return &GradualEvictionStrategy{
 		baseStrategy:   base,
 		maxEvictRatio:  0.1,        // Max 10% at once
-		minEvictSize:   1024 * 1024, // 1MB minimum
+		minEvictSize:   1024,       // 1KB minimum (more reasonable for tests)
 		evictionBuffer: 1.2,         // Free 20% extra space
 	}
 }

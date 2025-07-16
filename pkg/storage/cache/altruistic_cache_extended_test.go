@@ -14,30 +14,30 @@ func TestAltruisticCache_EvictionCooldown(t *testing.T) {
 	baseCache := NewMemoryCache(1000)
 	
 	config := &AltruisticCacheConfig{
-		MinPersonalCache: 800,
+		MinPersonalCache: 600,
 		EnableAltruistic: true,
 		EvictionCooldown: 500 * time.Millisecond,
 	}
 	
-	cache := NewAltruisticCache(baseCache, config, 1024)
+	cache := NewAltruisticCache(baseCache, config, 1000)
 	
-	// Fill with altruistic blocks
-	for i := 0; i < 5; i++ {
-		data := make([]byte, 100)
+	// Fill cache completely with altruistic blocks
+	for i := 0; i < 20; i++ {
+		data := make([]byte, 40) // 20 * 40 = 800 bytes
 		block := &blocks.Block{Data: data}
 		cache.StoreWithOrigin(string(rune('a'+i)), block, AltruisticBlock)
 	}
 	
-	// First eviction should succeed
-	largeData := make([]byte, 600)
+	// First personal block needs to evict many blocks (major eviction)
+	largeData := make([]byte, 200) // Need 200 bytes, will evict 240+ (6 blocks)
 	largeBlock := &blocks.Block{Data: largeData}
 	err := cache.StoreWithOrigin("personal1", largeBlock, PersonalBlock)
 	if err != nil {
 		t.Fatalf("First personal block should succeed: %v", err)
 	}
 	
-	// Immediate second eviction should fail due to cooldown
-	largeData2 := make([]byte, 300)
+	// Second personal block also needs eviction but should be blocked by cooldown
+	largeData2 := make([]byte, 200)
 	largeBlock2 := &blocks.Block{Data: largeData2}
 	err = cache.StoreWithOrigin("personal2", largeBlock2, PersonalBlock)
 	if err == nil {

@@ -314,11 +314,28 @@ func TestCoordinationEngine_GenerateHints(t *testing.T) {
 	}
 	
 	// Test with enough peers
+	filter1 := bloom.NewWithEstimates(1000, 0.01)
+	filter2 := bloom.NewWithEstimates(1000, 0.01)
+	filter3 := bloom.NewWithEstimates(1000, 0.01)
+	
+	// Add some blocks to create overlap
+	filter1.AddString("block1")
+	filter1.AddString("block2")
+	filter1.AddString("common1")
+	
+	filter2.AddString("block2")
+	filter2.AddString("block3")
+	filter2.AddString("common1")
+	
+	filter3.AddString("block1")
+	filter3.AddString("block3")
+	filter3.AddString("common2")
+	
 	peerFilters := map[string]*PeerFilterSet{
 		"peer1": {
 			PeerID: "peer1",
 			Filters: map[string]*bloom.BloomFilter{
-				"valuable_blocks": bloom.NewWithEstimates(1000, 0.01),
+				"valuable_blocks": filter1,
 			},
 			Hints: &CoordinationHints{
 				HighDemandBlocks: []string{"block1", "block2"},
@@ -327,7 +344,7 @@ func TestCoordinationEngine_GenerateHints(t *testing.T) {
 		"peer2": {
 			PeerID: "peer2",
 			Filters: map[string]*bloom.BloomFilter{
-				"valuable_blocks": bloom.NewWithEstimates(1000, 0.01),
+				"valuable_blocks": filter2,
 			},
 			Hints: &CoordinationHints{
 				HighDemandBlocks: []string{"block2", "block3"},
@@ -336,7 +353,7 @@ func TestCoordinationEngine_GenerateHints(t *testing.T) {
 		"peer3": {
 			PeerID: "peer3",
 			Filters: map[string]*bloom.BloomFilter{
-				"valuable_blocks": bloom.NewWithEstimates(1000, 0.01),
+				"valuable_blocks": filter3,
 			},
 			Hints: &CoordinationHints{
 				HighDemandBlocks: []string{"block1", "block3"},
@@ -358,7 +375,7 @@ func TestCoordinationEngine_GenerateHints(t *testing.T) {
 	
 	// Should calculate coordination score
 	if hints.CoordinationScore == 0.0 {
-		t.Error("Should calculate non-zero coordination score")
+		t.Errorf("Should calculate non-zero coordination score, got %f", hints.CoordinationScore)
 	}
 }
 

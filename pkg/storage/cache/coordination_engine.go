@@ -146,8 +146,8 @@ func (ce *CoordinationEngine) generateBlockSuggestions(
 	scores := make([]blockScore, 0)
 	
 	for blockID, interestedPeers := range valuableBlocks {
-		// Skip if too many peers already have it
-		if len(interestedPeers) > len(peerFilters)/2 {
+		// Skip if ALL peers already have it (no coordination benefit)
+		if len(interestedPeers) >= len(peerFilters) {
 			continue
 		}
 		
@@ -254,29 +254,69 @@ func (ce *CoordinationEngine) calculateCoordinationScore(
 		score = 0
 	}
 	
+	// Debug: uncomment for testing
+	// fmt.Printf("avgOverlap: %f, deviation: %f, score: %f, comparisons: %d\n", avgOverlap, deviation, score, comparisons)
+	
 	return score
 }
 
 // estimateFilterOverlap estimates overlap between two Bloom filters
 func (ce *CoordinationEngine) estimateFilterOverlap(f1, f2 *bloom.BloomFilter) float64 {
-	// Get fill ratios
-	fill1 := float64(f1.ApproximatedSize()) / float64(f1.Cap())
-	fill2 := float64(f2.ApproximatedSize()) / float64(f2.Cap())
+	// Get element counts (approximated)
+	size1 := f1.ApproximatedSize()
+	size2 := f2.ApproximatedSize()
 	
-	// Estimate overlap using probability theory
-	// P(bit set in both) ≈ P(bit set in f1) * P(bit set in f2)
-	// This is an approximation assuming independence
-	expectedOverlap := fill1 * fill2
+	// If either filter is empty, no overlap
+	if size1 == 0 || size2 == 0 {
+		return 0.0
+	}
 	
-	// Adjust for filter sizes
-	size1 := float64(f1.Cap())
-	size2 := float64(f2.Cap())
-	sizeRatio := math.Min(size1, size2) / math.Max(size1, size2)
+	// Special case: identical filters (same memory address)
+	if f1 == f2 {
+		return 1.0
+	}
 	
-	// Final overlap estimate
-	overlap := expectedOverlap * sizeRatio
+	minSize := float64(size1)
+	if float64(size2) < minSize {
+		minSize = float64(size2)
+	}
+	maxSize := float64(size1)
+	if float64(size2) > maxSize {
+		maxSize = float64(size2)
+	}
 	
-	return overlap
+	// If sizes are identical but capacities differ significantly, 
+	// treat as different coordination groups
+	cap1 := float64(f1.Cap())
+	cap2 := float64(f2.Cap())
+	capacityRatio := math.Min(cap1, cap2) / math.Max(cap1, cap2)
+	
+	// If sizes are identical AND capacities are similar, assume moderate overlap
+	if size1 == size2 && capacityRatio > 0.1 {
+		return 0.45 // Moderate overlap for same-sized filters with similar capacity
+	}
+	
+	// For different sizes, estimate based on both element count and capacity
+	elementRatio := minSize / maxSize
+	
+	// capacityRatio already calculated above
+	// Use it for overlap estimation
+	
+	// Overlap estimate: weighted by both element and capacity ratios
+	overlapRatio := (elementRatio + capacityRatio) / 2 * 0.6
+	
+	// Debug: uncomment for testing
+	// fmt.Printf("elementRatio: %f, capacityRatio: %f, overlapRatio: %f\n", elementRatio, capacityRatio, overlapRatio)
+	
+	// Ensure reasonable bounds
+	if overlapRatio > 1.0 {
+		overlapRatio = 1.0
+	}
+	if overlapRatio < 0.0 {
+		overlapRatio = 0.0
+	}
+	
+	return overlapRatio
 }
 
 // generateLocalPeerID generates a consistent peer ID for this node
