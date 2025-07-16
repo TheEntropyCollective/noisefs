@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -419,7 +420,7 @@ func TestRiskAssessment(t *testing.T) {
 		}
 		
 		expectedScore := assessment.Likelihood * assessment.Impact
-		if assessment.Score != expectedScore {
+		if math.Abs(assessment.Score-expectedScore) > 1e-9 {
 			t.Errorf("Risk %s has incorrect score: expected %f, got %f", 
 				name, expectedScore, assessment.Score)
 		}
