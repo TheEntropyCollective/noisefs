@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	storagetest "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 )
 
 func BenchmarkSearchIndexing(b *testing.B) {
@@ -205,13 +207,38 @@ func TestSearchConcurrency(t *testing.T) {
 	}
 
 	fileIndex := NewMockFileIndex()
+	
+	// Use same approach as working test
+	storage.RegisterBackend("mock", func(cfg *storage.BackendConfig) (storage.Backend, error) {
+		return storagetest.NewMockBackend("mock"), nil
+	})
+	
 	storageConfig := &storage.Config{
 		DefaultBackend: "mock",
 		Backends: map[string]*storage.BackendConfig{
-			"mock": {Type: "mock", Enabled: true},
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 1,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "http://localhost:5001",
+				},
+				Settings: map[string]interface{}{},
+			},
+		},
+		Distribution: &storage.DistributionConfig{
+			Strategy: "single",
+		},
+		HealthCheck: &storage.HealthCheckConfig{
+			Enabled:  false,
+			Interval: time.Second,
+			Timeout:  time.Second,
 		},
 	}
 	storageManager, _ := storage.NewManager(storageConfig)
+	ctx := context.Background()
+	storageManager.Start(ctx)
+	defer storageManager.Stop(ctx)
 
 	searchManager, _ := NewSearchManager(config, fileIndex, storageManager)
 	searchManager.Start()
@@ -257,16 +284,22 @@ func TestSearchConcurrency(t *testing.T) {
 	}
 
 	// Wait for all operations to complete
+	operationsCompleted := 0
 	for i := 0; i < 15; i++ {
 		select {
 		case <-done:
-			// Operation completed
+			operationsCompleted++
 		case err := <-errors:
 			t.Errorf("Concurrent operation failed: %v", err)
 		case <-time.After(10 * time.Second):
 			t.Fatal("Timeout waiting for concurrent operations")
 		}
 	}
+	
+	t.Logf("Completed %d operations", operationsCompleted)
+
+	// Wait for all indexing to complete
+	searchManager.WaitForIndexing()
 
 	// Verify final state
 	stats, err := searchManager.GetIndexStats()
@@ -274,6 +307,7 @@ func TestSearchConcurrency(t *testing.T) {
 		t.Fatalf("Failed to get stats: %v", err)
 	}
 
+	t.Logf("Final document count: %d", stats.DocumentCount)
 	if stats.DocumentCount < 1000 {
 		t.Errorf("Expected at least 1000 documents, got %d", stats.DocumentCount)
 	}
@@ -296,13 +330,38 @@ func TestSearchMemoryUsage(t *testing.T) {
 	}
 
 	fileIndex := NewMockFileIndex()
+	
+	// Use same approach as working test
+	storage.RegisterBackend("mock", func(cfg *storage.BackendConfig) (storage.Backend, error) {
+		return storagetest.NewMockBackend("mock"), nil
+	})
+	
 	storageConfig := &storage.Config{
 		DefaultBackend: "mock",
 		Backends: map[string]*storage.BackendConfig{
-			"mock": {Type: "mock", Enabled: true},
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 1,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "http://localhost:5001",
+				},
+				Settings: map[string]interface{}{},
+			},
+		},
+		Distribution: &storage.DistributionConfig{
+			Strategy: "single",
+		},
+		HealthCheck: &storage.HealthCheckConfig{
+			Enabled:  false,
+			Interval: time.Second,
+			Timeout:  time.Second,
 		},
 	}
 	storageManager, _ := storage.NewManager(storageConfig)
+	ctx := context.Background()
+	storageManager.Start(ctx)
+	defer storageManager.Stop(ctx)
 
 	searchManager, _ := NewSearchManager(config, fileIndex, storageManager)
 	searchManager.Start()
@@ -328,8 +387,8 @@ func TestSearchMemoryUsage(t *testing.T) {
 		t.Fatalf("Failed to index large file: %v", err)
 	}
 
-	// Wait for indexing
-	time.Sleep(500 * time.Millisecond)
+	// Wait for indexing to complete
+	searchManager.WaitForIndexing()
 
 	// Search and verify preview
 	results, err := searchManager.Search("file", SearchOptions{MaxResults: 10})

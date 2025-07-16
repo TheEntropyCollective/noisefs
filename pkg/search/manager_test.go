@@ -288,6 +288,11 @@ func TestContentExtractor(t *testing.T) {
 			"The preview should cut at a reasonable point. " +
 			"This sentence should not be included in the preview."
 
+		// Make sure the text is longer than ContentPreview to trigger truncation
+		for len(longText) <= config.ContentPreview {
+			longText += " Additional text to make it longer."
+		}
+
 		preview := extractor.createPreview(longText)
 
 		if len(preview) > config.ContentPreview+10 {
