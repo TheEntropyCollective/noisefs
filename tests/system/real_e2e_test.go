@@ -10,6 +10,8 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	fixtures "github.com/TheEntropyCollective/noisefs/tests/fixtures"
+	// Import backends package to trigger IPFS backend registration
+	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
 )
 
 // isDockerAvailable checks if Docker is available and running

@@ -13,6 +13,8 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	// Import backends package to trigger IPFS backend registration
+	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
 )
 
 // RealIPFSTestHarness manages a real multi-node IPFS test environment

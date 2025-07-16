@@ -1,14 +1,22 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Agent 5 - Advanced Directory Features
+## Current Milestone: PHASE 1 - Test Infrastructure Foundation
 
-**Status**: ACTIVE - Agent 5 (Advanced Features) - Test Stabilization COMPLETED, Sprint 2 READY
+**Status**: ACTIVE - Critical Infrastructure Fixes for System Test Stability
 
-**Summary**: Build advanced directory capabilities that transform NoiseFS directories into a powerful content management system. Add search, synchronization, write operations, and versioning to create a complete directory editing and management experience.
+**Summary**: Fix critical IPFS backend registration issue in system tests. The TestRealEndToEnd test is failing with "backend type ipfs not registered" errors because the IPFS backend is not properly registered in the test environment.
 
-**Building on Agent 4**: Agent 4 completed comprehensive FUSE directory integration with directory mounting, manifest caching, and full read-only directory navigation. Agent 5 extends this foundation with advanced features for content management and directory editing.
+**Root Cause Identified**: The IPFS backend registration happens in its init() function, but this only runs when the backends package is imported. The test harness imports the storage package but not the backends package, so the registration never occurs.
 
-**Integration Strategy**: Build upon Agent 4's directory cache and FUSE operations. Integrate with Agent 2's storage manager and directory processor. Extend Agent 1's manifest structures. Create new services for search, sync, and versioning while maintaining backward compatibility and performance.
+**Implementation Plan**: Add proper backend registration to the system test setup by importing the backends package to trigger the init() function that registers the IPFS backend type.
+
+### Current Task: Fix IPFS Backend Registration (CRITICAL PRIORITY)
+- [ ] Fix IPFS backend registration in system tests
+  - **Problem**: "backend type ipfs not registered" error in TestRealEndToEnd
+  - **Root Cause**: IPFS backend init() function not called in test environment
+  - **Solution**: Add blank import for backends package in test harness
+  - **Files to modify**: `/Users/jconnuck/noisefs/tests/fixtures/real_ipfs_harness.go`
+  - **Test**: `go test ./tests/system -run TestRealEndToEnd`
 
 ### Test Stabilization Sprint: System Reliability (HIGH PRIORITY) - ✅ COMPLETED
 - [x] Fix critical nil pointer panic in privacy/reuse system (TestPublicDomainMixer)
