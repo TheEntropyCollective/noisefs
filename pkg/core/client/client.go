@@ -590,6 +590,11 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 	if progress != nil {
 		progress("Reading file", 0, 100)
 	}
+	
+	if reader == nil {
+		return "", fmt.Errorf("reader cannot be nil")
+	}
+	
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return "", fmt.Errorf("failed to read data: %w", err)
