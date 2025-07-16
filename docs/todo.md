@@ -1,12 +1,62 @@
 # NoiseFS Development Todo
 
-## Current Milestone: Agent 4 - Directory FUSE Integration
+## Current Milestone: Agent 5 - Advanced Directory Features
 
-**Status**: ✅ COMPLETED - Agent 4 (FUSE Integration) - All Sprints Complete
+**Status**: ACTIVE - Agent 5 (Advanced Features) - Sprint 1 Starting
 
-**Summary**: Complete FUSE integration for directory support in NoiseFS, building on Agent 1's core directory infrastructure, Agent 2's storage integration, and Agent 3's CLI integration. Enhance FileIndex to support directory descriptor CIDs, implement directory manifest cache for efficient access, add FUSE directory operations (OpenDir, ReadDir, GetAttr), update mount command with directory support flags, and create comprehensive integration testing.
+**Summary**: Build advanced directory capabilities that transform NoiseFS directories into a powerful content management system. Add search, synchronization, write operations, and versioning to create a complete directory editing and management experience.
 
-**Analysis Complete**: Agent 1 successfully implemented DirectoryManifest and DirectoryEntry structures with encrypted manifests in pkg/core/descriptors/directory.go. Agent 2 completed directory storage integration with directory_processor.go and directory_manager.go, providing recursive tree walking, LRU caching, and storage backend integration. Agent 3 completed CLI integration with recursive upload/download and ls command. FUSE infrastructure exists in pkg/fuse/ with basic file support and index management.
+**Building on Agent 4**: Agent 4 completed comprehensive FUSE directory integration with directory mounting, manifest caching, and full read-only directory navigation. Agent 5 extends this foundation with advanced features for content management and directory editing.
+
+**Integration Strategy**: Build upon Agent 4's directory cache and FUSE operations. Integrate with Agent 2's storage manager and directory processor. Extend Agent 1's manifest structures. Create new services for search, sync, and versioning while maintaining backward compatibility and performance.
+
+### Sprint 1: Advanced Search Service (HIGH PRIORITY) - STARTING
+- [ ] Analyze existing codebase for search integration points
+- [ ] Research and select search indexing library (bleve vs tantivy-go)
+- [ ] Design search index storage strategy and architecture
+- [ ] Plan search API interface and CLI integration
+- [ ] Implement basic content indexing infrastructure
+- [ ] Create full-text search capabilities for directory files
+- [ ] Add metadata search (filename, size, date, type)
+- [ ] Implement search result caching and optimization
+- [ ] Create `noisefs search` CLI command
+- [ ] Add performance testing framework for search operations
+
+### Sprint 2: Directory Synchronization Service (HIGH PRIORITY)
+- [ ] Design bi-directional sync service architecture
+- [ ] Implement local directory monitoring and change detection
+- [ ] Create conflict detection and resolution strategies
+- [ ] Add progress reporting and comprehensive error handling
+- [ ] Support selective sync patterns (include/exclude files)
+- [ ] Create `noisefs sync` command with watch mode
+- [ ] Implement real-time sync capabilities
+- [ ] Add sync status and history tracking
+
+### Sprint 3: FUSE Write Operations (HIGH PRIORITY)
+- [ ] Extend FUSE operations to support write operations (Create, Write, Delete)
+- [ ] Implement directory operations (Mkdir, Rmdir)
+- [ ] Add atomic directory manifest updates using sync infrastructure
+- [ ] Implement file modification tracking and change detection
+- [ ] Handle concurrent write scenarios with distributed locking
+- [ ] Integrate with directory cache to maintain read performance
+- [ ] Add file permission and attribute handling
+- [ ] Create comprehensive write operation tests
+
+### Sprint 4: Directory Versioning System (HIGH PRIORITY)
+- [ ] Implement version control system for directory changes
+- [ ] Add automatic versioning on directory modifications
+- [ ] Create version restoration and rollback capabilities
+- [ ] Build diff utilities for comparing versions (file and content level)
+- [ ] Optimize storage efficiency using content deduplication
+- [ ] Add `noisefs versions` command for version management
+- [ ] Implement version cleanup and retention policies
+- [ ] Create version history visualization
+
+**Current Status - Agent 5 Implementation Progress:**
+- ⏳ **Sprint 1 Starting**: Advanced Search Service implementation
+- ⏳ **Sprint 2 Pending**: Directory Synchronization Service
+- ⏳ **Sprint 3 Pending**: FUSE Write Operations
+- ⏳ **Sprint 4 Pending**: Directory Versioning System
 
 **Key Finding**: FUSE integration requires extending FileIndex to support directory descriptors, implementing manifest caching for efficient directory navigation, enhancing FUSE operations to handle directory descriptors, and adding mount command flags for directory-specific options.
 

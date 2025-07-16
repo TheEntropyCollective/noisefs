@@ -4,6 +4,7 @@ go 1.24.4
 
 require (
 	github.com/bits-and-blooms/bloom/v3 v3.7.0
+	github.com/blevesearch/bleve/v2 v2.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/hanwen/go-fuse/v2 v2.8.0
