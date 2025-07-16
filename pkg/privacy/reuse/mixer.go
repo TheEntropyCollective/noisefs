@@ -108,7 +108,7 @@ func (s *RandomMixingStrategy) DetermineOptimalMixing(fileBlocks []*blocks.Block
 	}
 	
 	return &MixingPlan{
-		TotalBlocks:        totalBlocks + publicDomainCount,
+		TotalBlocks:        totalBlocks,
 		PublicDomainBlocks: publicDomainCount,
 		UserDataBlocks:     totalBlocks,
 		MixingPositions:    positions,
@@ -524,7 +524,7 @@ func (strategy *DeterministicMixingStrategy) DetermineOptimalMixing(fileBlocks [
 	}
 
 	plan := &MixingPlan{
-		TotalBlocks:        totalBlocks + publicBlocks,
+		TotalBlocks:        totalBlocks,
 		PublicDomainBlocks: publicBlocks,
 		UserDataBlocks:     totalBlocks,
 		MixingPositions:    make([]int, 0, publicBlocks),
@@ -602,7 +602,7 @@ func (strategy *OptimalMixingStrategy) DetermineOptimalMixing(fileBlocks []*bloc
 	}
 
 	plan := &MixingPlan{
-		TotalBlocks:        totalBlocks + publicBlocks,
+		TotalBlocks:        totalBlocks,
 		PublicDomainBlocks: publicBlocks,
 		UserDataBlocks:     totalBlocks,
 		MixingPositions:    make([]int, 0, publicBlocks),

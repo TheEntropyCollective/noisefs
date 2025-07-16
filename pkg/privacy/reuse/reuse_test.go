@@ -302,14 +302,14 @@ func TestPublicDomainMixer(t *testing.T) {
 
 		descriptor, plan, err := mixer.MixFileWithPublicDomain(fileBlocks)
 		if err != nil {
-			t.Errorf("Failed to mix file with public domain: %v", err)
+			t.Fatalf("Failed to mix file with public domain: %v", err)
 		}
 
 		if descriptor == nil {
-			t.Error("Should generate descriptor")
+			t.Fatal("Should generate descriptor")
 		}
 		if plan == nil {
-			t.Error("Should generate mixing plan")
+			t.Fatal("Should generate mixing plan")
 		}
 
 		// Check mixing plan requirements
