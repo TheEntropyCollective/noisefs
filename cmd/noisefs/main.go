@@ -60,7 +60,7 @@ func main() {
 	// Check for subcommands first
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "announce", "subscribe", "discover", "ls", "search", "sync":
+		case "announce", "subscribe", "discover", "ls", "search", "sync", "share-directory", "receive-directory", "list-snapshots":
 			handleSubcommand(os.Args[1], os.Args[2:])
 			return
 		}
@@ -1401,6 +1401,12 @@ func handleSubcommand(cmd string, args []string) {
 		return
 	case "sync":
 		err = handleSyncCommand(args, storageManager, quiet, jsonOutput)
+	case "share-directory":
+		err = shareDirectoryCommand(args, storageManager, quiet, jsonOutput)
+	case "receive-directory":
+		err = receiveDirectoryCommand(args, storageManager, quiet, jsonOutput)
+	case "list-snapshots":
+		err = listSnapshotsCommand(args, storageManager, quiet, jsonOutput)
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
@@ -1728,4 +1734,329 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 func streamingDownloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// For now, delegate to regular download - streaming directory download would need more complex implementation
 	return downloadDirectory(storageManager, client, directoryCID, outputDir, quiet, jsonOutput, cfg, logger)
+}
+
+// shareDirectoryCommand creates an immutable snapshot of a directory for sharing
+func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet bool, jsonOutput bool) error {
+	if len(args) < 3 {
+		return fmt.Errorf("usage: share-directory <directory-cid> <directory-key> <snapshot-name> [description]")
+	}
+	
+	directoryCID := args[0]
+	directoryKeyStr := args[1]
+	snapshotName := args[2]
+	description := ""
+	if len(args) > 3 {
+		description = args[3]
+	}
+	
+	// Parse the directory key
+	directoryKey, err := crypto.ParseKeyFromString(directoryKeyStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse directory key: %w", err)
+	}
+	
+	// Create directory manager
+	tempKey, err := crypto.GenerateKey("temp-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate temp key: %w", err)
+	}
+	
+	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create directory manager: %w", err)
+	}
+	
+	// Create snapshot
+	snapshotCID, snapshotKey, err := directoryManager.CreateDirectorySnapshot(
+		context.Background(),
+		directoryCID,
+		directoryKey,
+		snapshotName,
+		description,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create directory snapshot: %w", err)
+	}
+	
+	// Prepare result
+	result := ShareDirectoryResult{
+		SnapshotCID:  snapshotCID,
+		SnapshotKey:  snapshotKey.String(),
+		SnapshotName: snapshotName,
+		Description:  description,
+		OriginalCID:  directoryCID,
+		CreatedAt:    time.Now(),
+	}
+	
+	// Output result
+	if jsonOutput {
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		fmt.Printf("%s\t%s\n", snapshotCID, snapshotKey.String())
+	} else {
+		fmt.Printf("Directory snapshot created successfully!\n")
+		fmt.Printf("Snapshot CID: %s\n", snapshotCID)
+		fmt.Printf("Snapshot Key: %s\n", snapshotKey.String())
+		fmt.Printf("Snapshot Name: %s\n", snapshotName)
+		if description != "" {
+			fmt.Printf("Description: %s\n", description)
+		}
+		fmt.Printf("Original CID: %s\n", directoryCID)
+		fmt.Printf("\nShare this CID and key with others to give them read-only access to the directory snapshot.\n")
+	}
+	
+	return nil
+}
+
+// receiveDirectoryCommand accesses a shared directory snapshot
+func receiveDirectoryCommand(args []string, storageManager *storage.Manager, quiet bool, jsonOutput bool) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: receive-directory <snapshot-cid> <snapshot-key>")
+	}
+	
+	snapshotCID := args[0]
+	snapshotKeyStr := args[1]
+	
+	// Parse the snapshot key
+	snapshotKey, err := crypto.ParseKeyFromString(snapshotKeyStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse snapshot key: %w", err)
+	}
+	
+	// Create directory manager
+	tempKey, err := crypto.GenerateKey("temp-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate temp key: %w", err)
+	}
+	
+	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create directory manager: %w", err)
+	}
+	
+	// Retrieve snapshot manifest
+	manifest, err := directoryManager.RetrieveDirectoryManifestWithKey(
+		context.Background(),
+		snapshotCID,
+		snapshotKey,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve directory snapshot: %w", err)
+	}
+	
+	// Verify this is a snapshot
+	if !manifest.IsSnapshot() {
+		return fmt.Errorf("CID does not point to a valid directory snapshot")
+	}
+	
+	// Get snapshot info
+	snapshotInfo := manifest.GetSnapshotInfo()
+	if snapshotInfo == nil {
+		return fmt.Errorf("snapshot missing metadata")
+	}
+	
+	// Process directory entries
+	entries := make([]DirectoryListEntry, 0, len(manifest.Entries))
+	for _, entry := range manifest.Entries {
+		listEntry := DirectoryListEntry{
+			Name:       fmt.Sprintf("encrypted_%d", len(entries)),
+			CID:        entry.CID,
+			Type:       entry.Type,
+			Size:       entry.Size,
+			ModifiedAt: entry.ModifiedAt,
+		}
+		entries = append(entries, listEntry)
+	}
+	
+	// Prepare result
+	result := ReceiveDirectoryResult{
+		SnapshotCID:    snapshotCID,
+		SnapshotName:   snapshotInfo.SnapshotName,
+		Description:    snapshotInfo.Description,
+		OriginalCID:    snapshotInfo.OriginalCID,
+		CreatedAt:      snapshotInfo.CreationTime,
+		Entries:        entries,
+		TotalEntries:   len(entries),
+		IsSnapshot:     true,
+	}
+	
+	// Output result
+	if jsonOutput {
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		for _, entry := range entries {
+			typeStr := "file"
+			if entry.Type == blocks.DirectoryType {
+				typeStr = "directory"
+			}
+			fmt.Printf("%s\t%s\t%s\n", entry.CID, typeStr, entry.Name)
+		}
+	} else {
+		fmt.Printf("Directory Snapshot: %s\n", snapshotCID)
+		fmt.Printf("Snapshot Name: %s\n", snapshotInfo.SnapshotName)
+		if snapshotInfo.Description != "" {
+			fmt.Printf("Description: %s\n", snapshotInfo.Description)
+		}
+		fmt.Printf("Original CID: %s\n", snapshotInfo.OriginalCID)
+		fmt.Printf("Created: %s\n", snapshotInfo.CreationTime.Format("2006-01-02 15:04:05"))
+		fmt.Printf("Entries: %d\n\n", len(entries))
+		
+		for _, entry := range entries {
+			typeStr := "FILE"
+			if entry.Type == blocks.DirectoryType {
+				typeStr = "DIR"
+			}
+			
+			fmt.Printf("%-4s  %-8s  %s  %s\n", 
+				typeStr, 
+				formatBytes(entry.Size), 
+				entry.ModifiedAt.Format("2006-01-02 15:04:05"),
+				entry.Name)
+		}
+	}
+	
+	return nil
+}
+
+// listSnapshotsCommand lists all snapshots associated with a directory
+func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonOutput bool) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: list-snapshots <directory-cid> [directory-key]")
+	}
+	
+	directoryCID := args[0]
+	var directoryKey *crypto.EncryptionKey
+	
+	if len(args) > 1 {
+		var err error
+		directoryKey, err = crypto.ParseKeyFromString(args[1])
+		if err != nil {
+			return fmt.Errorf("failed to parse directory key: %w", err)
+		}
+	}
+	
+	// Create directory manager
+	tempKey, err := crypto.GenerateKey("temp-key")
+	if err != nil {
+		return fmt.Errorf("failed to generate temp key: %w", err)
+	}
+	
+	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create directory manager: %w", err)
+	}
+	
+	// For now, we can only list the original directory info
+	// In a full implementation, we would need a snapshot index or registry
+	var manifest *blocks.DirectoryManifest
+	if directoryKey != nil {
+		manifest, err = directoryManager.RetrieveDirectoryManifestWithKey(
+			context.Background(),
+			directoryCID,
+			directoryKey,
+		)
+	} else {
+		// Use default key (this is a limitation - in practice, the key would be required)
+		manifest, err = directoryManager.RetrieveDirectoryManifest(
+			context.Background(),
+			"",
+			directoryCID,
+		)
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to retrieve directory manifest: %w", err)
+	}
+	
+	// Prepare result
+	snapshots := make([]SnapshotInfo, 0)
+	
+	// If this is a snapshot, include it in the list
+	if manifest.IsSnapshot() {
+		snapshotInfo := manifest.GetSnapshotInfo()
+		if snapshotInfo != nil {
+			snapshots = append(snapshots, SnapshotInfo{
+				SnapshotCID:  directoryCID,
+				SnapshotName: snapshotInfo.SnapshotName,
+				Description:  snapshotInfo.Description,
+				OriginalCID:  snapshotInfo.OriginalCID,
+				CreatedAt:    snapshotInfo.CreationTime,
+				IsSnapshot:   true,
+			})
+		}
+	}
+	
+	result := ListSnapshotsResult{
+		DirectoryCID: directoryCID,
+		Snapshots:    snapshots,
+		TotalSnapshots: len(snapshots),
+	}
+	
+	// Output result
+	if jsonOutput {
+		util.PrintJSONSuccess(result)
+	} else if quiet {
+		for _, snapshot := range snapshots {
+			fmt.Printf("%s\t%s\t%s\n", snapshot.SnapshotCID, snapshot.SnapshotName, snapshot.CreatedAt.Format("2006-01-02 15:04:05"))
+		}
+	} else {
+		fmt.Printf("Directory: %s\n", directoryCID)
+		fmt.Printf("Snapshots: %d\n\n", len(snapshots))
+		
+		if len(snapshots) == 0 {
+			fmt.Printf("No snapshots found.\n")
+			fmt.Printf("Note: This command currently only detects if the provided CID is itself a snapshot.\n")
+			fmt.Printf("A full snapshot registry would be needed to list all snapshots of a directory.\n")
+		} else {
+			for _, snapshot := range snapshots {
+				fmt.Printf("Snapshot: %s\n", snapshot.SnapshotCID)
+				fmt.Printf("  Name: %s\n", snapshot.SnapshotName)
+				if snapshot.Description != "" {
+					fmt.Printf("  Description: %s\n", snapshot.Description)
+				}
+				fmt.Printf("  Original CID: %s\n", snapshot.OriginalCID)
+				fmt.Printf("  Created: %s\n", snapshot.CreatedAt.Format("2006-01-02 15:04:05"))
+				fmt.Printf("\n")
+			}
+		}
+	}
+	
+	return nil
+}
+
+// Result structures for JSON output
+type ShareDirectoryResult struct {
+	SnapshotCID  string    `json:"snapshot_cid"`
+	SnapshotKey  string    `json:"snapshot_key"`
+	SnapshotName string    `json:"snapshot_name"`
+	Description  string    `json:"description"`
+	OriginalCID  string    `json:"original_cid"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type ReceiveDirectoryResult struct {
+	SnapshotCID    string               `json:"snapshot_cid"`
+	SnapshotName   string               `json:"snapshot_name"`
+	Description    string               `json:"description"`
+	OriginalCID    string               `json:"original_cid"`
+	CreatedAt      time.Time            `json:"created_at"`
+	Entries        []DirectoryListEntry `json:"entries"`
+	TotalEntries   int                  `json:"total_entries"`
+	IsSnapshot     bool                 `json:"is_snapshot"`
+}
+
+type SnapshotInfo struct {
+	SnapshotCID  string    `json:"snapshot_cid"`
+	SnapshotName string    `json:"snapshot_name"`
+	Description  string    `json:"description"`
+	OriginalCID  string    `json:"original_cid"`
+	CreatedAt    time.Time `json:"created_at"`
+	IsSnapshot   bool      `json:"is_snapshot"`
+}
+
+type ListSnapshotsResult struct {
+	DirectoryCID   string         `json:"directory_cid"`
+	Snapshots      []SnapshotInfo `json:"snapshots"`
+	TotalSnapshots int            `json:"total_snapshots"`
 }

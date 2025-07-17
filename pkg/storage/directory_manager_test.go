@@ -774,3 +774,345 @@ func createTestEncryptionKeyBench(b *testing.B) *crypto.EncryptionKey {
 	}
 	return key
 }
+
+// TestCreateDirectorySnapshot tests the CreateDirectorySnapshot functionality
+func TestCreateDirectorySnapshot(t *testing.T) {
+	// Create test storage manager
+	manager := createTestStorageManager(t)
+	err := manager.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create directory manager
+	encryptionKey := createTestEncryptionKey(t)
+	config := DefaultDirectoryManagerConfig()
+	dirManager, err := NewDirectoryManager(manager, encryptionKey, config)
+	if err != nil {
+		t.Fatalf("Failed to create directory manager: %v", err)
+	}
+	
+	// Create and store original directory manifest
+	originalManifest := createTestDirectoryManifest()
+	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
+	if err != nil {
+		t.Fatalf("Failed to store original directory manifest: %v", err)
+	}
+	
+	// Create snapshot
+	snapshotName := "test-snapshot"
+	description := "Test snapshot description"
+	snapshotCID, snapshotKey, err := dirManager.CreateDirectorySnapshot(
+		context.Background(),
+		originalCID,
+		encryptionKey,
+		snapshotName,
+		description,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create directory snapshot: %v", err)
+	}
+	
+	// Verify snapshot was created
+	if snapshotCID == "" {
+		t.Error("Snapshot CID should not be empty")
+	}
+	
+	if snapshotKey == nil {
+		t.Error("Snapshot key should not be nil")
+	}
+	
+	// Verify snapshot key is different from original key
+	if snapshotKey.String() == encryptionKey.String() {
+		t.Error("Snapshot key should be different from original key")
+	}
+	
+	// Retrieve snapshot manifest
+	snapshotManifest, err := dirManager.RetrieveDirectoryManifestWithKey(
+		context.Background(),
+		snapshotCID,
+		snapshotKey,
+	)
+	if err != nil {
+		t.Fatalf("Failed to retrieve snapshot manifest: %v", err)
+	}
+	
+	// Verify snapshot properties
+	if !snapshotManifest.IsSnapshot() {
+		t.Error("Retrieved manifest should be a snapshot")
+	}
+	
+	snapshotInfo := snapshotManifest.GetSnapshotInfo()
+	if snapshotInfo == nil {
+		t.Fatal("Snapshot info should not be nil")
+	}
+	
+	if snapshotInfo.OriginalCID != originalCID {
+		t.Errorf("Expected original CID %s, got %s", originalCID, snapshotInfo.OriginalCID)
+	}
+	
+	if snapshotInfo.SnapshotName != snapshotName {
+		t.Errorf("Expected snapshot name %s, got %s", snapshotName, snapshotInfo.SnapshotName)
+	}
+	
+	if snapshotInfo.Description != description {
+		t.Errorf("Expected description %s, got %s", description, snapshotInfo.Description)
+	}
+	
+	// Verify entries are identical
+	if len(snapshotManifest.Entries) != len(originalManifest.Entries) {
+		t.Errorf("Expected %d entries, got %d", len(originalManifest.Entries), len(snapshotManifest.Entries))
+	}
+	
+	for i, entry := range snapshotManifest.Entries {
+		originalEntry := originalManifest.Entries[i]
+		if entry.CID != originalEntry.CID {
+			t.Errorf("Entry %d: expected CID %s, got %s", i, originalEntry.CID, entry.CID)
+		}
+		if entry.Type != originalEntry.Type {
+			t.Errorf("Entry %d: expected type %v, got %v", i, originalEntry.Type, entry.Type)
+		}
+		if entry.Size != originalEntry.Size {
+			t.Errorf("Entry %d: expected size %d, got %d", i, originalEntry.Size, entry.Size)
+		}
+	}
+}
+
+// TestCreateDirectorySnapshotErrors tests error conditions for CreateDirectorySnapshot
+func TestCreateDirectorySnapshotErrors(t *testing.T) {
+	// Create test storage manager
+	manager := createTestStorageManager(t)
+	err := manager.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create directory manager
+	encryptionKey := createTestEncryptionKey(t)
+	config := DefaultDirectoryManagerConfig()
+	dirManager, err := NewDirectoryManager(manager, encryptionKey, config)
+	if err != nil {
+		t.Fatalf("Failed to create directory manager: %v", err)
+	}
+	
+	// Test with invalid CID
+	_, _, err = dirManager.CreateDirectorySnapshot(
+		context.Background(),
+		"invalid-cid",
+		encryptionKey,
+		"test-snapshot",
+		"Test description",
+	)
+	if err == nil {
+		t.Error("Expected error for invalid CID")
+	}
+	
+	// Test with nil key
+	_, _, err = dirManager.CreateDirectorySnapshot(
+		context.Background(),
+		"valid-cid",
+		nil,
+		"test-snapshot",
+		"Test description",
+	)
+	if err == nil {
+		t.Error("Expected error for nil key")
+	}
+	
+	// Test with empty snapshot name
+	_, _, err = dirManager.CreateDirectorySnapshot(
+		context.Background(),
+		"valid-cid",
+		encryptionKey,
+		"",
+		"Test description",
+	)
+	if err == nil {
+		t.Error("Expected error for empty snapshot name")
+	}
+}
+
+// TestRetrieveDirectoryManifestWithKey tests the RetrieveDirectoryManifestWithKey functionality
+func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
+	// Create test storage manager
+	manager := createTestStorageManager(t)
+	err := manager.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create directory manager
+	encryptionKey := createTestEncryptionKey(t)
+	config := DefaultDirectoryManagerConfig()
+	dirManager, err := NewDirectoryManager(manager, encryptionKey, config)
+	if err != nil {
+		t.Fatalf("Failed to create directory manager: %v", err)
+	}
+	
+	// Create and store original directory manifest
+	originalManifest := createTestDirectoryManifest()
+	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
+	if err != nil {
+		t.Fatalf("Failed to store original directory manifest: %v", err)
+	}
+	
+	// Create snapshot
+	snapshotCID, snapshotKey, err := dirManager.CreateDirectorySnapshot(
+		context.Background(),
+		originalCID,
+		encryptionKey,
+		"test-snapshot",
+		"Test description",
+	)
+	if err != nil {
+		t.Fatalf("Failed to create directory snapshot: %v", err)
+	}
+	
+	// Retrieve with correct key
+	retrievedManifest, err := dirManager.RetrieveDirectoryManifestWithKey(
+		context.Background(),
+		snapshotCID,
+		snapshotKey,
+	)
+	if err != nil {
+		t.Fatalf("Failed to retrieve manifest with correct key: %v", err)
+	}
+	
+	if !retrievedManifest.IsSnapshot() {
+		t.Error("Retrieved manifest should be a snapshot")
+	}
+	
+	// Try to retrieve with wrong key
+	wrongKey, err := crypto.GenerateKey("wrong-password")
+	if err != nil {
+		t.Fatalf("Failed to generate wrong key: %v", err)
+	}
+	
+	_, err = dirManager.RetrieveDirectoryManifestWithKey(
+		context.Background(),
+		snapshotCID,
+		wrongKey,
+	)
+	if err == nil {
+		t.Error("Expected error when retrieving with wrong key")
+	}
+	
+	// Try to retrieve with invalid CID
+	_, err = dirManager.RetrieveDirectoryManifestWithKey(
+		context.Background(),
+		"invalid-cid",
+		snapshotKey,
+	)
+	if err == nil {
+		t.Error("Expected error when retrieving with invalid CID")
+	}
+}
+
+// TestSnapshotKeyGeneration tests that snapshot keys are properly generated
+func TestSnapshotKeyGeneration(t *testing.T) {
+	// Create test storage manager
+	manager := createTestStorageManager(t)
+	err := manager.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create directory manager
+	encryptionKey := createTestEncryptionKey(t)
+	config := DefaultDirectoryManagerConfig()
+	dirManager, err := NewDirectoryManager(manager, encryptionKey, config)
+	if err != nil {
+		t.Fatalf("Failed to create directory manager: %v", err)
+	}
+	
+	// Create and store original directory manifest
+	originalManifest := createTestDirectoryManifest()
+	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
+	if err != nil {
+		t.Fatalf("Failed to store original directory manifest: %v", err)
+	}
+	
+	// Create multiple snapshots and ensure keys are different
+	keys := make(map[string]bool)
+	
+	for i := 0; i < 5; i++ {
+		snapshotName := fmt.Sprintf("test-snapshot-%d", i)
+		_, snapshotKey, err := dirManager.CreateDirectorySnapshot(
+			context.Background(),
+			originalCID,
+			encryptionKey,
+			snapshotName,
+			"Test description",
+		)
+		if err != nil {
+			t.Fatalf("Failed to create snapshot %d: %v", i, err)
+		}
+		
+		keyStr := snapshotKey.String()
+		if keys[keyStr] {
+			t.Errorf("Duplicate key generated for snapshot %d", i)
+		}
+		keys[keyStr] = true
+		
+		// Verify key is different from original
+		if keyStr == encryptionKey.String() {
+			t.Errorf("Snapshot key %d should be different from original", i)
+		}
+	}
+}
+
+// TestSnapshotConcurrency tests concurrent snapshot creation
+func TestSnapshotConcurrency(t *testing.T) {
+	// Create test storage manager
+	manager := createTestStorageManager(t)
+	err := manager.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Failed to start storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create directory manager
+	encryptionKey := createTestEncryptionKey(t)
+	config := DefaultDirectoryManagerConfig()
+	dirManager, err := NewDirectoryManager(manager, encryptionKey, config)
+	if err != nil {
+		t.Fatalf("Failed to create directory manager: %v", err)
+	}
+	
+	// Create and store original directory manifest
+	originalManifest := createTestDirectoryManifest()
+	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
+	if err != nil {
+		t.Fatalf("Failed to store original directory manifest: %v", err)
+	}
+	
+	// Create snapshots concurrently
+	numWorkers := 10
+	results := make(chan error, numWorkers)
+	
+	for i := 0; i < numWorkers; i++ {
+		go func(workerID int) {
+			snapshotName := fmt.Sprintf("concurrent-snapshot-%d", workerID)
+			_, _, err := dirManager.CreateDirectorySnapshot(
+				context.Background(),
+				originalCID,
+				encryptionKey,
+				snapshotName,
+				"Concurrent test description",
+			)
+			results <- err
+		}(i)
+	}
+	
+	// Wait for all workers to complete
+	for i := 0; i < numWorkers; i++ {
+		err := <-results
+		if err != nil {
+			t.Errorf("Worker %d failed: %v", i, err)
+		}
+	}
+}

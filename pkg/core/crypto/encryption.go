@@ -5,6 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -196,4 +198,78 @@ func DecryptFileName(encryptedName []byte, dirKey *EncryptionKey) (string, error
 	}
 	
 	return string(decrypted), nil
+}
+
+// String returns a base64-encoded string representation of the encryption key
+func (k *EncryptionKey) String() string {
+	keyData := struct {
+		Key  string `json:"key"`
+		Salt string `json:"salt"`
+	}{
+		Key:  base64.StdEncoding.EncodeToString(k.Key),
+		Salt: base64.StdEncoding.EncodeToString(k.Salt),
+	}
+	
+	data, err := json.Marshal(keyData)
+	if err != nil {
+		return ""
+	}
+	
+	return base64.StdEncoding.EncodeToString(data)
+}
+
+// MarshalText implements the encoding.TextMarshaler interface
+func (k *EncryptionKey) MarshalText() ([]byte, error) {
+	return []byte(k.String()), nil
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface
+func (k *EncryptionKey) UnmarshalText(text []byte) error {
+	parsed, err := ParseKeyFromString(string(text))
+	if err != nil {
+		return err
+	}
+	
+	k.Key = parsed.Key
+	k.Salt = parsed.Salt
+	return nil
+}
+
+// ParseKeyFromString parses a base64-encoded string representation back to an EncryptionKey
+func ParseKeyFromString(keyStr string) (*EncryptionKey, error) {
+	if keyStr == "" {
+		return nil, fmt.Errorf("key string cannot be empty")
+	}
+	
+	// Decode base64 string
+	data, err := base64.StdEncoding.DecodeString(keyStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode key string: %w", err)
+	}
+	
+	// Parse JSON
+	var keyData struct {
+		Key  string `json:"key"`
+		Salt string `json:"salt"`
+	}
+	
+	if err := json.Unmarshal(data, &keyData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
+	}
+	
+	// Decode key and salt
+	key, err := base64.StdEncoding.DecodeString(keyData.Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode key: %w", err)
+	}
+	
+	salt, err := base64.StdEncoding.DecodeString(keyData.Salt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode salt: %w", err)
+	}
+	
+	return &EncryptionKey{
+		Key:  key,
+		Salt: salt,
+	}, nil
 }

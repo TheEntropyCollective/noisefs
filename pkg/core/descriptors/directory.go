@@ -20,13 +20,23 @@ type DirectoryEntry struct {
 	ModifiedAt    time.Time      `json:"modified"` // Last modification time
 }
 
+// SnapshotInfo represents metadata about a directory snapshot
+type SnapshotInfo struct {
+	OriginalCID   string    `json:"original_cid"`   // CID of the original directory
+	CreationTime  time.Time `json:"creation_time"`  // When the snapshot was created
+	SnapshotName  string    `json:"snapshot_name"`  // User-provided name for the snapshot
+	Description   string    `json:"description"`    // Optional description of the snapshot
+	IsSnapshot    bool      `json:"is_snapshot"`    // Indicates this is a snapshot manifest
+}
+
 // DirectoryManifest represents the encrypted contents of a directory
 type DirectoryManifest struct {
-	Version    string            `json:"version"`
-	Entries    []DirectoryEntry  `json:"entries"`
-	CreatedAt  time.Time         `json:"created"`
-	ModifiedAt time.Time         `json:"modified"`
-	Metadata   map[string][]byte `json:"metadata,omitempty"` // Encrypted metadata (base64 encoded in JSON)
+	Version      string            `json:"version"`
+	Entries      []DirectoryEntry  `json:"entries"`
+	CreatedAt    time.Time         `json:"created"`
+	ModifiedAt   time.Time         `json:"modified"`
+	Metadata     map[string][]byte `json:"metadata,omitempty"` // Encrypted metadata (base64 encoded in JSON)
+	SnapshotInfo *SnapshotInfo     `json:"snapshot_info,omitempty"` // Snapshot metadata if this is a snapshot
 }
 
 // NewDirectoryManifest creates a new empty directory manifest
@@ -38,6 +48,40 @@ func NewDirectoryManifest() *DirectoryManifest {
 		CreatedAt:  now,
 		ModifiedAt: now,
 		Metadata:   make(map[string][]byte),
+	}
+}
+
+// NewSnapshotManifest creates a new snapshot manifest from an existing directory manifest
+func NewSnapshotManifest(original *DirectoryManifest, originalCID, snapshotName, description string) *DirectoryManifest {
+	now := time.Now()
+	
+	// Create snapshot info
+	snapshotInfo := &SnapshotInfo{
+		OriginalCID:   originalCID,
+		CreationTime:  now,
+		SnapshotName:  snapshotName,
+		Description:   description,
+		IsSnapshot:    true,
+	}
+	
+	// Clone the original manifest entries (same file CIDs)
+	entriesCopy := make([]DirectoryEntry, len(original.Entries))
+	copy(entriesCopy, original.Entries)
+	
+	// Clone metadata
+	metadataCopy := make(map[string][]byte)
+	for k, v := range original.Metadata {
+		metadataCopy[k] = make([]byte, len(v))
+		copy(metadataCopy[k], v)
+	}
+	
+	return &DirectoryManifest{
+		Version:      "1.0",
+		Entries:      entriesCopy,
+		CreatedAt:    now,
+		ModifiedAt:   now,
+		Metadata:     metadataCopy,
+		SnapshotInfo: snapshotInfo,
 	}
 }
 
@@ -129,6 +173,21 @@ func (m *DirectoryManifest) Validate() error {
 		}
 	}
 	
+	// Validate snapshot info if present
+	if m.SnapshotInfo != nil {
+		if m.SnapshotInfo.IsSnapshot {
+			if m.SnapshotInfo.OriginalCID == "" {
+				return errors.New("snapshot must have original CID")
+			}
+			if m.SnapshotInfo.SnapshotName == "" {
+				return errors.New("snapshot must have a name")
+			}
+			if m.SnapshotInfo.CreationTime.IsZero() {
+				return errors.New("snapshot must have creation time")
+			}
+		}
+	}
+	
 	return nil
 }
 
@@ -140,6 +199,16 @@ func (m *DirectoryManifest) GetEntryCount() int {
 // IsEmpty returns true if the directory has no entries
 func (m *DirectoryManifest) IsEmpty() bool {
 	return len(m.Entries) == 0
+}
+
+// IsSnapshot returns true if this manifest represents a snapshot
+func (m *DirectoryManifest) IsSnapshot() bool {
+	return m.SnapshotInfo != nil && m.SnapshotInfo.IsSnapshot
+}
+
+// GetSnapshotInfo returns the snapshot information, or nil if not a snapshot
+func (m *DirectoryManifest) GetSnapshotInfo() *SnapshotInfo {
+	return m.SnapshotInfo
 }
 
 // EncryptManifest encrypts the entire manifest data

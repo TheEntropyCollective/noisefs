@@ -512,3 +512,85 @@ type DirectoryManagerHealth struct {
 	CacheStats *DirectoryCacheStats `json:"cache_stats"`
 	LastCheck  time.Time            `json:"last_check"`
 }
+
+// CreateDirectorySnapshot creates an immutable snapshot of a directory
+func (dm *DirectoryManager) CreateDirectorySnapshot(ctx context.Context, originalCID string, originalKey *crypto.EncryptionKey, snapshotName, description string) (string, *crypto.EncryptionKey, error) {
+	// Retrieve the original directory manifest
+	originalManifest, err := dm.RetrieveDirectoryManifestWithKey(ctx, originalCID, originalKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to retrieve original directory manifest: %w", err)
+	}
+	
+	// Create snapshot manifest with same file CIDs
+	snapshotManifest := blocks.NewSnapshotManifest(originalManifest, originalCID, snapshotName, description)
+	
+	// Generate new encryption key for the snapshot
+	snapshotKey, err := crypto.GenerateKey("snapshot-" + snapshotName)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate snapshot encryption key: %w", err)
+	}
+	
+	// Encrypt the snapshot manifest
+	encryptedManifest, err := blocks.EncryptManifest(snapshotManifest, snapshotKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to encrypt snapshot manifest: %w", err)
+	}
+	
+	// Check manifest size
+	if int64(len(encryptedManifest)) > dm.config.MaxManifestSize {
+		return "", nil, fmt.Errorf("snapshot manifest too large: %d bytes (max: %d)", len(encryptedManifest), dm.config.MaxManifestSize)
+	}
+	
+	// Create block from encrypted manifest
+	manifestBlock, err := blocks.NewBlock(encryptedManifest)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create snapshot manifest block: %w", err)
+	}
+	
+	// Store the snapshot block using the storage manager
+	address, err := dm.storageManager.Put(ctx, manifestBlock)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to store snapshot manifest block: %w", err)
+	}
+	
+	return address.ID, snapshotKey, nil
+}
+
+// RetrieveDirectoryManifestWithKey retrieves a directory manifest using a specific encryption key
+func (dm *DirectoryManager) RetrieveDirectoryManifestWithKey(ctx context.Context, manifestCID string, key *crypto.EncryptionKey) (*blocks.DirectoryManifest, error) {
+	// Retrieve from storage
+	address := &BlockAddress{
+		ID:          manifestCID,
+		BackendType: dm.storageManager.config.DefaultBackend,
+	}
+	
+	manifestBlock, err := dm.storageManager.Get(ctx, address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve manifest block: %w", err)
+	}
+	
+	// Decrypt the manifest with the provided key
+	manifest, err := dm.decryptManifestWithKey(manifestBlock.Data, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt manifest: %w", err)
+	}
+	
+	return manifest, nil
+}
+
+// decryptManifestWithKey decrypts a manifest from encrypted data using a specific key
+func (dm *DirectoryManager) decryptManifestWithKey(encryptedData []byte, key *crypto.EncryptionKey) (*blocks.DirectoryManifest, error) {
+	// Decrypt the data
+	decryptedData, err := crypto.Decrypt(encryptedData, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt data: %w", err)
+	}
+	
+	// Unmarshal the manifest
+	var manifest blocks.DirectoryManifest
+	if err := json.Unmarshal(decryptedData, &manifest); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+	}
+	
+	return &manifest, nil
+}
