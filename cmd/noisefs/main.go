@@ -60,7 +60,7 @@ func main() {
 	// Check for subcommands first
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "announce", "subscribe", "discover", "ls", "search":
+		case "announce", "subscribe", "discover", "ls", "search", "sync":
 			handleSubcommand(os.Args[1], os.Args[2:])
 			return
 		}
@@ -1399,6 +1399,8 @@ func handleSubcommand(cmd string, args []string) {
 		// Search command handles its own args parsing
 		handleSearchCommand(args)
 		return
+	case "sync":
+		err = handleSyncCommand(args, storageManager, quiet, jsonOutput)
 	default:
 		err = fmt.Errorf("unknown command: %s", cmd)
 	}
