@@ -266,7 +266,7 @@ func (sc *SystemCoordinator) initializeReuse() error {
 	// Create public domain mixer with defaults
 	mixerConfig := reuse.DefaultMixerConfig()
 	mixerConfig.MinPublicDomainRatio = 0.3
-	sc.publicMixer = reuse.NewPublicDomainMixer(sc.universalPool, mixerConfig)
+	sc.publicMixer = reuse.NewPublicDomainMixer(sc.universalPool, mixerConfig, sc.storageManager)
 	
 	// Create reuse-aware client
 	reuseClient, err := reuse.NewReuseAwareClient(sc.storageManager, sc.blockCache)

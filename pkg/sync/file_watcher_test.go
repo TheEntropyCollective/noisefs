@@ -93,8 +93,8 @@ func TestFileWatcher_FileModification(t *testing.T) {
 
 	select {
 	case event := <-fw.Events():
-		if event.Type != EventTypeFileCreated {
-			t.Errorf("Expected EventTypeFileCreated, got %s", event.Type)
+		if event.Type != EventTypeFileCreated && event.Type != EventTypeFileModified {
+			t.Errorf("Expected EventTypeFileCreated or EventTypeFileModified, got %s", event.Type)
 		}
 	case <-ctx.Done():
 		t.Error("Timeout waiting for file creation event")

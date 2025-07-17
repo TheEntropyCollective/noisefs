@@ -8,6 +8,8 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -282,7 +284,12 @@ func TestPublicDomainMixer(t *testing.T) {
 	setupMixer := func() (*PublicDomainMixer, *UniversalBlockPool) {
 		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
 		pool.Initialize()
-		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
+		// Create a test storage manager for the mixer
+		storageManager, err := storage.NewManager(storagetesting.NewMockBackend())
+		if err != nil {
+			t.Fatalf("Failed to create storage manager: %v", err)
+		}
+		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig(), storageManager)
 		return mixer, pool
 	}
 
