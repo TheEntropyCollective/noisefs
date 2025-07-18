@@ -36,6 +36,9 @@ type Client struct {
 	
 	// Diversity controls for anti-concentration
 	diversityControls     *cache.RandomizerDiversityControls
+	
+	// Availability integration for randomizer availability checking
+	availabilityIntegration *cache.AvailabilityIntegration
 }
 
 // ClientConfig holds configuration for NoiseFS client
@@ -44,6 +47,7 @@ type ClientConfig struct {
 	PreferRandomizerPeers bool
 	AdaptiveCacheConfig   *cache.AdaptiveCacheConfig
 	DiversityControlsConfig *cache.DiversityControlsConfig
+	AvailabilityConfig    *cache.AvailabilityConfig
 }
 
 // NewClient creates a new NoiseFS client using storage manager
@@ -62,6 +66,7 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 			PredictionInterval: time.Minute * 10,
 		},
 		DiversityControlsConfig: cache.DefaultDiversityControlsConfig(),
+		AvailabilityConfig:      cache.DefaultAvailabilityConfig(),
 	}
 	
 	return NewClientWithConfig(storageManager, blockCache, config)
@@ -105,6 +110,18 @@ func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache
 		client.diversityControls = cache.NewRandomizerDiversityControls(config.DiversityControlsConfig)
 	} else {
 		client.diversityControls = cache.NewRandomizerDiversityControls(nil) // Uses defaults
+	}
+	
+	// Initialize availability integration
+	if config.AvailabilityConfig != nil {
+		client.availabilityIntegration = cache.NewAvailabilityIntegration(storageManager, config.AvailabilityConfig)
+	} else {
+		client.availabilityIntegration = cache.NewAvailabilityIntegration(storageManager, nil) // Uses defaults
+	}
+	
+	// Connect availability integration to health monitor
+	if client.availabilityIntegration != nil {
+		client.metrics.SetAvailabilityIntegration(client.availabilityIntegration)
 	}
 	
 	return client, nil
@@ -273,10 +290,10 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 		
 		// If we have at least 2 suitable cached blocks, use them
 		if len(suitableBlocks) >= 2 {
-			// Use diversity-aware selection instead of random
-			selected1, selected2, err := c.selectRandomizersWithDiversity(suitableBlocks)
+			// Use diversity-aware selection with availability checking
+			selected1, selected2, err := c.selectRandomizersWithDiversityAndAvailability(suitableBlocks)
 			if err != nil {
-				return nil, "", nil, "", 0, fmt.Errorf("failed to select randomizers with diversity: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to select randomizers with diversity and availability: %w", err)
 			}
 			
 			// Record selections for diversity tracking
@@ -421,6 +438,43 @@ func (c *Client) selectRandomizersWithDiversity(candidates []*cache.BlockInfo) (
 	}
 	
 	return selected1, selected2, nil
+}
+
+// selectRandomizersWithDiversityAndAvailability selects two randomizers using diversity controls and availability checking
+func (c *Client) selectRandomizersWithDiversityAndAvailability(candidates []*cache.BlockInfo) (*cache.BlockInfo, *cache.BlockInfo, error) {
+	if len(candidates) < 2 {
+		return nil, nil, fmt.Errorf("need at least 2 candidates, got %d", len(candidates))
+	}
+	
+	// If no availability integration, fall back to diversity-only selection
+	if c.availabilityIntegration == nil {
+		return c.selectRandomizersWithDiversity(candidates)
+	}
+	
+	// Check availability of all candidates
+	ctx := context.Background()
+	candidateCIDs := make([]string, len(candidates))
+	for i, candidate := range candidates {
+		candidateCIDs[i] = candidate.CID
+	}
+	
+	availabilityResults := c.availabilityIntegration.CheckAvailability(ctx, candidateCIDs)
+	
+	// Filter candidates to only include available ones
+	availableCandidates := make([]*cache.BlockInfo, 0, len(candidates))
+	for _, candidate := range candidates {
+		if status, exists := availabilityResults[candidate.CID]; exists && status.Available {
+			availableCandidates = append(availableCandidates, candidate)
+		}
+	}
+	
+	// If we don't have enough available candidates, fallback to diversity-only selection
+	if len(availableCandidates) < 2 {
+		return c.selectRandomizersWithDiversity(candidates)
+	}
+	
+	// Use diversity-aware selection on available candidates
+	return c.selectRandomizersWithDiversity(availableCandidates)
 }
 
 // selectRandomizersRandom provides fallback random selection
@@ -1257,4 +1311,25 @@ func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.W
 	}
 	
 	return nil
+}
+
+// GetAvailabilityMetrics returns availability metrics if availability integration is enabled
+func (c *Client) GetAvailabilityMetrics() *cache.AvailabilityMetrics {
+	if c.availabilityIntegration == nil {
+		return nil
+	}
+	return c.availabilityIntegration.GetAvailabilityMetrics()
+}
+
+// GetAvailabilityScore returns the current availability score for health monitoring
+func (c *Client) GetAvailabilityScore() float64 {
+	if c.availabilityIntegration == nil {
+		return 1.0 // Default to good score when not available
+	}
+	return c.availabilityIntegration.GetAvailabilityScore()
+}
+
+// IsAvailabilityIntegrationEnabled returns whether availability integration is enabled
+func (c *Client) IsAvailabilityIntegrationEnabled() bool {
+	return c.availabilityIntegration != nil
 }

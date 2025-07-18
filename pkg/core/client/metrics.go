@@ -109,6 +109,7 @@ func (m *Metrics) GetStats() MetricsSnapshot {
 		snapshot.MemoryPressure = healthScore.MemoryPressure
 		snapshot.EvictionRate = healthScore.EvictionRate
 		snapshot.CoordinationHealth = healthScore.CoordinationHealth
+		snapshot.AvailabilityHealth = healthScore.AvailabilityHealth
 	}
 	
 	return snapshot
@@ -135,6 +136,7 @@ type MetricsSnapshot struct {
 	MemoryPressure        float64 `json:"memory_pressure"`         // Memory usage 0-1
 	EvictionRate          float64 `json:"eviction_rate"`           // Evictions per hour
 	CoordinationHealth    float64 `json:"coordination_health"`     // Network coordination 0-1
+	AvailabilityHealth    float64 `json:"availability_health"`     // Randomizer availability 0-1
 }
 
 // calculateBlockReuseRate returns the percentage of blocks that were reused
@@ -176,6 +178,16 @@ func (m *Metrics) SetHealthMonitorComponents(ce *cache.CoordinationEngine, ht *c
 		if ht != nil {
 			m.healthMonitor.SetHealthTracker(ht)
 		}
+	}
+}
+
+// SetAvailabilityIntegration configures health monitor with availability integration
+func (m *Metrics) SetAvailabilityIntegration(ai *cache.AvailabilityIntegration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if m.healthMonitor != nil && ai != nil {
+		m.healthMonitor.SetAvailabilityIntegration(ai)
 	}
 }
 
