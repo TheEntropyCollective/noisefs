@@ -649,7 +649,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 	// Process each block (using 3-tuple format)
 	for _, block := range fileBlocks {
 		// Select two randomizers
-		randomizer1Block, randomizer1CID, randomizer2Block, randomizer2CID, err := w.noisefsClient.SelectRandomizers(block.Size())
+		randomizer1Block, randomizer1CID, randomizer2Block, randomizer2CID, _, err := w.noisefsClient.SelectRandomizers(block.Size())
 		if err != nil {
 			return "", err
 		}

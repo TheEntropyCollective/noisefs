@@ -257,9 +257,9 @@ func (sr *ScenarioRunner) runScenario(scenario *Scenario) (*ScenarioResult, erro
 
 // calculateEfficiencyMetrics computes storage and reuse efficiency
 func (sr *ScenarioRunner) calculateEfficiencyMetrics(metrics *GlobalMetrics) EfficiencyMetrics {
-	storageOverhead := 1.0
+	storageOverhead := 0.0
 	if metrics.TotalBytesOriginal > 0 {
-		storageOverhead = float64(metrics.TotalBytesStored) / float64(metrics.TotalBytesOriginal)
+		storageOverhead = ((float64(metrics.TotalBytesStored) - float64(metrics.TotalBytesOriginal)) / float64(metrics.TotalBytesOriginal)) * 100.0
 	}
 	
 	deduplicationSavings := 0.0

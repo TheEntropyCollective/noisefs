@@ -35,7 +35,7 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 		}
 
 		// Get two randomizers for 3-tuple
-		randBlock1, randCID1, randBlock2, randCID2, err := client.SelectRandomizers(len(blockData))
+		randBlock1, randCID1, randBlock2, randCID2, _, err := client.SelectRandomizers(len(blockData))
 		if err != nil {
 			return nil, err
 		}

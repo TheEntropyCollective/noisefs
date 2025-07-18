@@ -310,7 +310,7 @@ func BenchmarkStorageEfficiency(b *testing.B) {
 
 			metrics.OriginalDataSize = totalOriginalSize
 			metrics.StoredDataSize = totalStoredSize
-			metrics.StorageOverheadRatio = float64(totalStoredSize) / float64(totalOriginalSize)
+			metrics.StorageOverheadRatio = ((float64(totalStoredSize) - float64(totalOriginalSize)) / float64(totalOriginalSize)) * 100.0
 			metrics.TotalOperations = metrics.SuccessfulOperations + metrics.FailedOperations
 
 			// Custom storage efficiency metrics

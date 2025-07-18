@@ -458,7 +458,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	randomizer2CIDs := make([]string, len(fileBlocks))
 
 	for i := range fileBlocks {
-		randBlock1, cid1, randBlock2, cid2, err := client.SelectRandomizers(fileBlocks[i].Size())
+		randBlock1, cid1, randBlock2, cid2, _, err := client.SelectRandomizers(fileBlocks[i].Size())
 		if err != nil {
 			return fmt.Errorf("failed to select randomizer blocks: %w", err)
 		}

@@ -73,7 +73,7 @@ func TestDebugOverhead(t *testing.T) {
 	finalMetrics1 := client.GetMetrics()
 	finalStored1 := finalMetrics1.BytesStoredIPFS
 	bytesStored1 := finalStored1 - initialStored
-	overhead1 := (float64(bytesStored1) / float64(len(testData))) * 100.0
+	overhead1 := ((float64(bytesStored1) - float64(len(testData))) / float64(len(testData))) * 100.0
 	
 	cacheStatsAfter1 := cache.GetStats()
 	t.Logf("Cache after: %d blocks", cacheStatsAfter1.Size)
@@ -101,7 +101,7 @@ func TestDebugOverhead(t *testing.T) {
 	finalMetrics2 := client.GetMetrics()
 	finalStored2 := finalMetrics2.BytesStoredIPFS
 	bytesStored2 := finalStored2 - finalStored1  // Incremental storage for second file
-	overhead2 := (float64(bytesStored2) / float64(len(testData))) * 100.0
+	overhead2 := ((float64(bytesStored2) - float64(len(testData))) / float64(len(testData))) * 100.0
 	
 	cacheStatsAfter2 := cache.GetStats()
 	t.Logf("Cache after second: %d blocks", cacheStatsAfter2.Size)
@@ -122,11 +122,11 @@ func TestDebugOverhead(t *testing.T) {
 	}
 	
 	// Verify expectations
-	if overhead1 < 250 || overhead1 > 350 {
-		t.Errorf("First upload overhead %.1f%% unexpected (should be ~300%%)", overhead1)
+	if overhead1 < 150 || overhead1 > 250 {
+		t.Errorf("First upload overhead %.1f%% unexpected (should be ~200%%)", overhead1)
 	}
 	
-	if overhead2 > 150 {  // Second upload should have much lower overhead due to reuse
-		t.Errorf("Second upload overhead %.1f%% too high (should be <150%% with reuse)", overhead2)
+	if overhead2 > -50 {  // Second upload should have negative overhead (0 bytes stored = -100% overhead)
+		t.Errorf("Second upload overhead %.1f%% too high (should be ~-100%% with perfect reuse)", overhead2)
 	}
 }

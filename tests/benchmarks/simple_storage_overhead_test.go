@@ -106,7 +106,7 @@ func BenchmarkSimpleStorageOverhead(b *testing.B) {
 				
 				// Calculate overhead for this file
 				bytesStored := finalStored - initialStored
-				overheadPercent := (float64(bytesStored) / float64(size)) * 100.0
+				overheadPercent := ((float64(bytesStored) - float64(size)) / float64(size)) * 100.0
 				overheadResults = append(overheadResults, overheadPercent)
 				
 				// Check cache state after upload

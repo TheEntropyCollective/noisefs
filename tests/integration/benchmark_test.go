@@ -111,7 +111,7 @@ func BenchmarkRandomizerSelection(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, _, _, err := client.SelectRandomizers(blockSize)
+			_, _, _, _, _, err := client.SelectRandomizers(blockSize)
 			if err != nil {
 				b.Errorf("Randomizer selection failed: %v", err)
 			}
@@ -335,7 +335,7 @@ func BenchmarkStorageOverhead(b *testing.B) {
 		originalSize += int64(len(sourceData))
 		
 		// Get two randomizers for 3-tuple XOR
-		randomizer1, _, randomizer2, _, err := client.SelectRandomizers(len(sourceData))
+		randomizer1, _, randomizer2, _, _, err := client.SelectRandomizers(len(sourceData))
 		if err != nil {
 			b.Errorf("Failed to get randomizers: %v", err)
 			continue

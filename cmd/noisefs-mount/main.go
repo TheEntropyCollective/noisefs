@@ -666,7 +666,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 	// Process each block
 	for _, dataBlock := range fileBlocks {
 		// Select randomizers for 3-tuple anonymization
-		rand1, cid1, rand2, cid2, err := client.SelectRandomizers(dataBlock.Size())
+		rand1, cid1, rand2, cid2, _, err := client.SelectRandomizers(dataBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}

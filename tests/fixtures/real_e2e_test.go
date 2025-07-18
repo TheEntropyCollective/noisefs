@@ -429,7 +429,7 @@ func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descript
 		}
 
 		// Get two randomizers for 3-tuple XOR
-		randomizer1, randCID1, randomizer2, randCID2, err := client.NoiseClient.SelectRandomizers(len(blockData))
+		randomizer1, randCID1, randomizer2, randCID2, _, err := client.NoiseClient.SelectRandomizers(len(blockData))
 		if err != nil {
 			return nil, fmt.Errorf("failed to select randomizers: %w", err)
 		}
