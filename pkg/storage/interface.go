@@ -159,6 +159,11 @@ const (
 	ErrCodeIntegrityFailure = "INTEGRITY_FAILURE"
 	ErrCodeUnauthorized    = "UNAUTHORIZED"
 	ErrCodeBackendOffline  = "BACKEND_OFFLINE"
+	ErrCodeInvalidConfig   = "INVALID_CONFIG"
+	ErrCodeBackendInit     = "BACKEND_INIT_FAILED"
+	ErrCodeManagerNotStarted = "MANAGER_NOT_STARTED"
+	ErrCodeNoBackends      = "NO_BACKENDS_AVAILABLE"
+	ErrCodeValidationFailed = "VALIDATION_FAILED"
 )
 
 // Helper functions for creating storage errors
@@ -187,6 +192,40 @@ func NewConnectionError(backendType string, cause error) *StorageError {
 		Message:     "failed to connect to storage backend",
 		BackendType: backendType,
 		Cause:       cause,
+	}
+}
+
+func NewConfigError(backendType string, message string, cause error) *StorageError {
+	return &StorageError{
+		Code:        ErrCodeInvalidConfig,
+		Message:     message,
+		BackendType: backendType,
+		Cause:       cause,
+	}
+}
+
+func NewBackendInitError(backendType string, cause error) *StorageError {
+	return &StorageError{
+		Code:        ErrCodeBackendInit,
+		Message:     "failed to initialize storage backend",
+		BackendType: backendType,
+		Cause:       cause,
+	}
+}
+
+func NewManagerNotStartedError() *StorageError {
+	return &StorageError{
+		Code:        ErrCodeManagerNotStarted,
+		Message:     "storage manager not started",
+		BackendType: "manager",
+	}
+}
+
+func NewNoBackendsError() *StorageError {
+	return &StorageError{
+		Code:        ErrCodeNoBackends,
+		Message:     "no storage backends available",
+		BackendType: "manager",
 	}
 }
 

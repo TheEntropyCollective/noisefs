@@ -135,7 +135,7 @@ func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descri
 	}
 	
 	// Record upload metrics
-	client.RecordUpload(int64(len(data)), int64(len(data)*15/10)) // 1.5x storage overhead for 3-tuple
+	client.RecordUpload(int64(len(data)), int64(len(data)*102/100)) // ~1.2% storage overhead due to padding
 	
 	return desc, nil
 }

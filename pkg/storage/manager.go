@@ -27,7 +27,7 @@ type Manager struct {
 // NewManager creates a new storage manager
 func NewManager(config *Config) (*Manager, error) {
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
+		return nil, NewConfigError("manager", "invalid configuration", err)
 	}
 	
 	factory := NewBackendFactory(config)
@@ -54,20 +54,21 @@ func (m *Manager) Start(ctx context.Context) error {
 	defer m.mutex.Unlock()
 	
 	if m.started {
-		return fmt.Errorf("manager already started")
+		return NewStorageError(ErrCodeAlreadyExists, "manager already started", "manager", nil)
 	}
 	
 	// Create all enabled backends
 	backends, err := m.factory.CreateAllBackends()
 	if err != nil {
-		return fmt.Errorf("failed to create backends: %w", err)
+		return NewBackendInitError("manager", err)
 	}
 	
 	// Connect to all backends
 	var errors ErrorAggregator
 	for name, backend := range backends {
 		if err := backend.Connect(ctx); err != nil {
-			errors.Add(fmt.Errorf("failed to connect to backend '%s': %w", name, err))
+			connectionErr := NewConnectionError(name, err)
+			errors.Add(connectionErr)
 			continue
 		}
 		m.backends[name] = backend
@@ -77,7 +78,7 @@ func (m *Manager) Start(ctx context.Context) error {
 		if errors.HasErrors() {
 			return errors.CreateAggregateError()
 		}
-		return fmt.Errorf("no backends available")
+		return NewNoBackendsError()
 	}
 	
 	// Start health monitoring
@@ -137,7 +138,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 // Put stores a block across selected backends
 func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error) {
 	if !m.started {
-		return nil, fmt.Errorf("storage manager not started")
+		return nil, NewManagerNotStartedError()
 	}
 	
 	// Use router to determine storage strategy
@@ -147,7 +148,7 @@ func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, 
 // Get retrieves a block from the best available backend
 func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error) {
 	if !m.started {
-		return nil, fmt.Errorf("storage manager not started")
+		return nil, NewManagerNotStartedError()
 	}
 	
 	return m.router.Get(ctx, address)
@@ -156,7 +157,7 @@ func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block
 // Has checks if a block exists in any backend
 func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) {
 	if !m.started {
-		return false, fmt.Errorf("storage manager not started")
+		return false, NewManagerNotStartedError()
 	}
 	
 	return m.router.Has(ctx, address)
@@ -165,7 +166,7 @@ func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) 
 // Delete removes a block from all backends where it exists
 func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return fmt.Errorf("storage manager not started")
+		return NewManagerNotStartedError()
 	}
 	
 	return m.router.Delete(ctx, address)
@@ -174,7 +175,7 @@ func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 // PutMany stores multiple blocks using optimal distribution
 func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*BlockAddress, error) {
 	if !m.started {
-		return nil, fmt.Errorf("storage manager not started")
+		return nil, NewManagerNotStartedError()
 	}
 	
 	return m.router.PutMany(ctx, blocks)
@@ -183,7 +184,7 @@ func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*Block
 // GetMany retrieves multiple blocks efficiently
 func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error) {
 	if !m.started {
-		return nil, fmt.Errorf("storage manager not started")
+		return nil, NewManagerNotStartedError()
 	}
 	
 	return m.router.GetMany(ctx, addresses)
@@ -192,7 +193,7 @@ func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*bl
 // Pin pins a block in appropriate backends
 func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return fmt.Errorf("storage manager not started")
+		return NewManagerNotStartedError()
 	}
 	
 	return m.router.Pin(ctx, address)
@@ -201,7 +202,7 @@ func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 // Unpin unpins a block from all backends
 func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return fmt.Errorf("storage manager not started")
+		return NewManagerNotStartedError()
 	}
 	
 	return m.router.Unpin(ctx, address)
@@ -365,24 +366,24 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 	defer m.mutex.Unlock()
 	
 	if !m.started {
-		return fmt.Errorf("manager not started")
+		return NewManagerNotStartedError()
 	}
 	
 	// Validate new configuration
 	if err := newConfig.Validate(); err != nil {
-		return fmt.Errorf("invalid backend configuration: %w", err)
+		return NewConfigError(name, "invalid backend configuration", err)
 	}
 	
 	// Check if backend exists
 	oldBackend, exists := m.backends[name]
 	if !exists {
-		return fmt.Errorf("backend '%s' not found", name)
+		return NewStorageError(ErrCodeNotFound, fmt.Sprintf("backend '%s' not found", name), name, nil)
 	}
 	
 	// Disconnect old backend
 	ctx := context.Background()
 	if err := oldBackend.Disconnect(ctx); err != nil {
-		return fmt.Errorf("failed to disconnect old backend: %w", err)
+		return NewConnectionError(name, err)
 	}
 	
 	// Update configuration
@@ -392,12 +393,12 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 	if newConfig.Enabled {
 		newBackend, err := m.factory.CreateBackend(name)
 		if err != nil {
-			return fmt.Errorf("failed to create new backend: %w", err)
+			return NewBackendInitError(name, err)
 		}
 		
 		// Connect new backend
 		if err := newBackend.Connect(ctx); err != nil {
-			return fmt.Errorf("failed to connect new backend: %w", err)
+			return NewConnectionError(name, err)
 		}
 		
 		m.backends[name] = newBackend
@@ -441,7 +442,7 @@ func (m *Manager) GetDefaultBackend() (Backend, error) {
 	defaultName := m.config.DefaultBackend
 	backend, exists := m.GetBackend(defaultName)
 	if !exists {
-		return nil, fmt.Errorf("default backend '%s' not available", defaultName)
+		return nil, NewStorageError(ErrCodeNotFound, fmt.Sprintf("default backend '%s' not available", defaultName), defaultName, nil)
 	}
 	return backend, nil
 }

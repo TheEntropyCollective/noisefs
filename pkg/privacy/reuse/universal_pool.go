@@ -92,7 +92,24 @@ func NewUniversalBlockPool(config *PoolConfig, storageBackend storage.Backend) *
 	}
 }
 
-// Initialize populates the pool with public domain content and genesis blocks
+// Initialize establishes the universal block pool with cryptographically secure
+// privacy guarantees. The initialization process ensures:
+//
+// 1. **Genesis Block Generation**: Creates deterministic seed blocks that provide
+//    a mathematical foundation for the anonymization system
+//
+// 2. **Public Domain Content Loading**: Populates the pool with copyright-free
+//    content from diverse sources (literature, government docs, etc.)
+//
+// 3. **Privacy Pool Validation**: Ensures minimum pool sizes and diversity
+//    requirements are met for mathematical anonymity guarantees
+//
+// 4. **Cryptographic Properties**: Establishes the statistical properties
+//    required for the OFFSystem's plausible deniability proofs
+//
+// The pool must be successfully initialized before any randomizer selection
+// operations can be performed. Initialization failure indicates insufficient
+// entropy or privacy guarantees for secure operation.
 func (pool *UniversalBlockPool) Initialize() error {
 	pool.mutex.Lock()
 	defer pool.mutex.Unlock()
@@ -354,7 +371,24 @@ func (pool *UniversalBlockPool) validatePool() error {
 	return nil
 }
 
-// GetRandomizerBlock returns a random block from the pool for the given size
+// GetRandomizerBlock selects a randomizer block using the universal pool's
+// privacy-preserving selection algorithm. The algorithm ensures:
+//
+// 1. **Plausible Deniability**: Each block serves multiple files, making it
+//    impossible to determine which file a block belongs to without the descriptor
+//
+// 2. **Optimal Reuse Rates**: Popular blocks are naturally reused more frequently,
+//    improving storage efficiency while maintaining privacy guarantees
+//
+// 3. **Cryptographic Anonymity**: Random selection from the pool ensures no
+//    predictable patterns that could compromise user privacy
+//
+// 4. **Size Compatibility**: Automatically handles size mismatches by selecting
+//    larger blocks that can be trimmed while preserving anonymization properties
+//
+// The method updates usage statistics and popularity scores to optimize future
+// selections while maintaining the mathematical privacy guarantees of the
+// OFFSystem 3-tuple XOR anonymization protocol.
 func (pool *UniversalBlockPool) GetRandomizerBlock(size int) (*PoolBlock, error) {
 	pool.mutex.RLock()
 	defer pool.mutex.RUnlock()
@@ -403,7 +437,23 @@ func (pool *UniversalBlockPool) GetRandomizerBlock(size int) (*PoolBlock, error)
 	return poolBlock, nil
 }
 
-// GetPublicDomainBlock returns a random public domain block for the given size
+// GetPublicDomainBlock selects a public domain block for legal compliance
+// and enhanced privacy protection. Public domain blocks provide:
+//
+// 1. **Legal Safety**: Content is in the public domain, eliminating copyright
+//    concerns when blocks are shared across the network
+//
+// 2. **Enhanced Anonymity**: Public domain content naturally appears in many
+//    contexts, providing stronger plausible deniability
+//
+// 3. **Compliance Requirements**: Ensures the pool maintains the required
+//    ratio of public domain content for legal and privacy guarantees
+//
+// 4. **Diverse Content Sources**: Draws from literature, government documents,
+//    and other copyright-free materials to maximize anonymity set diversity
+//
+// This method is specifically used when legal compliance requires demonstrable
+// public domain content in the anonymization process.
 func (pool *UniversalBlockPool) GetPublicDomainBlock(size int) (*PoolBlock, error) {
 	pool.mutex.RLock()
 	defer pool.mutex.RUnlock()
