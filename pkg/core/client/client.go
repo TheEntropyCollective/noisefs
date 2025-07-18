@@ -3,6 +3,7 @@ package noisefs
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -32,6 +33,9 @@ type Client struct {
 	// Configuration for intelligent operations
 	preferRandomizerPeers bool
 	adaptiveCacheEnabled  bool
+	
+	// Diversity controls for anti-concentration
+	diversityControls     *cache.RandomizerDiversityControls
 }
 
 // ClientConfig holds configuration for NoiseFS client
@@ -39,6 +43,7 @@ type ClientConfig struct {
 	EnableAdaptiveCache   bool
 	PreferRandomizerPeers bool
 	AdaptiveCacheConfig   *cache.AdaptiveCacheConfig
+	DiversityControlsConfig *cache.DiversityControlsConfig
 }
 
 // NewClient creates a new NoiseFS client using storage manager
@@ -56,6 +61,7 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 			ExchangeInterval:   time.Minute * 15,
 			PredictionInterval: time.Minute * 10,
 		},
+		DiversityControlsConfig: cache.DefaultDiversityControlsConfig(),
 	}
 	
 	return NewClientWithConfig(storageManager, blockCache, config)
@@ -92,6 +98,13 @@ func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache
 	// Initialize adaptive cache if enabled
 	if config.EnableAdaptiveCache && config.AdaptiveCacheConfig != nil {
 		client.adaptiveCache = cache.NewAdaptiveCache(config.AdaptiveCacheConfig)
+	}
+	
+	// Initialize diversity controls
+	if config.DiversityControlsConfig != nil {
+		client.diversityControls = cache.NewRandomizerDiversityControls(config.DiversityControlsConfig)
+	} else {
+		client.diversityControls = cache.NewRandomizerDiversityControls(nil) // Uses defaults
 	}
 	
 	return client, nil
@@ -260,28 +273,17 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 		
 		// If we have at least 2 suitable cached blocks, use them
 		if len(suitableBlocks) >= 2 {
-			// Select first randomizer
-			index1, err := rand.Int(rand.Reader, big.NewInt(int64(len(suitableBlocks))))
+			// Use diversity-aware selection instead of random
+			selected1, selected2, err := c.selectRandomizersWithDiversity(suitableBlocks)
 			if err != nil {
-				return nil, "", nil, "", 0, fmt.Errorf("failed to generate random index for first randomizer: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to select randomizers with diversity: %w", err)
 			}
 			
-			selected1 := suitableBlocks[index1.Int64()]
-			
-			// Remove selected block from pool and select second randomizer
-			remainingBlocks := make([]*cache.BlockInfo, 0, len(suitableBlocks)-1)
-			for i, block := range suitableBlocks {
-				if i != int(index1.Int64()) {
-					remainingBlocks = append(remainingBlocks, block)
-				}
+			// Record selections for diversity tracking
+			if c.diversityControls != nil {
+				c.diversityControls.RecordRandomizerSelection(selected1.CID)
+				c.diversityControls.RecordRandomizerSelection(selected2.CID)
 			}
-			
-			index2, err := rand.Int(rand.Reader, big.NewInt(int64(len(remainingBlocks))))
-			if err != nil {
-				return nil, "", nil, "", 0, fmt.Errorf("failed to generate random index for second randomizer: %w", err)
-			}
-			
-			selected2 := remainingBlocks[index2.Int64()]
 			
 			// Update popularity and metrics
 			c.cache.IncrementPopularity(selected1.CID)
@@ -368,6 +370,134 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 	totalNewStorage = bytesStored1 + bytesStored2
 	
 	return randBlock1, cid1, randBlock2, cid2, totalNewStorage, nil // Count both new randomizers
+}
+
+// scoredCandidate represents a candidate randomizer with its diversity score
+type scoredCandidate struct {
+	block *cache.BlockInfo
+	score float64
+}
+
+// selectRandomizersWithDiversity selects two randomizers using diversity controls
+func (c *Client) selectRandomizersWithDiversity(candidates []*cache.BlockInfo) (*cache.BlockInfo, *cache.BlockInfo, error) {
+	if len(candidates) < 2 {
+		return nil, nil, fmt.Errorf("need at least 2 candidates, got %d", len(candidates))
+	}
+	
+	// If no diversity controls, fall back to random selection
+	if c.diversityControls == nil {
+		return c.selectRandomizersRandom(candidates)
+	}
+	
+	// Score all candidates using diversity controls
+	
+	scored := make([]scoredCandidate, len(candidates))
+	for i, candidate := range candidates {
+		baseScore := float64(candidate.Popularity + 1) // Base score from popularity
+		adjustedScore := c.diversityControls.CalculateRandomizerScore(candidate.CID, baseScore)
+		scored[i] = scoredCandidate{
+			block: candidate,
+			score: adjustedScore,
+		}
+	}
+	
+	// Use weighted random selection based on scores
+	selected1, err := c.weightedRandomSelection(scored)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to select first randomizer: %w", err)
+	}
+	
+	// Remove selected candidate and select second
+	remaining := make([]scoredCandidate, 0, len(scored)-1)
+	for _, candidate := range scored {
+		if candidate.block.CID != selected1.CID {
+			remaining = append(remaining, candidate)
+		}
+	}
+	
+	selected2, err := c.weightedRandomSelection(remaining)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to select second randomizer: %w", err)
+	}
+	
+	return selected1, selected2, nil
+}
+
+// selectRandomizersRandom provides fallback random selection
+func (c *Client) selectRandomizersRandom(candidates []*cache.BlockInfo) (*cache.BlockInfo, *cache.BlockInfo, error) {
+	if len(candidates) < 2 {
+		return nil, nil, fmt.Errorf("insufficient candidates for random selection, need at least 2, got %d", len(candidates))
+	}
+	
+	// Select first randomizer
+	index1, err := rand.Int(rand.Reader, big.NewInt(int64(len(candidates))))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate random index for first randomizer: %w", err)
+	}
+	
+	selected1 := candidates[index1.Int64()]
+	
+	// Remove selected block from pool and select second randomizer
+	remaining := make([]*cache.BlockInfo, 0, len(candidates)-1)
+	for i, block := range candidates {
+		if i != int(index1.Int64()) {
+			remaining = append(remaining, block)
+		}
+	}
+	
+	index2, err := rand.Int(rand.Reader, big.NewInt(int64(len(remaining))))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to generate random index for second randomizer: %w", err)
+	}
+	
+	selected2 := remaining[index2.Int64()]
+	
+	return selected1, selected2, nil
+}
+
+// weightedRandomSelection selects a candidate using weighted random selection
+func (c *Client) weightedRandomSelection(candidates []scoredCandidate) (*cache.BlockInfo, error) {
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no candidates available")
+	}
+	
+	// Calculate total weight
+	totalWeight := 0.0
+	for _, candidate := range candidates {
+		totalWeight += candidate.score
+	}
+	
+	// If all scores are 0, fall back to uniform random
+	if totalWeight == 0 {
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(candidates))))
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate random index: %w", err)
+		}
+		return candidates[index.Int64()].block, nil
+	}
+	
+	// Generate random number in [0, totalWeight)
+	randomBytes := make([]byte, 8)
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+	
+	// Convert to float64 in [0, 1)
+	randomFloat := float64(binary.BigEndian.Uint64(randomBytes)) / float64(^uint64(0))
+	target := randomFloat * totalWeight
+	
+	// Find the selected candidate
+	cumulative := 0.0
+	for _, candidate := range candidates {
+		cumulative += candidate.score
+		if cumulative >= target {
+			return candidate.block, nil
+		}
+	}
+	
+	// Fallback to last candidate (shouldn't happen with proper floating point)
+	return candidates[len(candidates)-1].block, nil
 }
 
 // StoreBlockWithCache stores a block in IPFS and caches it
