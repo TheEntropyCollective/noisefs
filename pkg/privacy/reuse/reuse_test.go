@@ -3,6 +3,7 @@ package reuse
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
@@ -12,6 +13,18 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
+
+// Global initialization to ensure mock backend is registered only once
+var mockBackendRegistered sync.Once
+
+func init() {
+	// Register mock backend globally to prevent race conditions
+	mockBackendRegistered.Do(func() {
+		storage.RegisterBackend("mock", func(cfg *storage.BackendConfig) (storage.Backend, error) {
+			return backends.NewMockBackend("mock", cfg)
+		})
+	})
+}
 
 // MockIPFSClient for testing
 type MockIPFSClient struct {
@@ -260,8 +273,7 @@ func TestReuseEnforcer(t *testing.T) {
 // Test Public Domain Mixer
 func TestPublicDomainMixer(t *testing.T) {
 	setupMixer := func() (*PublicDomainMixer, *UniversalBlockPool) {
-		pool := createTestUniversalBlockPool(t)
-		// Create a test storage manager for the mixer
+		// Create a test storage manager first
 		config := storage.DefaultConfig()
 		// Configure mock backend as the default backend
 		config.DefaultBackend = "mock"
@@ -284,6 +296,22 @@ func TestPublicDomainMixer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to start storage manager: %v", err)
 		}
+		
+		// Get the default backend to use with the pool
+		defaultBackend, err := storageManager.GetDefaultBackend()
+		if err != nil {
+			t.Fatalf("Failed to get default backend from storage manager: %v", err)
+		}
+		
+		// Create pool with the same backend
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), defaultBackend)
+		
+		// Initialize the pool
+		err = pool.Initialize()
+		if err != nil {
+			t.Fatalf("Failed to initialize pool: %v", err)
+		}
+		
 		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig(), storageManager)
 		return mixer, pool
 	}
