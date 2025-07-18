@@ -8,11 +8,12 @@ import (
 
 // CacheHealthMonitor tracks and scores cache health metrics
 type CacheHealthMonitor struct {
-	mu                 sync.RWMutex
-	metrics            *HealthMetrics
-	coordinationEngine *CoordinationEngine
-	healthTracker      *BlockHealthTracker
-	startTime          time.Time
+	mu                    sync.RWMutex
+	metrics               *HealthMetrics
+	coordinationEngine    *CoordinationEngine
+	healthTracker         *BlockHealthTracker
+	availabilityIntegration *AvailabilityIntegration
+	startTime             time.Time
 }
 
 // HealthMetrics holds raw health data
@@ -35,6 +36,7 @@ type HealthScore struct {
 	MemoryPressure     float64 `json:"memory_pressure"`      // 0-1 memory usage
 	EvictionRate       float64 `json:"eviction_rate"`        // Evictions per hour
 	CoordinationHealth float64 `json:"coordination_health"`  // 0-1 network coordination
+	AvailabilityHealth float64 `json:"availability_health"`  // 0-1 randomizer availability
 }
 
 // NewCacheHealthMonitor creates a new health monitor
@@ -57,6 +59,13 @@ func (chm *CacheHealthMonitor) SetHealthTracker(ht *BlockHealthTracker) {
 	chm.mu.Lock()
 	defer chm.mu.Unlock()
 	chm.healthTracker = ht
+}
+
+// SetAvailabilityIntegration sets the availability integration for health scoring
+func (chm *CacheHealthMonitor) SetAvailabilityIntegration(ai *AvailabilityIntegration) {
+	chm.mu.Lock()
+	defer chm.mu.Unlock()
+	chm.availabilityIntegration = ai
 }
 
 // UpdateMetrics updates the raw health metrics
@@ -87,6 +96,7 @@ func (chm *CacheHealthMonitor) CalculateHealthScore() *HealthScore {
 	score.MemoryPressure = chm.calculateMemoryPressure()
 	score.EvictionRate = chm.calculateEvictionRate()
 	score.CoordinationHealth = chm.calculateCoordinationHealth()
+	score.AvailabilityHealth = chm.calculateAvailabilityHealth()
 	
 	// Calculate weighted overall score
 	score.Overall = chm.calculateOverallScore(score)
@@ -156,15 +166,25 @@ func (chm *CacheHealthMonitor) calculateCoordinationHealth() float64 {
 	return metrics.CoordinationScore
 }
 
+// calculateAvailabilityHealth measures randomizer availability effectiveness
+func (chm *CacheHealthMonitor) calculateAvailabilityHealth() float64 {
+	if chm.availabilityIntegration == nil {
+		return 0.8 // Good default score when availability checking is unavailable
+	}
+	
+	return chm.availabilityIntegration.GetAvailabilityScore()
+}
+
 // calculateOverallScore computes weighted average of all health components
 func (chm *CacheHealthMonitor) calculateOverallScore(score *HealthScore) float64 {
 	// Weights for different health aspects
 	weights := map[string]float64{
-		"diversity":    0.25, // Randomizer diversity is critical for privacy
-		"age":          0.15, // Block age affects access performance
-		"memory":       0.20, // Memory pressure affects system stability
-		"eviction":     0.15, // Eviction rate indicates cache churn
+		"diversity":    0.20, // Randomizer diversity is critical for privacy
+		"age":          0.10, // Block age affects access performance
+		"memory":       0.15, // Memory pressure affects system stability
+		"eviction":     0.10, // Eviction rate indicates cache churn
 		"coordination": 0.25, // Network coordination is critical for efficiency
+		"availability": 0.20, // Randomizer availability is critical for functionality
 	}
 	
 	// Convert age to 0-1 score (lower age is better)
@@ -189,7 +209,8 @@ func (chm *CacheHealthMonitor) calculateOverallScore(score *HealthScore) float64
 		weights["age"]*ageScore +
 		weights["memory"]*memoryScore +
 		weights["eviction"]*evictionScore +
-		weights["coordination"]*score.CoordinationHealth
+		weights["coordination"]*score.CoordinationHealth +
+		weights["availability"]*score.AvailabilityHealth
 	
 	return math.Max(0.0, math.Min(1.0, overall))
 }
