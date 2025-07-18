@@ -390,9 +390,10 @@ func (mixer *PublicDomainMixer) storeAnonymizedBlock(fileBlock, randomizer1, ran
 		anonymizedData[i] = fileBlock.Data[i] ^ rand1Data[i] ^ rand2Data[i]
 	}
 
-	// Create anonymized block
-	anonymizedBlock := &blocks.Block{
-		Data: anonymizedData,
+	// Create anonymized block with proper ID
+	anonymizedBlock, err := blocks.NewBlock(anonymizedData)
+	if err != nil {
+		return "", fmt.Errorf("failed to create anonymized block: %w", err)
 	}
 
 	// Store in IPFS via storage manager
