@@ -472,6 +472,7 @@ func TestHealthMonitoring(t *testing.T) {
 	config := DefaultConfig()
 	config.HealthCheck.Enabled = true
 	config.HealthCheck.Interval = 100 * time.Millisecond
+	config.HealthCheck.Timeout = 50 * time.Millisecond  // Must be less than interval
 	
 	manager, err := NewManager(config)
 	if err != nil {
