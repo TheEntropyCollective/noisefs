@@ -2,6 +2,9 @@ package noisefs
 
 import (
 	"sync"
+	"time"
+	
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 // Metrics tracks NoiseFS performance and efficiency metrics
@@ -15,11 +18,18 @@ type Metrics struct {
 	TotalDownloads        int64 // Total files downloaded
 	BytesUploadedOriginal int64 // Original bytes uploaded
 	BytesStoredIPFS       int64 // Actual bytes stored in IPFS
+	
+	// Health monitoring (Week 1 implementation)
+	healthMonitor         *cache.CacheHealthMonitor
+	startTime             time.Time
 }
 
 // NewMetrics creates a new metrics tracker
 func NewMetrics() *Metrics {
-	return &Metrics{}
+	return &Metrics{
+		healthMonitor: cache.NewCacheHealthMonitor(),
+		startTime:     time.Now(),
+	}
 }
 
 // RecordBlockReuse increments the block reuse counter
@@ -71,7 +81,13 @@ func (m *Metrics) GetStats() MetricsSnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	
-	return MetricsSnapshot{
+	// Get health scores if monitor is available
+	var healthScore *cache.HealthScore
+	if m.healthMonitor != nil {
+		healthScore = m.healthMonitor.CalculateHealthScore()
+	}
+	
+	snapshot := MetricsSnapshot{
 		BlocksReused:          m.BlocksReused,
 		BlocksGenerated:       m.BlocksGenerated,
 		CacheHits:             m.CacheHits,
@@ -84,6 +100,18 @@ func (m *Metrics) GetStats() MetricsSnapshot {
 		CacheHitRate:          m.calculateCacheHitRate(),
 		StorageEfficiency:     m.calculateStorageEfficiency(),
 	}
+	
+	// Add health metrics if available
+	if healthScore != nil {
+		snapshot.CacheHealthScore = healthScore.Overall
+		snapshot.RandomizerDiversity = healthScore.RandomizerDiversity
+		snapshot.AverageBlockAge = healthScore.AverageBlockAge
+		snapshot.MemoryPressure = healthScore.MemoryPressure
+		snapshot.EvictionRate = healthScore.EvictionRate
+		snapshot.CoordinationHealth = healthScore.CoordinationHealth
+	}
+	
+	return snapshot
 }
 
 // MetricsSnapshot represents a point-in-time view of metrics
@@ -99,6 +127,14 @@ type MetricsSnapshot struct {
 	BlockReuseRate        float64 `json:"block_reuse_rate"`
 	CacheHitRate          float64 `json:"cache_hit_rate"`
 	StorageEfficiency     float64 `json:"storage_efficiency"`
+	
+	// Cache Health Metrics (Week 1 implementation)
+	CacheHealthScore      float64 `json:"cache_health_score"`      // Overall health 0-1
+	RandomizerDiversity   float64 `json:"randomizer_diversity"`    // Entropy measure 0-1
+	AverageBlockAge       float64 `json:"average_block_age"`       // Hours since last access
+	MemoryPressure        float64 `json:"memory_pressure"`         // Memory usage 0-1
+	EvictionRate          float64 `json:"eviction_rate"`           // Evictions per hour
+	CoordinationHealth    float64 `json:"coordination_health"`     // Network coordination 0-1
 }
 
 // calculateBlockReuseRate returns the percentage of blocks that were reused
@@ -126,4 +162,50 @@ func (m *Metrics) calculateStorageEfficiency() float64 {
 	}
 	overhead := float64(m.BytesStoredIPFS) / float64(m.BytesUploadedOriginal) * 100.0
 	return overhead
+}
+
+// SetHealthMonitorComponents configures health monitor with cache components
+func (m *Metrics) SetHealthMonitorComponents(ce *cache.CoordinationEngine, ht *cache.BlockHealthTracker) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if m.healthMonitor != nil {
+		if ce != nil {
+			m.healthMonitor.SetCoordinationEngine(ce)
+		}
+		if ht != nil {
+			m.healthMonitor.SetHealthTracker(ht)
+		}
+	}
+}
+
+// UpdateHealthMetrics updates the health monitor with current cache state
+func (m *Metrics) UpdateHealthMetrics(metrics *cache.HealthMetrics) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if m.healthMonitor != nil {
+		m.healthMonitor.UpdateMetrics(metrics)
+	}
+}
+
+// RecordEviction records a cache eviction for health tracking
+func (m *Metrics) RecordEviction() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	
+	if m.healthMonitor != nil {
+		m.healthMonitor.RecordEviction()
+	}
+}
+
+// GetHealthSummary returns a human-readable health summary
+func (m *Metrics) GetHealthSummary() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	
+	if m.healthMonitor != nil {
+		return m.healthMonitor.GetHealthSummary()
+	}
+	return "Unknown"
 }
