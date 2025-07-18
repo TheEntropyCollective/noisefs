@@ -611,11 +611,11 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		return "", fmt.Errorf("failed to create splitter: %w", err)
 	}
 	
-	// Split file into blocks
+	// Split file into blocks with padding for cache efficiency
 	if progress != nil {
 		progress("Splitting file into blocks", 0, 100)
 	}
-	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
+	fileBlocks, err := splitter.SplitWithPadding(strings.NewReader(string(data)))
 	if err != nil {
 		return "", fmt.Errorf("failed to split file: %w", err)
 	}
@@ -623,8 +623,11 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		progress("Splitting file into blocks", 100, 100)
 	}
 	
-	// Create descriptor
-	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
+	// Calculate padded file size
+	paddedFileSize := int64(len(fileBlocks) * blockSize)
+	
+	// Create descriptor with padding information
+	descriptor := descriptors.NewDescriptorWithPadding(filename, fileSize, paddedFileSize, blockSize)
 	
 	// Process each block with XOR
 	totalBlocks := len(fileBlocks)
@@ -778,10 +781,21 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 		progress("Assembling file", 100, 100)
 	}
 	
+	// Handle padding removal
+	assembledData := []byte(buf.String())
+	
+	// If this is a padded file, trim to original size
+	if descriptor.IsPadded() {
+		originalSize := descriptor.GetOriginalFileSize()
+		if int64(len(assembledData)) > originalSize {
+			assembledData = assembledData[:originalSize]
+		}
+	}
+	
 	// Record download
 	c.RecordDownload()
 	
-	return []byte(buf.String()), descriptor.Filename, nil
+	return assembledData, descriptor.Filename, nil
 }
 
 // StreamingProgressCallback is called during streaming operations to report progress

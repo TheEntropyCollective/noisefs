@@ -25,14 +25,15 @@ const (
 
 // Descriptor contains metadata needed to reconstruct a file or directory
 type Descriptor struct {
-	Version      string         `json:"version"`
-	Type         DescriptorType `json:"type,omitempty"`         // Optional for backward compatibility
-	Filename     string         `json:"filename"`
-	FileSize     int64          `json:"file_size"`
-	BlockSize    int            `json:"block_size"`
-	Blocks       []BlockPair    `json:"blocks,omitempty"`        // Empty for directories
-	ManifestCID  string         `json:"manifest_cid,omitempty"`  // Only for directories
-	CreatedAt    time.Time      `json:"created_at"`
+	Version           string         `json:"version"`
+	Type              DescriptorType `json:"type,omitempty"`         // Optional for backward compatibility
+	Filename          string         `json:"filename"`
+	FileSize          int64          `json:"file_size"`              // Original file size (before padding)
+	PaddedFileSize    int64          `json:"padded_file_size,omitempty"` // Total size including padding (optional for backward compatibility)
+	BlockSize         int            `json:"block_size"`
+	Blocks            []BlockPair    `json:"blocks,omitempty"`        // Empty for directories
+	ManifestCID       string         `json:"manifest_cid,omitempty"`  // Only for directories
+	CreatedAt         time.Time      `json:"created_at"`
 }
 
 // NewDescriptor creates a new file descriptor
@@ -45,6 +46,20 @@ func NewDescriptor(filename string, fileSize int64, blockSize int) *Descriptor {
 		BlockSize: blockSize,
 		Blocks:    make([]BlockPair, 0),
 		CreatedAt: time.Now(),
+	}
+}
+
+// NewDescriptorWithPadding creates a new file descriptor with padding information
+func NewDescriptorWithPadding(filename string, originalFileSize int64, paddedFileSize int64, blockSize int) *Descriptor {
+	return &Descriptor{
+		Version:        "3.1", // New version to indicate padding support
+		Type:           FileType,
+		Filename:       filename,
+		FileSize:       originalFileSize,
+		PaddedFileSize: paddedFileSize,
+		BlockSize:      blockSize,
+		Blocks:         make([]BlockPair, 0),
+		CreatedAt:      time.Now(),
 	}
 }
 
@@ -209,4 +224,23 @@ func (d *Descriptor) IsFile() bool {
 // IsDirectory returns true if this is a directory descriptor
 func (d *Descriptor) IsDirectory() bool {
 	return d.Type == DirectoryType
+}
+
+// IsPadded returns true if this descriptor uses padding
+func (d *Descriptor) IsPadded() bool {
+	return d.PaddedFileSize > 0 && d.PaddedFileSize > d.FileSize
+}
+
+// GetOriginalFileSize returns the original file size (before padding)
+func (d *Descriptor) GetOriginalFileSize() int64 {
+	return d.FileSize
+}
+
+// GetPaddedFileSize returns the total size including padding
+func (d *Descriptor) GetPaddedFileSize() int64 {
+	if d.PaddedFileSize > 0 {
+		return d.PaddedFileSize
+	}
+	// Backward compatibility: if no padding info, assume FileSize is the total size
+	return d.FileSize
 }

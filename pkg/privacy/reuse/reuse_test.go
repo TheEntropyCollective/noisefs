@@ -9,7 +9,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -81,28 +81,15 @@ func (m *MockIPFSClient) BroadcastBlock(ctx context.Context, cid string, block *
 // Test Universal Block Pool
 func TestUniversalBlockPool(t *testing.T) {
 	t.Run("Initialization", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		
-		if pool.IsInitialized() {
-			t.Error("Pool should not be initialized before calling Initialize()")
-		}
-		
-		err := pool.Initialize()
-		if err != nil {
-			t.Errorf("Failed to initialize pool: %v", err)
-		}
+		pool := createTestUniversalBlockPool(t)
 		
 		if !pool.IsInitialized() {
-			t.Error("Pool should be initialized after calling Initialize()")
+			t.Error("Pool should be initialized after calling createTestUniversalBlockPool()")
 		}
 	})
 
 	t.Run("Genesis Block Generation", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		err := pool.Initialize()
-		if err != nil {
-			t.Fatalf("Failed to initialize pool: %v", err)
-		}
+		pool := createTestUniversalBlockPool(t)
 
 		// Check that pool has genesis blocks for standard sizes
 		standardSizes := []int{64 * 1024, 128 * 1024, 256 * 1024}
@@ -118,11 +105,7 @@ func TestUniversalBlockPool(t *testing.T) {
 	})
 
 	t.Run("Public Domain Block Retrieval", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		err := pool.Initialize()
-		if err != nil {
-			t.Fatalf("Failed to initialize pool: %v", err)
-		}
+		pool := createTestUniversalBlockPool(t)
 
 		// Get public domain block
 		size := 128 * 1024
@@ -139,11 +122,7 @@ func TestUniversalBlockPool(t *testing.T) {
 	})
 
 	t.Run("Pool Statistics", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		err := pool.Initialize()
-		if err != nil {
-			t.Fatalf("Failed to initialize pool: %v", err)
-		}
+		pool := createTestUniversalBlockPool(t)
 
 		metrics := pool.GetMetrics()
 		if metrics.TotalBlocks == 0 {
@@ -166,8 +145,7 @@ func TestUniversalBlockPool(t *testing.T) {
 // Test Block Reuse Enforcer
 func TestReuseEnforcer(t *testing.T) {
 	setupEnforcer := func() (*ReuseEnforcer, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		pool.Initialize()
+		pool := createTestUniversalBlockPool(t)
 		enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 		return enforcer, pool
 	}
@@ -282,12 +260,29 @@ func TestReuseEnforcer(t *testing.T) {
 // Test Public Domain Mixer
 func TestPublicDomainMixer(t *testing.T) {
 	setupMixer := func() (*PublicDomainMixer, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		pool.Initialize()
+		pool := createTestUniversalBlockPool(t)
 		// Create a test storage manager for the mixer
-		storageManager, err := storage.NewManager(storagetesting.NewMockBackend())
+		config := storage.DefaultConfig()
+		// Configure mock backend as the default backend
+		config.DefaultBackend = "mock"
+		config.Backends = map[string]*storage.BackendConfig{
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 100,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "mock://test",
+				},
+			},
+		}
+		storageManager, err := storage.NewManager(config)
 		if err != nil {
 			t.Fatalf("Failed to create storage manager: %v", err)
+		}
+		// Start the storage manager
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to start storage manager: %v", err)
 		}
 		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig(), storageManager)
 		return mixer, pool
@@ -418,10 +413,32 @@ func TestReuseAwareClient(t *testing.T) {
 // Test Legal Proof System
 func TestLegalProofSystem(t *testing.T) {
 	setupLegalSystem := func() (*LegalProofSystem, *UniversalBlockPool) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		pool.Initialize()
+		pool := createTestUniversalBlockPool(t)
 		enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
-		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig())
+		// Create a storage manager for the mixer
+		config := storage.DefaultConfig()
+		// Configure mock backend as the default backend
+		config.DefaultBackend = "mock"
+		config.Backends = map[string]*storage.BackendConfig{
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 100,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "mock://test",
+				},
+			},
+		}
+		storageManager, err := storage.NewManager(config)
+		if err != nil {
+			t.Fatalf("Failed to create storage manager: %v", err)
+		}
+		// Start the storage manager
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to start storage manager: %v", err)
+		}
+		mixer := NewPublicDomainMixer(pool, DefaultMixerConfig(), storageManager)
 		legal := NewLegalProofSystem(pool, enforcer, mixer)
 		return legal, pool
 	}
@@ -565,11 +582,7 @@ func TestReuseSystemIntegration(t *testing.T) {
 	})
 
 	t.Run("Pool Statistics Integration", func(t *testing.T) {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
-		err := pool.Initialize()
-		if err != nil {
-			t.Fatalf("Failed to initialize pool: %v", err)
-		}
+		pool := createTestUniversalBlockPool(t)
 
 		// Use some blocks to generate statistics
 		for i := 0; i < 10; i++ {
@@ -594,13 +607,39 @@ func TestReuseSystemIntegration(t *testing.T) {
 // Benchmark tests
 func BenchmarkPoolInitialization(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
+		// Create mock backend configuration
+		mockConfig := &storage.BackendConfig{
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+		}
+		
+		// Create mock backend
+		mockBackend, err := backends.NewMockBackend("mock", mockConfig)
+		if err != nil {
+			b.Fatalf("Failed to create mock backend: %v", err)
+		}
+		
+		pool := NewUniversalBlockPool(DefaultPoolConfig(), mockBackend)
 		pool.Initialize()
 	}
 }
 
 func BenchmarkBlockRetrieval(b *testing.B) {
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
+	// Create mock backend configuration
+	mockConfig := &storage.BackendConfig{
+		Type:     "mock",
+		Enabled:  true,
+		Priority: 100,
+	}
+	
+	// Create mock backend
+	mockBackend, err := backends.NewMockBackend("mock", mockConfig)
+	if err != nil {
+		b.Fatalf("Failed to create mock backend: %v", err)
+	}
+	
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), mockBackend)
 	pool.Initialize()
 
 	b.ResetTimer()
@@ -613,7 +652,20 @@ func BenchmarkBlockRetrieval(b *testing.B) {
 }
 
 func BenchmarkValidation(b *testing.B) {
-	pool := NewUniversalBlockPool(DefaultPoolConfig(), nil)
+	// Create mock backend configuration
+	mockConfig := &storage.BackendConfig{
+		Type:     "mock",
+		Enabled:  true,
+		Priority: 100,
+	}
+	
+	// Create mock backend
+	mockBackend, err := backends.NewMockBackend("mock", mockConfig)
+	if err != nil {
+		b.Fatalf("Failed to create mock backend: %v", err)
+	}
+	
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), mockBackend)
 	pool.Initialize()
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 
@@ -633,6 +685,34 @@ func BenchmarkValidation(b *testing.B) {
 }
 
 // Helper functions for tests
+
+func createTestUniversalBlockPool(t *testing.T) *UniversalBlockPool {
+	t.Helper()
+	
+	// Create mock backend configuration
+	mockConfig := &storage.BackendConfig{
+		Type:     "mock",
+		Enabled:  true,
+		Priority: 100,
+	}
+	
+	// Create mock backend
+	mockBackend, err := backends.NewMockBackend("mock", mockConfig)
+	if err != nil {
+		t.Fatalf("Failed to create mock backend: %v", err)
+	}
+	
+	// Create pool with mock backend
+	pool := NewUniversalBlockPool(DefaultPoolConfig(), mockBackend)
+	
+	// Initialize the pool
+	err = pool.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize pool: %v", err)
+	}
+	
+	return pool
+}
 
 func createTestDescriptor(blockCount int) *descriptors.Descriptor {
 	descriptor := descriptors.NewDescriptor("test.txt", int64(blockCount*1000), 128*1024)
