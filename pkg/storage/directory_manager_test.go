@@ -11,6 +11,18 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 )
 
+// Global initialization to ensure test backend is registered only once
+var testBackendRegistered sync.Once
+
+func init() {
+	// Register test backend globally to prevent race conditions
+	testBackendRegistered.Do(func() {
+		RegisterBackend("test", func(cfg *BackendConfig) (Backend, error) {
+			return newTestBackend(), nil
+		})
+	})
+}
+
 // Simple mock backend for testing
 type testBackend struct {
 	data  map[string][]byte
@@ -133,11 +145,6 @@ func (tb *testBackend) HealthCheck(ctx context.Context) *HealthStatus {
 
 // Test helper functions
 func createTestStorageManager(t *testing.T) *Manager {
-	// Register test backend
-	RegisterBackend("test", func(cfg *BackendConfig) (Backend, error) {
-		return newTestBackend(), nil
-	})
-	
 	config := &Config{
 		DefaultBackend: "test",
 		Backends: map[string]*BackendConfig{
@@ -731,11 +738,6 @@ func BenchmarkDirectoryManager_RetrieveManifest(b *testing.B) {
 
 // Helper functions for benchmarks
 func createTestStorageManagerBench(b *testing.B) *Manager {
-	// Register test backend
-	RegisterBackend("test", func(cfg *BackendConfig) (Backend, error) {
-		return newTestBackend(), nil
-	})
-	
 	config := &Config{
 		DefaultBackend: "test",
 		Backends: map[string]*BackendConfig{
