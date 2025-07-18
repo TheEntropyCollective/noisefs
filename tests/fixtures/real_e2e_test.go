@@ -411,7 +411,7 @@ func testRealStorageEfficiency(t *testing.T, harness *RealIPFSTestHarness) {
 
 // realFileUpload performs real file upload with block splitting and randomizers
 func realFileUpload(client *RealIPFSNode, data []byte, blockSize int) (*descriptors.Descriptor, error) {
-	descriptor := descriptors.NewDescriptor("test_file.bin", int64(len(data)), blockSize)
+	descriptor := descriptors.NewDescriptor("test_file.bin", int64(len(data)), int64(len(data)), blockSize)
 
 	offset := 0
 	for offset < len(data) {

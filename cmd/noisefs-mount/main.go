@@ -661,7 +661,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 	}
 	
 	// Create descriptor
-	descriptor := descriptors.NewDescriptor(filename, int64(len(content)), blocks.DefaultBlockSize)
+	descriptor := descriptors.NewDescriptor(filename, int64(len(content)), int64(len(content)), blocks.DefaultBlockSize)
 	
 	// Process each block
 	for _, dataBlock := range fileBlocks {

@@ -374,6 +374,7 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 	descriptor := descriptors.NewDescriptor(
 		filepath.Base(filePath),
 		fileInfo.Size(),
+		fileInfo.Size(),
 		blockSize,
 	)
 	

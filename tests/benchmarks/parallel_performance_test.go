@@ -658,7 +658,7 @@ func prepareTestDescriptor(b *testing.B, fileSize int64, blockSize int) *descrip
 	b.Helper()
 
 	// Create test descriptor with mock block references
-	descriptor := descriptors.NewDescriptor("test_file.dat", fileSize, blockSize)
+	descriptor := descriptors.NewDescriptor("test_file.dat", fileSize, fileSize, blockSize)
 	
 	blockCount := int((fileSize + int64(blockSize) - 1) / int64(blockSize))
 	for i := 0; i < blockCount; i++ {

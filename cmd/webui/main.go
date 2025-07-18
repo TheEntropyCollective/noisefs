@@ -644,7 +644,7 @@ func (w *WebUI) uploadFile(file io.Reader, filename string, fileSize int64, bloc
 	}
 
 	// Create descriptor
-	descriptor := descriptors.NewDescriptor(filename, fileSize, blockSize)
+	descriptor := descriptors.NewDescriptor(filename, fileSize, fileSize, blockSize)
 
 	// Process each block (using 3-tuple format)
 	for _, block := range fileBlocks {

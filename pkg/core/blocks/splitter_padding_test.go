@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestSplitWithPadding(t *testing.T) {
+func TestSplitAlwaysPadded(t *testing.T) {
 	tests := []struct {
 		name      string
 		blockSize int
@@ -46,10 +46,10 @@ func TestSplitWithPadding(t *testing.T) {
 				t.Fatalf("Failed to create splitter: %v", err)
 			}
 
-			// Test padded splitting
-			blocks, err := splitter.SplitWithPadding(strings.NewReader(tt.input))
+			// Test splitting (always padded)
+			blocks, err := splitter.Split(strings.NewReader(tt.input))
 			if err != nil {
-				t.Fatalf("SplitWithPadding failed: %v", err)
+				t.Fatalf("Split failed: %v", err)
 			}
 
 			if len(blocks) != len(tt.expected) {
@@ -86,9 +86,9 @@ func TestSplitBytesWithPadding(t *testing.T) {
 		t.Fatalf("Failed to create splitter: %v", err)
 	}
 
-	blocks, err := splitter.SplitBytesWithPadding(input)
+	blocks, err := splitter.SplitBytes(input)
 	if err != nil {
-		t.Fatalf("SplitBytesWithPadding failed: %v", err)
+		t.Fatalf("SplitBytes failed: %v", err)
 	}
 
 	if len(blocks) != 1 {
@@ -124,9 +124,9 @@ func TestPaddingRoundTrip(t *testing.T) {
 	}
 
 	// Split with padding
-	blocks, err := splitter.SplitWithPadding(strings.NewReader(originalData))
+	blocks, err := splitter.Split(strings.NewReader(originalData))
 	if err != nil {
-		t.Fatalf("SplitWithPadding failed: %v", err)
+		t.Fatalf("Split failed: %v", err)
 	}
 
 	// Reassemble
@@ -152,9 +152,9 @@ func TestPaddingWithEmptyData(t *testing.T) {
 	}
 
 	// Test with empty reader
-	blocks, err := splitter.SplitWithPadding(strings.NewReader(""))
+	blocks, err := splitter.Split(strings.NewReader(""))
 	if err != nil {
-		t.Fatalf("SplitWithPadding with empty data failed: %v", err)
+		t.Fatalf("Split with empty data failed: %v", err)
 	}
 
 	if len(blocks) != 0 {
@@ -172,12 +172,12 @@ func TestPaddingConsistency(t *testing.T) {
 	}
 
 	// Split the same data multiple times
-	blocks1, err := splitter.SplitWithPadding(strings.NewReader(testData))
+	blocks1, err := splitter.Split(strings.NewReader(testData))
 	if err != nil {
 		t.Fatalf("First split failed: %v", err)
 	}
 
-	blocks2, err := splitter.SplitWithPadding(strings.NewReader(testData))
+	blocks2, err := splitter.Split(strings.NewReader(testData))
 	if err != nil {
 		t.Fatalf("Second split failed: %v", err)
 	}

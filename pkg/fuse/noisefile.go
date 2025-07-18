@@ -163,6 +163,7 @@ func (f *NoiseFile) uploadFile() error {
 	descriptor := descriptors.NewDescriptor(
 		f.path,
 		int64(len(f.writeBuffer)),
+		int64(len(f.writeBuffer)),
 		blocks.DefaultBlockSize,
 	)
 	

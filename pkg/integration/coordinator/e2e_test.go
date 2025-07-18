@@ -66,7 +66,7 @@ func (m *mockBlockStore) HasBlock(cid string) (bool, error) {
 // simulateUpload simulates the complete file upload process
 func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descriptors.Descriptor, error) {
 	// Create descriptor
-	desc := descriptors.NewDescriptor("test_file.txt", int64(len(data)), blockSize)
+	desc := descriptors.NewDescriptor("test_file.txt", int64(len(data)), int64(len(data)), blockSize)
 	
 	// Split data into blocks
 	offset := 0

@@ -19,7 +19,7 @@ func main() {
 	descriptorCID := "QmExampleDescriptorCID1234567890abcdef"
 
 	// Create example descriptor for a document
-	descriptor := descriptors.NewDescriptor("research_paper.pdf", 2048576, 32768) // 2MB file, 32KB blocks
+	descriptor := descriptors.NewDescriptor("research_paper.pdf", 2048576, 2048576, 32768) // 2MB file, 32KB blocks
 
 	// Create compliance infrastructure
 	config := compliance.DefaultAuditConfig()

@@ -100,13 +100,13 @@ func ExampleNewDirectoryManifest() {
 	//   First file decrypted: secret-document.pdf
 }
 
-// Example demonstrates backward compatibility with v3 file descriptors
+// Example demonstrates v4 file descriptor format
 func ExampleDescriptor_backwardCompatibility() {
-	// Create a v3 file descriptor (the old way)
-	fileDesc := NewDescriptor("old-file.txt", 2048, 256)
+	// Create a v4 file descriptor (the current way)
+	fileDesc := NewDescriptor("old-file.txt", 2048, 2048, 256)
 	fileDesc.AddBlockTriple("QmData1", "QmRand1", "QmRand2")
 	
-	// This should still work
+	// This should work with v4 format
 	fmt.Printf("Legacy file descriptor:\n")
 	fmt.Printf("  Version: %s\n", fileDesc.Version)
 	fmt.Printf("  Type: %s\n", fileDesc.Type)
@@ -124,11 +124,11 @@ func ExampleDescriptor_backwardCompatibility() {
 	
 	// Output:
 	// Legacy file descriptor:
-	//   Version: 3.0
+	//   Version: 4.0
 	//   Type: file
 	//   Is File: true
 	//   Is Directory: false
-	//   JSON serialization: 200+ bytes
+	//   JSON serialization: 300+ bytes
 	//   Loaded type: file
 	//   Validation: true
 }

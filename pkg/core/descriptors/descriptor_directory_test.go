@@ -2,7 +2,6 @@ package descriptors
 
 import (
 	"testing"
-	"time"
 )
 
 func TestDirectoryDescriptor(t *testing.T) {
@@ -67,7 +66,7 @@ func TestDirectoryDescriptor(t *testing.T) {
 	})
 	
 	t.Run("TypeHelpers", func(t *testing.T) {
-		fileDesc := NewDescriptor("test.txt", 1024, 128)
+		fileDesc := NewDescriptor("test.txt", 1024, 1024, 128)
 		if !fileDesc.IsFile() {
 			t.Error("File descriptor should return true for IsFile()")
 		}
@@ -85,63 +84,4 @@ func TestDirectoryDescriptor(t *testing.T) {
 	})
 }
 
-func TestBackwardCompatibility(t *testing.T) {
-	t.Run("V3FileDescriptor", func(t *testing.T) {
-		// Create a v3 file descriptor (without Type field)
-		desc := &Descriptor{
-			Version:   "3.0",
-			Filename:  "test.txt",
-			FileSize:  1024,
-			BlockSize: 128,
-			Blocks: []BlockPair{
-				{
-					DataCID:        "QmData1",
-					RandomizerCID1: "QmRand1",
-					RandomizerCID2: "QmRand2",
-				},
-			},
-			CreatedAt: time.Now(),
-		}
-		
-		// Should validate successfully
-		if err := desc.Validate(); err != nil {
-			t.Errorf("V3 descriptor failed validation: %v", err)
-		}
-		
-		// Should be recognized as a file
-		if !desc.IsFile() {
-			t.Error("V3 descriptor should be recognized as a file")
-		}
-		
-		// Type should be set after validation
-		if desc.Type != FileType {
-			t.Errorf("V3 descriptor Type should be set to FileType after validation, got %v", desc.Type)
-		}
-	})
-	
-	t.Run("JSONRoundTrip", func(t *testing.T) {
-		// Test that v3 descriptors can still be marshaled/unmarshaled
-		original := NewDescriptor("test.txt", 2048, 256)
-		original.AddBlockTriple("QmData", "QmRand1", "QmRand2")
-		original.Version = "3.0" // Force v3 version
-		original.Type = "" // Remove type to simulate old descriptor
-		
-		data, err := original.ToJSON()
-		if err != nil {
-			t.Fatalf("Failed to marshal v3 descriptor: %v", err)
-		}
-		
-		loaded, err := FromJSON(data)
-		if err != nil {
-			t.Fatalf("Failed to unmarshal v3 descriptor: %v", err)
-		}
-		
-		if !loaded.IsFile() {
-			t.Error("Loaded v3 descriptor should be recognized as a file")
-		}
-		
-		if loaded.Type != FileType {
-			t.Errorf("Loaded v3 descriptor should have Type set to FileType, got %v", loaded.Type)
-		}
-	})
-}
+// TestBackwardCompatibility removed - no longer supporting v3 format without Type field

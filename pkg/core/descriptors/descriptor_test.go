@@ -10,16 +10,17 @@ import (
 func TestNewDescriptor(t *testing.T) {
 	filename := "test.txt"
 	fileSize := int64(1024)
+	paddedFileSize := int64(1024) // Same as file size for this test
 	blockSize := 128
 
-	desc := NewDescriptor(filename, fileSize, blockSize)
+	desc := NewDescriptor(filename, fileSize, paddedFileSize, blockSize)
 
 	if desc == nil {
 		t.Fatal("NewDescriptor() returned nil")
 	}
 
-	if desc.Version != "3.0" {
-		t.Errorf("NewDescriptor() Version = %v, want 3.0", desc.Version)
+	if desc.Version != "4.0" {
+		t.Errorf("NewDescriptor() Version = %v, want 4.0", desc.Version)
 	}
 
 	if desc.Filename != filename {
@@ -28,6 +29,10 @@ func TestNewDescriptor(t *testing.T) {
 
 	if desc.FileSize != fileSize {
 		t.Errorf("NewDescriptor() FileSize = %v, want %v", desc.FileSize, fileSize)
+	}
+
+	if desc.PaddedFileSize != paddedFileSize {
+		t.Errorf("NewDescriptor() PaddedFileSize = %v, want %v", desc.PaddedFileSize, paddedFileSize)
 	}
 
 	if desc.BlockSize != blockSize {
@@ -55,10 +60,12 @@ func TestDescriptorValidate(t *testing.T) {
 		{
 			name: "valid descriptor",
 			desc: &Descriptor{
-				Version:   "3.0",
-				Filename:  "test.txt",
-				FileSize:  1024,
-				BlockSize: 128,
+				Version:        "4.0",
+				Type:           FileType,
+				Filename:       "test.txt",
+				FileSize:       1024,
+				PaddedFileSize: 1024,
+				BlockSize:      128,
 				Blocks: []BlockPair{
 					{DataCID: "data1", RandomizerCID1: "rand1", RandomizerCID2: "rand2"},
 				},
@@ -70,6 +77,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "empty version",
 			desc: &Descriptor{
 				Version:   "",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -84,6 +92,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "empty filename",
 			desc: &Descriptor{
 				Version:   "1.0",
+				Type:      FileType,
 				Filename:  "",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -98,6 +107,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "zero file size",
 			desc: &Descriptor{
 				Version:   "1.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  0,
 				BlockSize: 128,
@@ -112,6 +122,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "negative file size",
 			desc: &Descriptor{
 				Version:   "1.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  -1,
 				BlockSize: 128,
@@ -126,6 +137,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "zero block size",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 0,
@@ -140,6 +152,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "no blocks",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -152,6 +165,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "empty data CID in block",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -166,6 +180,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "empty randomizer CID in block",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -180,6 +195,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "same data and randomizer CID",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -194,6 +210,7 @@ func TestDescriptorValidate(t *testing.T) {
 			name: "empty second randomizer CID",
 			desc: &Descriptor{
 				Version:   "3.0",
+				Type:      FileType,
 				Filename:  "test.txt",
 				FileSize:  1024,
 				BlockSize: 128,
@@ -230,7 +247,7 @@ func TestDescriptorValidate(t *testing.T) {
 }
 
 func TestDescriptorToJSON(t *testing.T) {
-	desc := NewDescriptor("test.txt", 1024, 128)
+	desc := NewDescriptor("test.txt", 1024, 1024, 128)
 	err := desc.AddBlockTriple("data1", "rand1", "rand2")
 	if err != nil {
 		t.Fatalf("Failed to add block triple: %v", err)
@@ -270,11 +287,13 @@ func TestDescriptorToJSON(t *testing.T) {
 }
 
 func TestDescriptorFromJSON(t *testing.T) {
-	// Create valid JSON for 3-tuple format
+	// Create valid JSON for 4.0 format
 	validJSON := `{
-		"version": "3.0",
+		"version": "4.0",
+		"type": "file",
 		"filename": "test.txt",
 		"file_size": 1024,
+		"padded_file_size": 1024,
 		"block_size": 128,
 		"blocks": [
 			{
@@ -336,7 +355,7 @@ func TestDescriptorFromJSON(t *testing.T) {
 
 func TestDescriptorRoundTrip(t *testing.T) {
 	// Create a descriptor
-	original := NewDescriptor("roundtrip.txt", 2048, 256)
+	original := NewDescriptor("roundtrip.txt", 2048, 2048, 256)
 	err := original.AddBlockTriple("data1", "rand1", "rand1b")
 	if err != nil {
 		t.Fatalf("Failed to add first block triple: %v", err)
@@ -395,7 +414,7 @@ func TestDescriptorRoundTrip(t *testing.T) {
 
 
 func TestDescriptorAddBlockTriple(t *testing.T) {
-	desc := NewDescriptor("test.txt", 1024, 128)
+	desc := NewDescriptor("test.txt", 1024, 1024, 128)
 
 	// Test valid block triple
 	err := desc.AddBlockTriple("data_cid_1", "rand_cid_1", "rand_cid_2")
@@ -457,7 +476,7 @@ func TestDescriptorAddBlockTriple(t *testing.T) {
 
 
 func TestDescriptorGetRandomizerCIDs(t *testing.T) {
-	desc := NewDescriptor("test.txt", 1024, 128)
+	desc := NewDescriptor("test.txt", 1024, 1024, 128)
 	
 	// Add a 3-tuple block
 	err := desc.AddBlockTriple("data1", "rand1", "rand2")

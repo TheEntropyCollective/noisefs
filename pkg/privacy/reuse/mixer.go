@@ -268,7 +268,7 @@ func (mixer *PublicDomainMixer) executeMixingPlan(fileBlocks []*blocks.Block, pl
 		totalSize += int64(len(block.Data))
 	}
 
-	descriptor := descriptors.NewDescriptor("mixed_file", totalSize, len(fileBlocks[0].Data))
+	descriptor := descriptors.NewDescriptor("mixed_file", totalSize, totalSize, len(fileBlocks[0].Data))
 
 	// Process each file block
 	for i, fileBlock := range fileBlocks {

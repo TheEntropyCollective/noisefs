@@ -308,7 +308,7 @@ func uploadFile(client *noisefs.Client, filePath, relativePath string, blockSize
 	}
 
 	// Create descriptor
-	descriptor := descriptors.NewDescriptor(relativePath, int64(len(content)), blockSize)
+	descriptor := descriptors.NewDescriptor(relativePath, int64(len(content)), int64(len(content)), blockSize)
 
 	// Process each block with 3-tuple anonymization
 	for _, dataBlock := range fileBlocks {

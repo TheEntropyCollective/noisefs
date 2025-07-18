@@ -86,7 +86,7 @@ func TestSimpleUploadDownload(t *testing.T) {
 		t.Logf("Split data into %d blocks", len(fileBlocks))
 
 		// Create descriptor
-		descriptor := descriptors.NewDescriptor("test.txt", int64(len(testData)), blockSize)
+		descriptor := descriptors.NewDescriptor("test.txt", int64(len(testData)), int64(len(testData)), blockSize)
 
 		// Process each block (3-tuple format)
 		for i, block := range fileBlocks {

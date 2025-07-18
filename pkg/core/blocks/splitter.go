@@ -21,7 +21,7 @@ func NewSplitter(blockSize int) (*Splitter, error) {
 	}, nil
 }
 
-// Split splits data from a reader into blocks
+// Split splits data from a reader into blocks with padding for optimal cache efficiency
 func (s *Splitter) Split(reader io.Reader) ([]*Block, error) {
 	if reader == nil {
 		return nil, errors.New("reader cannot be nil")
@@ -34,8 +34,9 @@ func (s *Splitter) Split(reader io.Reader) ([]*Block, error) {
 		n, err := reader.Read(buffer)
 		if n > 0 {
 			// Create a new block with the data read
-			blockData := make([]byte, n)
+			blockData := make([]byte, s.blockSize) // Always allocate full block size
 			copy(blockData, buffer[:n])
+			// Remaining bytes are zero-padded automatically
 			
 			block, err := NewBlock(blockData)
 			if err != nil {
@@ -57,36 +58,7 @@ func (s *Splitter) Split(reader io.Reader) ([]*Block, error) {
 	return blocks, nil
 }
 
-// SplitWithPadding splits data from a reader into blocks, padding the last block to full size
-func (s *Splitter) SplitWithPadding(reader io.Reader) ([]*Block, error) {
-	blocks, err := s.Split(reader)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Pad the last block to full block size for cache efficiency
-	if len(blocks) > 0 {
-		lastBlock := blocks[len(blocks)-1]
-		if lastBlock.Size() < s.blockSize {
-			// Create padded data
-			paddedData := make([]byte, s.blockSize)
-			copy(paddedData, lastBlock.Data)
-			// Fill remaining space with zeros (padding)
-			// Note: Padding bytes are zero, original size is tracked in descriptor
-			
-			paddedBlock, err := NewBlock(paddedData)
-			if err != nil {
-				return nil, err
-			}
-			
-			blocks[len(blocks)-1] = paddedBlock
-		}
-	}
-	
-	return blocks, nil
-}
-
-// SplitBytes splits a byte slice into blocks
+// SplitBytes splits a byte slice into blocks with padding for optimal cache efficiency
 func (s *Splitter) SplitBytes(data []byte) ([]*Block, error) {
 	if len(data) == 0 {
 		return nil, errors.New("data cannot be empty")
@@ -100,40 +72,17 @@ func (s *Splitter) SplitBytes(data []byte) ([]*Block, error) {
 			end = len(data)
 		}
 		
-		block, err := NewBlock(data[i:end])
+		// Always create full-sized blocks with padding
+		blockData := make([]byte, s.blockSize)
+		copy(blockData, data[i:end])
+		// Remaining bytes are zero-padded automatically
+		
+		block, err := NewBlock(blockData)
 		if err != nil {
 			return nil, err
 		}
 		
 		blocks = append(blocks, block)
-	}
-	
-	return blocks, nil
-}
-
-// SplitBytesWithPadding splits a byte slice into blocks, padding the last block to full size
-func (s *Splitter) SplitBytesWithPadding(data []byte) ([]*Block, error) {
-	blocks, err := s.SplitBytes(data)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Pad the last block to full block size for cache efficiency
-	if len(blocks) > 0 {
-		lastBlock := blocks[len(blocks)-1]
-		if lastBlock.Size() < s.blockSize {
-			// Create padded data
-			paddedData := make([]byte, s.blockSize)
-			copy(paddedData, lastBlock.Data)
-			// Fill remaining space with zeros (padding)
-			
-			paddedBlock, err := NewBlock(paddedData)
-			if err != nil {
-				return nil, err
-			}
-			
-			blocks[len(blocks)-1] = paddedBlock
-		}
 	}
 	
 	return blocks, nil

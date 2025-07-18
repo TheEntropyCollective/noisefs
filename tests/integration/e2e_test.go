@@ -16,7 +16,7 @@ import (
 // simulateUpload simulates the complete file upload process
 func simulateUpload(client *noisefs.Client, data []byte, blockSize int) (*descriptors.Descriptor, error) {
 	// Create descriptor
-	desc := descriptors.NewDescriptor("test_file.txt", int64(len(data)), blockSize)
+	desc := descriptors.NewDescriptor("test_file.txt", int64(len(data)), int64(len(data)), blockSize)
 
 	// Split data into blocks
 	offset := 0
@@ -457,7 +457,7 @@ func TestEndToEndErrorRecovery(t *testing.T) {
 	// Since we can't directly delete from the real storage manager,
 	// we'll test error recovery by trying to download with an invalid descriptor
 	// that references a non-existent block
-	invalidDesc := descriptors.NewDescriptor("invalid_test.txt", int64(len(originalData)), blockSize)
+	invalidDesc := descriptors.NewDescriptor("invalid_test.txt", int64(len(originalData)), int64(len(originalData)), blockSize)
 	// Create a block info with non-existent content CID
 	// Note: We'll create the descriptor with a bad block that can't be retrieved
 	invalidDesc.Blocks = []descriptors.BlockPair{

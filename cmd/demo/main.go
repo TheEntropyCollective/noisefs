@@ -236,6 +236,7 @@ func uploadFileDemo(storageManager *storage.Manager, client *noisefs.Client, fil
 	descriptor := descriptors.NewDescriptor(
 		filepath.Base(filePath),
 		fileInfo.Size(),
+		fileInfo.Size(),
 		blockSize,
 	)
 

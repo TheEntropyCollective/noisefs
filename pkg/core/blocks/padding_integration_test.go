@@ -50,7 +50,7 @@ func TestPaddingIntegration(t *testing.T) {
 			}
 
 			// Split with padding
-			blocks, err := splitter.SplitWithPadding(strings.NewReader(tc.content))
+			blocks, err := splitter.Split(strings.NewReader(tc.content))
 			if err != nil {
 				t.Fatalf("Failed to split with padding: %v", err)
 			}
@@ -120,12 +120,12 @@ func TestPaddingConsistencyAcrossOperations(t *testing.T) {
 	}
 
 	// Split using both methods
-	blocks1, err := splitter.SplitWithPadding(strings.NewReader(content))
+	blocks1, err := splitter.Split(strings.NewReader(content))
 	if err != nil {
 		t.Fatalf("Failed to split with padding (method 1): %v", err)
 	}
 
-	blocks2, err := splitter.SplitBytesWithPadding([]byte(content))
+	blocks2, err := splitter.SplitBytes([]byte(content))
 	if err != nil {
 		t.Fatalf("Failed to split with padding (method 2): %v", err)
 	}
@@ -153,7 +153,7 @@ func TestPaddingWithVariousBlockSizes(t *testing.T) {
 				t.Fatalf("Failed to create splitter with size %d: %v", blockSize, err)
 			}
 
-			blocks, err := splitter.SplitWithPadding(strings.NewReader(content))
+			blocks, err := splitter.Split(strings.NewReader(content))
 			if err != nil {
 				t.Fatalf("Failed to split with padding: %v", err)
 			}

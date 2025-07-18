@@ -188,7 +188,7 @@ func TestEndToEndFlow(t *testing.T) {
 		}
 
 		// Create descriptor object for testing
-		descriptor := descriptors.NewDescriptor("desc_test.txt", int64(len(testData)), 128*1024)
+		descriptor := descriptors.NewDescriptor("desc_test.txt", int64(len(testData)), int64(len(testData)), 128*1024)
 		// Note: Setting CID directly since descriptor structure may not have this field
 		// descriptor.CID = descriptorCID
 

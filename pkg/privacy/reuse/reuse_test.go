@@ -154,7 +154,7 @@ func TestReuseEnforcer(t *testing.T) {
 		enforcer, _ := setupEnforcer()
 		
 		// Create a mock descriptor with insufficient reuse
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		
 		// Add blocks that don't meet reuse requirements
 		for i := 0; i < 5; i++ {
@@ -236,7 +236,7 @@ func TestReuseEnforcer(t *testing.T) {
 		enforcer, _ := setupEnforcer()
 		
 		// Create a descriptor and validate it (this creates audit entries)
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		fileData := make([]byte, 1000)
 		
 		_, err := enforcer.ValidateUpload(descriptor, fileData)
@@ -365,7 +365,7 @@ func TestPublicDomainMixer(t *testing.T) {
 		mixer, _ := setupMixer()
 		
 		// Create test descriptor
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		
 		// Add some block triples (simplified)
 		for i := 0; i < 3; i++ {
@@ -447,7 +447,7 @@ func TestLegalProofSystem(t *testing.T) {
 		legal, _ := setupLegalSystem()
 
 		// Create test descriptor
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		descriptor.AddBlockTriple("data1", "rand1", "rand2")
 		descriptor.AddBlockTriple("data2", "rand3", "rand4")
 
@@ -486,7 +486,7 @@ func TestLegalProofSystem(t *testing.T) {
 	t.Run("Block Analysis", func(t *testing.T) {
 		legal, _ := setupLegalSystem()
 
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		descriptor.AddBlockTriple("data1", "rand1", "rand2")
 		descriptor.AddBlockTriple("data2", "rand3", "rand4")
 		descriptor.AddBlockTriple("data3", "rand5", "rand6")
@@ -510,7 +510,7 @@ func TestLegalProofSystem(t *testing.T) {
 	t.Run("Proof Storage and Retrieval", func(t *testing.T) {
 		legal, _ := setupLegalSystem()
 
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		descriptor.AddBlockTriple("data1", "rand1", "rand2")
 
 		fileData := make([]byte, 1000)
@@ -547,7 +547,7 @@ func TestLegalProofSystem(t *testing.T) {
 	t.Run("Defense Strategy Generation", func(t *testing.T) {
 		legal, _ := setupLegalSystem()
 
-		descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+		descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 		descriptor.AddBlockTriple("data1", "rand1", "rand2")
 
 		fileData := make([]byte, 1000)
@@ -669,7 +669,7 @@ func BenchmarkValidation(b *testing.B) {
 	pool.Initialize()
 	enforcer := NewReuseEnforcer(pool, DefaultReusePolicy())
 
-	descriptor := descriptors.NewDescriptor("test.txt", 1000, 128*1024)
+	descriptor := descriptors.NewDescriptor("test.txt", 1000, 1024, 128*1024)
 	descriptor.AddBlockTriple("data1", "rand1", "rand2")
 	descriptor.AddBlockTriple("data2", "rand3", "rand4")
 	
@@ -715,7 +715,7 @@ func createTestUniversalBlockPool(t *testing.T) *UniversalBlockPool {
 }
 
 func createTestDescriptor(blockCount int) *descriptors.Descriptor {
-	descriptor := descriptors.NewDescriptor("test.txt", int64(blockCount*1000), 128*1024)
+	descriptor := descriptors.NewDescriptor("test.txt", int64(blockCount*1000), int64(blockCount*1024), 128*1024)
 	
 	for i := 0; i < blockCount; i++ {
 		descriptor.AddBlockTriple(
