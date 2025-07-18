@@ -332,22 +332,60 @@ func DefaultConfig() *Config {
 // Validate validates the storage configuration
 func (c *Config) Validate() error {
 	if c.DefaultBackend == "" {
-		return fmt.Errorf("default_backend cannot be empty")
+		return NewConfigError("storage", "default_backend cannot be empty", nil)
 	}
 
 	if len(c.Backends) == 0 {
-		return fmt.Errorf("at least one backend must be configured")
+		return NewConfigError("storage", "at least one backend must be configured", nil)
 	}
 
 	// Check that default backend exists
 	if _, exists := c.Backends[c.DefaultBackend]; !exists {
-		return fmt.Errorf("default backend '%s' not found in backends configuration", c.DefaultBackend)
+		return NewConfigError("storage", fmt.Sprintf("default backend '%s' not found in backends configuration", c.DefaultBackend), nil)
+	}
+
+	// Check that default backend is enabled
+	if defaultBackend := c.Backends[c.DefaultBackend]; !defaultBackend.Enabled {
+		return NewConfigError("storage", fmt.Sprintf("default backend '%s' is disabled", c.DefaultBackend), nil)
+	}
+
+	// Ensure at least one backend is enabled
+	hasEnabledBackend := false
+	for _, backend := range c.Backends {
+		if backend.Enabled {
+			hasEnabledBackend = true
+			break
+		}
+	}
+	if !hasEnabledBackend {
+		return NewConfigError("storage", "at least one backend must be enabled", nil)
+	}
+
+	// Validate distribution configuration
+	if c.Distribution != nil {
+		if err := c.Distribution.Validate(); err != nil {
+			return NewConfigError("storage", "distribution configuration invalid", err)
+		}
+	}
+
+	// Validate health check configuration
+	if c.HealthCheck != nil {
+		if err := c.HealthCheck.Validate(); err != nil {
+			return NewConfigError("storage", "health check configuration invalid", err)
+		}
+	}
+
+	// Validate performance configuration
+	if c.Performance != nil {
+		if err := c.Performance.Validate(); err != nil {
+			return NewConfigError("storage", "performance configuration invalid", err)
+		}
 	}
 
 	// Validate each backend configuration
 	for name, backend := range c.Backends {
 		if err := backend.Validate(); err != nil {
-			return fmt.Errorf("backend '%s' configuration invalid: %w", name, err)
+			return NewConfigError("storage", fmt.Sprintf("backend '%s' configuration invalid", name), err)
 		}
 	}
 
@@ -357,19 +395,42 @@ func (c *Config) Validate() error {
 // Validate validates a backend configuration
 func (bc *BackendConfig) Validate() error {
 	if bc.Type == "" {
-		return fmt.Errorf("backend type cannot be empty")
+		return NewConfigError(bc.Type, "backend type cannot be empty", nil)
+	}
+
+	// Validate supported backend types
+	validTypes := map[string]bool{
+		"ipfs": true, "filecoin": true, "arweave": true, "storj": true,
+		"local": true, "s3": true, "gcs": true, "azure": true, "mock": true,
+	}
+	if !validTypes[bc.Type] {
+		return NewConfigError(bc.Type, fmt.Sprintf("unsupported backend type '%s'", bc.Type), nil)
 	}
 
 	if bc.Connection == nil {
-		return fmt.Errorf("connection configuration is required")
+		return NewConfigError(bc.Type, "connection configuration is required", nil)
 	}
 
-	if bc.Connection.Endpoint == "" {
-		return fmt.Errorf("connection endpoint cannot be empty")
+	if err := bc.Connection.Validate(); err != nil {
+		return NewConfigError(bc.Type, "connection configuration invalid", err)
 	}
 
 	if bc.Priority < 0 {
-		return fmt.Errorf("priority cannot be negative")
+		return NewConfigError(bc.Type, "priority cannot be negative", nil)
+	}
+
+	// Validate retry configuration if present
+	if bc.Retry != nil {
+		if err := bc.Retry.Validate(); err != nil {
+			return NewConfigError(bc.Type, "retry configuration invalid", err)
+		}
+	}
+
+	// Validate timeout configuration if present  
+	if bc.Timeouts != nil {
+		if err := bc.Timeouts.Validate(); err != nil {
+			return NewConfigError(bc.Type, "timeout configuration invalid", err)
+		}
 	}
 
 	return nil
@@ -411,4 +472,340 @@ func (c *Config) GetBackendsByPriority() []*BackendConfig {
 func (c *Config) GetBackendConfig(name string) (*BackendConfig, bool) {
 	config, exists := c.Backends[name]
 	return config, exists
+}
+
+// Validate validates connection configuration
+func (cc *ConnectionConfig) Validate() error {
+	if cc.Endpoint == "" {
+		return NewConfigError("connection", "endpoint cannot be empty", nil)
+	}
+
+	if cc.MaxConnections < 0 {
+		return NewConfigError("connection", "max_connections cannot be negative", nil)
+	}
+	if cc.MaxConnections == 0 {
+		cc.MaxConnections = 10 // Set default
+	}
+
+	if cc.IdleTimeout < 0 {
+		return NewConfigError("connection", "idle_timeout cannot be negative", nil)
+	}
+
+	if cc.ConnectTimeout < 0 {
+		return NewConfigError("connection", "connect_timeout cannot be negative", nil)
+	}
+
+	// Validate auth configuration if present
+	if cc.Auth != nil {
+		if err := cc.Auth.Validate(); err != nil {
+			return NewConfigError("connection", "auth configuration invalid", err)
+		}
+	}
+
+	// Validate TLS configuration if present
+	if cc.TLS != nil {
+		if err := cc.TLS.Validate(); err != nil {
+			return NewConfigError("connection", "TLS configuration invalid", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates authentication configuration
+func (ac *AuthConfig) Validate() error {
+	validTypes := map[string]bool{
+		"none": true, "basic": true, "api_key": true, "oauth": true, "bearer": true,
+	}
+	if !validTypes[ac.Type] {
+		return NewConfigError("auth", fmt.Sprintf("unsupported auth type '%s'", ac.Type), nil)
+	}
+
+	switch ac.Type {
+	case "basic":
+		if ac.Username == "" {
+			return NewConfigError("auth", "username required for basic auth", nil)
+		}
+		if ac.Password == "" {
+			return NewConfigError("auth", "password required for basic auth", nil)
+		}
+	case "api_key":
+		if ac.APIKey == "" {
+			return NewConfigError("auth", "api_key required for api_key auth", nil)
+		}
+	case "oauth", "bearer":
+		if ac.Token == "" {
+			return NewConfigError("auth", "token required for oauth/bearer auth", nil)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates TLS configuration
+func (tc *TLSConfig) Validate() error {
+	if !tc.Enabled {
+		return nil // Skip validation if TLS is disabled
+	}
+
+	// If cert/key files are specified, both must be present
+	if tc.CertFile != "" && tc.KeyFile == "" {
+		return NewConfigError("tls", "key_file required when cert_file is specified", nil)
+	}
+	if tc.KeyFile != "" && tc.CertFile == "" {
+		return NewConfigError("tls", "cert_file required when key_file is specified", nil)
+	}
+
+	return nil
+}
+
+// Validate validates retry configuration
+func (rc *RetryConfig) Validate() error {
+	if rc.MaxAttempts < 0 {
+		return NewConfigError("retry", "max_attempts cannot be negative", nil)
+	}
+	if rc.MaxAttempts == 0 {
+		rc.MaxAttempts = 3 // Set default
+	}
+
+	if rc.BaseDelay < 0 {
+		return NewConfigError("retry", "base_delay cannot be negative", nil)
+	}
+
+	if rc.MaxDelay < 0 {
+		return NewConfigError("retry", "max_delay cannot be negative", nil)
+	}
+
+	if rc.MaxDelay > 0 && rc.BaseDelay > rc.MaxDelay {
+		return NewConfigError("retry", "base_delay cannot be greater than max_delay", nil)
+	}
+
+	if rc.Multiplier < 1.0 {
+		return NewConfigError("retry", "multiplier must be >= 1.0", nil)
+	}
+
+	return nil
+}
+
+// Validate validates timeout configuration
+func (tc *TimeoutConfig) Validate() error {
+	if tc.Connect < 0 {
+		return NewConfigError("timeout", "connect timeout cannot be negative", nil)
+	}
+
+	if tc.Read < 0 {
+		return NewConfigError("timeout", "read timeout cannot be negative", nil)
+	}
+
+	if tc.Write < 0 {
+		return NewConfigError("timeout", "write timeout cannot be negative", nil)
+	}
+
+	if tc.Operation < 0 {
+		return NewConfigError("timeout", "operation timeout cannot be negative", nil)
+	}
+
+	return nil
+}
+
+// Validate validates distribution configuration
+func (dc *DistributionConfig) Validate() error {
+	validStrategies := map[string]bool{
+		"single": true, "replicate": true, "stripe": true, "smart": true,
+	}
+	if !validStrategies[dc.Strategy] {
+		return NewConfigError("distribution", fmt.Sprintf("unsupported strategy '%s'", dc.Strategy), nil)
+	}
+
+	// Validate replication config if present
+	if dc.Replication != nil {
+		if err := dc.Replication.Validate(); err != nil {
+			return NewConfigError("distribution", "replication configuration invalid", err)
+		}
+	}
+
+	// Validate selection config if present
+	if dc.Selection != nil {
+		if err := dc.Selection.Validate(); err != nil {
+			return NewConfigError("distribution", "selection configuration invalid", err)
+		}
+	}
+
+	// Validate load balancing config if present
+	if dc.LoadBalancing != nil {
+		if err := dc.LoadBalancing.Validate(); err != nil {
+			return NewConfigError("distribution", "load balancing configuration invalid", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates replication configuration
+func (rc *ReplicationConfig) Validate() error {
+	if rc.MinReplicas < 1 {
+		return NewConfigError("replication", "min_replicas must be at least 1", nil)
+	}
+
+	if rc.MaxReplicas < rc.MinReplicas {
+		return NewConfigError("replication", "max_replicas cannot be less than min_replicas", nil)
+	}
+
+	return nil
+}
+
+// Validate validates selection configuration
+func (sc *SelectionConfig) Validate() error {
+	if sc.CostWeight < 0 || sc.CostWeight > 1 {
+		return NewConfigError("selection", "cost_weight must be between 0 and 1", nil)
+	}
+
+	// Validate performance criteria if present
+	if sc.Performance != nil {
+		if err := sc.Performance.Validate(); err != nil {
+			return NewConfigError("selection", "performance criteria invalid", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates performance criteria
+func (pc *PerformanceCriteria) Validate() error {
+	if pc.MaxLatency < 0 {
+		return NewConfigError("performance", "max_latency cannot be negative", nil)
+	}
+
+	if pc.MinThroughput < 0 {
+		return NewConfigError("performance", "min_throughput cannot be negative", nil)
+	}
+
+	if pc.MaxErrorRate < 0 || pc.MaxErrorRate > 1 {
+		return NewConfigError("performance", "max_error_rate must be between 0 and 1", nil)
+	}
+
+	if pc.LatencyWeight < 0 || pc.LatencyWeight > 1 {
+		return NewConfigError("performance", "latency_weight must be between 0 and 1", nil)
+	}
+
+	if pc.ReliabilityWeight < 0 || pc.ReliabilityWeight > 1 {
+		return NewConfigError("performance", "reliability_weight must be between 0 and 1", nil)
+	}
+
+	return nil
+}
+
+// Validate validates load balancing configuration
+func (lbc *LoadBalancingConfig) Validate() error {
+	validAlgorithms := map[string]bool{
+		"round_robin": true, "weighted": true, "least_connections": true, "performance": true,
+	}
+	if !validAlgorithms[lbc.Algorithm] {
+		return NewConfigError("load_balancing", fmt.Sprintf("unsupported algorithm '%s'", lbc.Algorithm), nil)
+	}
+
+	return nil
+}
+
+// Validate validates health check configuration
+func (hcc *HealthCheckConfig) Validate() error {
+	if !hcc.Enabled {
+		return nil // Skip validation if health checks are disabled
+	}
+
+	if hcc.Interval <= 0 {
+		return NewConfigError("health_check", "interval must be positive", nil)
+	}
+
+	if hcc.Timeout <= 0 {
+		return NewConfigError("health_check", "timeout must be positive", nil)
+	}
+
+	if hcc.Timeout >= hcc.Interval {
+		return NewConfigError("health_check", "timeout must be less than interval", nil)
+	}
+
+	// Validate thresholds if present
+	if hcc.Thresholds != nil {
+		if err := hcc.Thresholds.Validate(); err != nil {
+			return NewConfigError("health_check", "thresholds configuration invalid", err)
+		}
+	}
+
+	// Validate actions if present
+	if hcc.Actions != nil {
+		if err := hcc.Actions.Validate(); err != nil {
+			return NewConfigError("health_check", "actions configuration invalid", err)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates health thresholds
+func (ht *HealthThresholds) Validate() error {
+	if ht.MaxLatency < 0 {
+		return NewConfigError("health_thresholds", "max_latency cannot be negative", nil)
+	}
+
+	if ht.MaxErrorRate < 0 || ht.MaxErrorRate > 1 {
+		return NewConfigError("health_thresholds", "max_error_rate must be between 0 and 1", nil)
+	}
+
+	if ht.MinSuccessRate < 0 || ht.MinSuccessRate > 1 {
+		return NewConfigError("health_thresholds", "min_success_rate must be between 0 and 1", nil)
+	}
+
+	if ht.ConsecutiveFailures < 0 {
+		return NewConfigError("health_thresholds", "consecutive_failures cannot be negative", nil)
+	}
+
+	return nil
+}
+
+// Validate validates health actions
+func (ha *HealthActions) Validate() error {
+	validUnhealthyActions := map[string]bool{
+		"disable": true, "deprioritize": true, "quarantine": true,
+	}
+	if ha.OnUnhealthy != "" && !validUnhealthyActions[ha.OnUnhealthy] {
+		return NewConfigError("health_actions", fmt.Sprintf("unsupported on_unhealthy action '%s'", ha.OnUnhealthy), nil)
+	}
+
+	validRecoveredActions := map[string]bool{
+		"enable": true, "restore_priority": true,
+	}
+	if ha.OnRecovered != "" && !validRecoveredActions[ha.OnRecovered] {
+		return NewConfigError("health_actions", fmt.Sprintf("unsupported on_recovered action '%s'", ha.OnRecovered), nil)
+	}
+
+	return nil
+}
+
+// Validate validates performance configuration
+func (pc *PerformanceConfig) Validate() error {
+	if pc.MaxConcurrentOperations < 0 {
+		return NewConfigError("performance", "max_concurrent_operations cannot be negative", nil)
+	}
+
+	if pc.MaxConcurrentPerBackend < 0 {
+		return NewConfigError("performance", "max_concurrent_per_backend cannot be negative", nil)
+	}
+
+	// Validate cache config if present - add placeholder methods if needed
+	if pc.Cache != nil {
+		// Cache validation will depend on cache config structure
+	}
+
+	// Validate batch config if present - add placeholder methods if needed  
+	if pc.Batch != nil {
+		// Batch validation will depend on batch config structure
+	}
+
+	// Validate compression config if present - add placeholder methods if needed
+	if pc.Compression != nil {
+		// Compression validation will depend on compression config structure  
+	}
+
+	return nil
 }
