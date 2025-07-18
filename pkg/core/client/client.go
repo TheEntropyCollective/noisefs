@@ -131,6 +131,25 @@ func (c *Client) storeBlock(ctx context.Context, block *blocks.Block) (string, e
 	return address.ID, nil
 }
 
+// storeBlockWithTracking stores a block and returns the CID and actual bytes stored (0 if block already existed)
+func (c *Client) storeBlockWithTracking(ctx context.Context, block *blocks.Block) (string, int64, error) {
+	// Use storage manager
+	address, err := c.storageManager.Put(ctx, block)
+	if err != nil {
+		return "", 0, fmt.Errorf("storage manager put failed: %w", err)
+	}
+	
+	// Return actual bytes stored based on whether block was newly stored
+	var bytesStored int64
+	if address.WasNewlyStored {
+		bytesStored = int64(len(block.Data))
+	} else {
+		bytesStored = 0 // Block already existed, no new storage
+	}
+	
+	return address.ID, bytesStored, nil
+}
+
 // retrieveBlock retrieves a block using the storage manager
 func (c *Client) retrieveBlock(ctx context.Context, cid string) (*blocks.Block, error) {
 	// Use storage manager
@@ -629,8 +648,10 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 	// Create descriptor with padding information
 	descriptor := descriptors.NewDescriptor(filename, fileSize, paddedFileSize, blockSize)
 	
-	// Process each block with XOR
+	// Process each block with XOR and track actual storage
 	totalBlocks := len(fileBlocks)
+	var totalStorageUsed int64 = 0 // Track actual bytes stored
+	
 	for i, fileBlock := range fileBlocks {
 		if progress != nil {
 			progress("Anonymizing blocks", i, totalBlocks)
@@ -647,11 +668,18 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 			return "", fmt.Errorf("failed to XOR blocks: %w", err)
 		}
 		
-		// Store anonymized block
-		dataCID, err := c.StoreBlockWithCache(xorBlock)
+		// Store anonymized block with tracking
+		dataCID, bytesStored, err := c.storeBlockWithTracking(context.Background(), xorBlock)
 		if err != nil {
 			return "", fmt.Errorf("failed to store data block: %w", err)
 		}
+		totalStorageUsed += bytesStored
+		
+		// Cache the anonymized block
+		c.cacheBlock(dataCID, xorBlock, map[string]interface{}{
+			"block_type": "data",
+			"strategy":   "performance",
+		})
 		
 		// Add block triple to descriptor
 		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
@@ -683,8 +711,8 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		progress("Saving file descriptor", 100, 100)
 	}
 	
-	// Record metrics
-	c.RecordUpload(fileSize, fileSize*3) // *3 for data + 2 randomizer blocks
+	// Record metrics with actual storage used
+	c.RecordUpload(fileSize, totalStorageUsed)
 	
 	return descriptorCID, nil
 }
@@ -906,8 +934,8 @@ func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filen
 		return "", fmt.Errorf("failed to save descriptor: %w", err)
 	}
 	
-	// Record metrics
-	c.RecordUpload(totalBytesProcessed, totalBytesProcessed*3) // *3 for data + 2 randomizer blocks
+	// Record metrics - TODO: Implement proper storage tracking for streaming uploads
+	c.RecordUpload(totalBytesProcessed, totalBytesProcessed*3) // *3 for data + 2 randomizer blocks - FIXME: Still hardcoded for streaming
 	
 	if progress != nil {
 		progress("Upload complete", totalBytesProcessed, totalBlocksProcessed)

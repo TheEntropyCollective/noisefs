@@ -69,6 +69,9 @@ type BlockAddress struct {
 	// Storage location hints
 	Providers []string `json:"providers,omitempty"`
 	
+	// Storage tracking for metrics
+	WasNewlyStored bool `json:"was_newly_stored,omitempty"` // true if this was a new storage operation, false if block already existed
+	
 	// Timestamps
 	CreatedAt time.Time `json:"created_at"`
 	AccessedAt time.Time `json:"accessed_at,omitempty"`

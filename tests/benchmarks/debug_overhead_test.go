@@ -2,14 +2,12 @@ package benchmarks
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	
 	// Import backends to register them
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends"

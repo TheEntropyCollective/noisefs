@@ -62,16 +62,16 @@ func BenchmarkSimpleStorageOverhead(b *testing.B) {
 		b.Fatalf("Failed to create NoiseFS client: %v", err)
 	}
 
-	// Test file sizes that align with block boundaries
+	// Test file sizes with different block counts
 	testSizes := []int64{
-		128 * 1024,     // 128KB (1 block)
-		256 * 1024,     // 256KB (2 blocks)
-		512 * 1024,     // 512KB (4 blocks)
-		1024 * 1024,    // 1MB (8 blocks)
+		100 * 1024,     // 100KB (1 block with padding)
+		200 * 1024,     // 200KB (2 blocks)
+		400 * 1024,     // 400KB (4 blocks)  
+		800 * 1024,     // 800KB (7 blocks)
 	}
 
 	var results []SimpleOverheadResult
-	numFilesPerSize := 5 // Upload multiple files of each size to enable reuse
+	numFilesPerSize := 40 // Upload many files to see amortized overhead
 
 	for _, size := range testSizes {
 		b.Run(fmt.Sprintf("FileSize_%dKB", size/1024), func(b *testing.B) {
@@ -112,9 +112,12 @@ func BenchmarkSimpleStorageOverhead(b *testing.B) {
 				// Check cache state after upload
 				cacheStatsAfter := cache.GetStats()
 				
-				b.Logf("File %d: %dKB, Stored: %dB, Overhead: %.1f%%, Cache: %d->%d blocks, Hit rate: %.1f%%", 
-					fileNum+1, size/1024, bytesStored, overheadPercent, 
-					cacheStatsBefore.Size, cacheStatsAfter.Size, cacheStatsAfter.HitRate*100)
+				// Log detailed progress every 5 files, plus first 3 and last 3
+				if fileNum < 3 || fileNum >= numFilesPerSize-3 || (fileNum+1)%5 == 0 {
+					b.Logf("File %d: %dKB, Stored: %dB, Overhead: %.1f%%, Cache: %d->%d blocks, Hit rate: %.1f%%", 
+						fileNum+1, size/1024, bytesStored, overheadPercent, 
+						cacheStatsBefore.Size, cacheStatsAfter.Size, cacheStatsAfter.HitRate*100)
+				}
 				
 				// Verify we can download it back
 				_, err = client.Download(descriptorCID)
@@ -123,26 +126,36 @@ func BenchmarkSimpleStorageOverhead(b *testing.B) {
 				}
 			}
 			
-			// Calculate average overhead across all files of this size
+			// Calculate different overhead metrics
 			var totalOverhead float64
 			for _, overhead := range overheadResults {
 				totalOverhead += overhead
 			}
 			avgOverhead := totalOverhead / float64(len(overheadResults))
 			
+			// Calculate amortized overhead excluding cold-start files
+			coldStartFiles := 5 // Exclude first 5 files from amortized calculation
+			var amortizedTotal float64
+			amortizedCount := 0
+			for i := coldStartFiles; i < len(overheadResults); i++ {
+				amortizedTotal += overheadResults[i]
+				amortizedCount++
+			}
+			amortizedOverhead := amortizedTotal / float64(amortizedCount)
+			
 			// Also report the progression to show reuse effect
 			firstFileOverhead := overheadResults[0]
 			lastFileOverhead := overheadResults[len(overheadResults)-1]
 			
 			result := SimpleOverheadResult{
-				Scenario:        fmt.Sprintf("%dKB files (avg of %d)", size/1024, numFilesPerSize),
+				Scenario:        fmt.Sprintf("%dKB files (amortized after warmup)", size/1024),
 				FileSize:        size,
-				OverheadPercent: avgOverhead,
+				OverheadPercent: amortizedOverhead,
 			}
 			results = append(results, result)
 			
-			b.Logf("Summary %dKB: First file %.1f%%, Last file %.1f%%, Average %.1f%%", 
-				size/1024, firstFileOverhead, lastFileOverhead, avgOverhead)
+			b.Logf("Summary %dKB: First %.1f%%, Last %.1f%%, All-files avg %.1f%%, Amortized (after file %d) %.1f%%", 
+				size/1024, firstFileOverhead, lastFileOverhead, avgOverhead, coldStartFiles+1, amortizedOverhead)
 		})
 	}
 

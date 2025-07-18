@@ -40,10 +40,15 @@ func (m *MockBackend) Put(ctx context.Context, block *blocks.Block) (*storage.Bl
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	// Check if block already exists
+	_, alreadyExists := m.data[block.ID]
+	
 	address := &storage.BlockAddress{
-		ID:          block.ID,
-		BackendType: "mock",
-		Metadata:    map[string]interface{}{"backend": m.id},
+		ID:             block.ID,
+		BackendType:    "mock",
+		Metadata:       map[string]interface{}{"backend": m.id},
+		WasNewlyStored: !alreadyExists, // true if this is a new block, false if it already existed
+		Size:           int64(len(block.Data)),
 	}
 	
 	m.data[block.ID] = block
