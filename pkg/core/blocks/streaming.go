@@ -1,6 +1,7 @@
 package blocks
 
 import (
+	"context"
 	"errors"
 	"io"
 	"sort"
@@ -34,6 +35,11 @@ func NewStreamingSplitter(blockSize int) (*StreamingSplitter, error) {
 
 // Split splits data from a reader into blocks using callback-based processing
 func (s *StreamingSplitter) Split(reader io.Reader, processor BlockProcessor) error {
+	return s.SplitWithContext(context.Background(), reader, processor)
+}
+
+// SplitWithContext splits data from a reader into blocks with context support
+func (s *StreamingSplitter) SplitWithContext(ctx context.Context, reader io.Reader, processor BlockProcessor) error {
 	if reader == nil {
 		return errors.New("reader cannot be nil")
 	}
@@ -46,10 +52,19 @@ func (s *StreamingSplitter) Split(reader io.Reader, processor BlockProcessor) er
 	blockIndex := 0
 	
 	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		
 		n, err := reader.Read(buffer)
 		if n > 0 {
-			blockData := make([]byte, n)
+			// Always create full-sized blocks with padding for optimal cache efficiency
+			blockData := make([]byte, s.blockSize)
 			copy(blockData, buffer[:n])
+			// Remaining bytes are zero-padded automatically
 			
 			block, blockErr := NewBlock(blockData)
 			if blockErr != nil {
@@ -77,6 +92,11 @@ func (s *StreamingSplitter) Split(reader io.Reader, processor BlockProcessor) er
 
 // SplitWithProgress splits data with progress reporting
 func (s *StreamingSplitter) SplitWithProgress(reader io.Reader, processor BlockProcessor, progress ProgressCallback) error {
+	return s.SplitWithProgressAndContext(context.Background(), reader, processor, progress)
+}
+
+// SplitWithProgressAndContext splits data with progress reporting and context support
+func (s *StreamingSplitter) SplitWithProgressAndContext(ctx context.Context, reader io.Reader, processor BlockProcessor, progress ProgressCallback) error {
 	if reader == nil {
 		return errors.New("reader cannot be nil")
 	}
@@ -90,10 +110,19 @@ func (s *StreamingSplitter) SplitWithProgress(reader io.Reader, processor BlockP
 	bytesProcessed := int64(0)
 	
 	for {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		
 		n, err := reader.Read(buffer)
 		if n > 0 {
-			blockData := make([]byte, n)
+			// Always create full-sized blocks with padding for optimal cache efficiency
+			blockData := make([]byte, s.blockSize)
 			copy(blockData, buffer[:n])
+			// Remaining bytes are zero-padded automatically
 			
 			block, blockErr := NewBlock(blockData)
 			if blockErr != nil {
