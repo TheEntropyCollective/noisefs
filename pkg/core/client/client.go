@@ -243,7 +243,10 @@ func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string,
 }
 
 // SelectRandomizers selects two randomizer blocks for 3-tuple anonymization
-func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
+// Returns the two blocks, their CIDs, and the total bytes of NEW storage required (excludes cached reuse)
+func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, int64, error) {
+	var totalNewStorage int64 = 0
+
 	// Try to get popular blocks from cache first
 	randomizers, err := c.cache.GetRandomizers(20) // Get more blocks for better selection
 	if err == nil && len(randomizers) > 0 {
@@ -260,7 +263,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 			// Select first randomizer
 			index1, err := rand.Int(rand.Reader, big.NewInt(int64(len(suitableBlocks))))
 			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to generate random index for first randomizer: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to generate random index for first randomizer: %w", err)
 			}
 			
 			selected1 := suitableBlocks[index1.Int64()]
@@ -275,7 +278,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 			
 			index2, err := rand.Int(rand.Reader, big.NewInt(int64(len(remainingBlocks))))
 			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to generate random index for second randomizer: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to generate random index for second randomizer: %w", err)
 			}
 			
 			selected2 := remainingBlocks[index2.Int64()]
@@ -286,7 +289,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 			c.metrics.RecordBlockReuse()
 			c.metrics.RecordBlockReuse()
 			
-			return selected1.Block, selected1.CID, selected2.Block, selected2.CID, nil
+			return selected1.Block, selected1.CID, selected2.Block, selected2.CID, 0, nil // 0 bytes new storage - both from cache
 		}
 		
 		// If we have exactly 1 suitable cached block, use it and generate another
@@ -298,18 +301,18 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 			// Generate second randomizer
 			randBlock2, err := blocks.NewRandomBlock(blockSize)
 			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to create second randomizer: %w", err)
 			}
 			
-			cid2, err := c.storeBlock(context.Background(), randBlock2)
+			cid2, bytesStored, err := c.storeBlockWithTracking(context.Background(), randBlock2)
 			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+				return nil, "", nil, "", 0, fmt.Errorf("failed to store second randomizer: %w", err)
 			}
 			
 			c.cache.Store(cid2, randBlock2)
 			c.metrics.RecordBlockGeneration()
 			
-			return selected1.Block, selected1.CID, randBlock2, cid2, nil
+			return selected1.Block, selected1.CID, randBlock2, cid2, bytesStored, nil // Only count new randomizer storage
 		}
 	}
 	
@@ -317,7 +320,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 	// Ensure they're different by generating different random data
 	randBlock1, err := blocks.NewRandomBlock(blockSize)
 	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to create first randomizer: %w", err)
+		return nil, "", nil, "", 0, fmt.Errorf("failed to create first randomizer: %w", err)
 	}
 	
 	// Generate second randomizer, retry if identical to first (extremely unlikely but possible)
@@ -325,7 +328,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 	for attempts := 0; attempts < 10; attempts++ {
 		randBlock2, err = blocks.NewRandomBlock(blockSize)
 		if err != nil {
-			return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
+			return nil, "", nil, "", 0, fmt.Errorf("failed to create second randomizer: %w", err)
 		}
 		
 		// Check if blocks are different (compare IDs which are content hashes)
@@ -335,25 +338,25 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 		
 		// If we reach max attempts, this is extremely unlikely with crypto random
 		if attempts == 9 {
-			return nil, "", nil, "", fmt.Errorf("failed to generate different randomizer blocks after 10 attempts")
+			return nil, "", nil, "", 0, fmt.Errorf("failed to generate different randomizer blocks after 10 attempts")
 		}
 	}
 	
-	// Store both randomizers using storage abstraction
+	// Store both randomizers using storage abstraction with tracking
 	ctx := context.Background() // TODO: Accept context parameter in future version
-	cid1, err := c.storeBlock(ctx, randBlock1)
+	cid1, bytesStored1, err := c.storeBlockWithTracking(ctx, randBlock1)
 	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to store first randomizer: %w", err)
+		return nil, "", nil, "", 0, fmt.Errorf("failed to store first randomizer: %w", err)
 	}
 	
-	cid2, err := c.storeBlock(ctx, randBlock2)
+	cid2, bytesStored2, err := c.storeBlockWithTracking(ctx, randBlock2)
 	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
+		return nil, "", nil, "", 0, fmt.Errorf("failed to store second randomizer: %w", err)
 	}
 	
 	// Ensure CIDs are different (they should be since block content is different)
 	if cid1 == cid2 {
-		return nil, "", nil, "", fmt.Errorf("generated randomizers have identical CIDs")
+		return nil, "", nil, "", 0, fmt.Errorf("generated randomizers have identical CIDs")
 	}
 	
 	// Cache both randomizers
@@ -362,7 +365,9 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 	c.metrics.RecordBlockGeneration()
 	c.metrics.RecordBlockGeneration()
 	
-	return randBlock1, cid1, randBlock2, cid2, nil
+	totalNewStorage = bytesStored1 + bytesStored2
+	
+	return randBlock1, cid1, randBlock2, cid2, totalNewStorage, nil // Count both new randomizers
 }
 
 // StoreBlockWithCache stores a block in IPFS and caches it
@@ -656,8 +661,8 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		if progress != nil {
 			progress("Anonymizing blocks", i, totalBlocks)
 		}
-		// Select two randomizer blocks (3-tuple XOR)
-		randBlock1, cid1, randBlock2, cid2, err := c.SelectRandomizers(fileBlock.Size())
+		// Select two randomizer blocks (3-tuple XOR) and track NEW randomizer storage
+		randBlock1, cid1, randBlock2, cid2, randomizerBytesStored, err := c.SelectRandomizers(fileBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}
@@ -669,11 +674,13 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 		}
 		
 		// Store anonymized block with tracking
-		dataCID, bytesStored, err := c.storeBlockWithTracking(context.Background(), xorBlock)
+		dataCID, dataBytesStored, err := c.storeBlockWithTracking(context.Background(), xorBlock)
 		if err != nil {
 			return "", fmt.Errorf("failed to store data block: %w", err)
 		}
-		totalStorageUsed += bytesStored
+		
+		// Count both data and NEW randomizer storage
+		totalStorageUsed += dataBytesStored + randomizerBytesStored
 		
 		// Cache the anonymized block
 		c.cacheBlock(dataCID, xorBlock, map[string]interface{}{

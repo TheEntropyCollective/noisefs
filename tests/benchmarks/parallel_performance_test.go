@@ -92,7 +92,7 @@ func benchmarkUploadSequential(b *testing.B, fileSize int64, blockSize int) {
 		randomizer1Blocks := make([]*blocks.Block, len(fileBlocks))
 		randomizer2Blocks := make([]*blocks.Block, len(fileBlocks))
 		for j := range fileBlocks {
-			r1, _, r2, _, err := client.SelectRandomizers(fileBlocks[j].Size())
+			r1, _, r2, _, _, err := client.SelectRandomizers(fileBlocks[j].Size())
 			if err != nil {
 				b.Fatalf("Failed to select randomizers: %v", err)
 			}
@@ -173,7 +173,7 @@ func benchmarkUploadParallel(b *testing.B, fileSize int64, blockSize int, worker
 		randomizer1Blocks := make([]*blocks.Block, len(fileBlocks))
 		randomizer2Blocks := make([]*blocks.Block, len(fileBlocks))
 		for j := range fileBlocks {
-			r1, _, r2, _, err := client.SelectRandomizers(fileBlocks[j].Size())
+			r1, _, r2, _, _, err := client.SelectRandomizers(fileBlocks[j].Size())
 			if err != nil {
 				b.Fatalf("Failed to select randomizers: %v", err)
 			}
