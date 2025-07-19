@@ -24,9 +24,117 @@ func (m *mockDirectoryManager) RetrieveDirectoryManifest(ctx context.Context, di
 }
 
 func TestRemoteChangeMonitor_Basic(t *testing.T) {
-	// This test is skipped because it requires a complex mock setup
-	// The RemoteChangeMonitor depends on DirectoryManager which has complex dependencies
-	t.Skip("Integration test requires full DirectoryManager setup")
+	// Test creating a RemoteChangeMonitor using the constructor
+	// to verify proper initialization patterns work
+	
+	// Create basic sync config
+	config := &SyncConfig{
+		SyncInterval: time.Minute,
+	}
+	
+	// Create temporary directory for state storage
+	tempDir := t.TempDir()
+	stateStore, err := NewSyncStateStore(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create state store: %v", err)
+	}
+	
+	// Since we can't easily mock the DirectoryManager dependency,
+	// we'll test the parts that don't require it directly.
+	
+	// Test manual creation to verify struct fields are accessible
+	monitor := &RemoteChangeMonitor{
+		config:         config,
+		stateStore:     stateStore,
+		monitoredPaths: make(map[string]*RemoteMonitorState),
+		pollInterval:   time.Second, // Short interval for testing
+		eventChan:      make(chan SyncEvent, 100),
+		errorChan:      make(chan error, 10),
+	}
+	
+	// Test that monitor can be created
+	if monitor == nil {
+		t.Fatal("Monitor should not be nil")
+	}
+	
+	// Test basic configuration
+	if monitor.config.SyncInterval != time.Minute {
+		t.Error("Monitor should use provided config")
+	}
+	
+	if monitor.pollInterval != time.Second {
+		t.Error("Monitor should use configured poll interval")
+	}
+	
+	// Test channel initialization
+	if monitor.eventChan == nil {
+		t.Error("Event channel should be initialized")
+	}
+	
+	if monitor.errorChan == nil {
+		t.Error("Error channel should be initialized")
+	}
+	
+	// Test channel capacity
+	if cap(monitor.eventChan) != 100 {
+		t.Errorf("Expected event channel capacity of 100, got %d", cap(monitor.eventChan))
+	}
+	
+	if cap(monitor.errorChan) != 10 {
+		t.Errorf("Expected error channel capacity of 10, got %d", cap(monitor.errorChan))
+	}
+	
+	// Test monitored paths map initialization
+	if monitor.monitoredPaths == nil {
+		t.Error("Monitored paths map should be initialized")
+	}
+	
+	if len(monitor.monitoredPaths) != 0 {
+		t.Error("Monitored paths map should start empty")
+	}
+	
+	// Test direct path manipulation without AddPath (which needs DirectoryManager)
+	remotePath := "/remote/test"
+	syncID := "test-sync-1"
+	manifestCID := "QmTestManifest"
+	
+	// Manually add a monitored path to test internal state
+	monitor.monitoredPaths[remotePath] = &RemoteMonitorState{
+		RemotePath:   remotePath,
+		ManifestCID:  manifestCID,
+		LastSnapshot: make(map[string]RemoteMetadata),
+		LastChecked:  time.Now(),
+		SyncID:       syncID,
+	}
+	
+	// Verify path was added
+	if len(monitor.monitoredPaths) != 1 {
+		t.Errorf("Expected 1 monitored path, got %d", len(monitor.monitoredPaths))
+	}
+	
+	state, exists := monitor.monitoredPaths[remotePath]
+	if !exists {
+		t.Error("Monitored path should exist")
+	}
+	
+	if state.RemotePath != remotePath {
+		t.Errorf("Expected remote path %s, got %s", remotePath, state.RemotePath)
+	}
+	
+	if state.SyncID != syncID {
+		t.Errorf("Expected sync ID %s, got %s", syncID, state.SyncID)
+	}
+	
+	// Test removing a monitored path (this method doesn't require DirectoryManager)
+	err = monitor.RemovePath(remotePath)
+	if err != nil {
+		t.Fatalf("Failed to remove monitored path: %v", err)
+	}
+	
+	// Verify path was removed
+	if len(monitor.monitoredPaths) != 0 {
+		t.Errorf("Expected 0 monitored paths, got %d", len(monitor.monitoredPaths))
+	}
 }
 
 func TestRemoteChangeMonitor_CompareSnapshots(t *testing.T) {

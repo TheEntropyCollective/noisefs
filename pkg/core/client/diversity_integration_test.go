@@ -1,17 +1,104 @@
 package noisefs
 
 import (
+	"context"
 	"testing"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 func TestClient_DiversityControlsIntegration(t *testing.T) {
-	t.Skip("Skipping integration test - requires full storage setup")
+	// Create mock storage manager for testing
+	config := storage.DefaultConfig()
+	config.Backends = make(map[string]*storage.BackendConfig)
+	
+	config.Backends["memory"] = &storage.BackendConfig{
+		Type:    storage.BackendTypeLocal,
+		Enabled: true,
+		Connection: &storage.ConnectionConfig{
+			Endpoint: "memory://test",
+		},
+	}
+	config.DefaultBackend = "memory"
+	
+	manager, err := storage.NewManager(config)
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create client with diversity controls
+	blockCache := cache.NewMemoryCache(100)
+	client, err := NewClient(manager, blockCache)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	
+	// Test that diversity controls are initialized
+	if client.diversityControls == nil {
+		t.Error("Diversity controls should be initialized")
+	}
+	
+	// Test initial diversity metrics
+	metrics := client.diversityControls.GetDiversityMetrics()
+	if metrics.TotalRandomizers != 0 {
+		t.Error("Should start with 0 randomizers")
+	}
+	
+	if metrics.MaxUsageRatio != 0.0 {
+		t.Error("Should start with 0 max usage ratio")
+	}
 }
 
 func TestClient_DiversityControlsConfiguration(t *testing.T) {
-	t.Skip("Skipping configuration test - requires full storage setup")
+	// Test diversity controls configuration with mock storage
+	config := storage.DefaultConfig()
+	config.Backends = make(map[string]*storage.BackendConfig)
+	
+	config.Backends["memory"] = &storage.BackendConfig{
+		Type:    storage.BackendTypeLocal,
+		Enabled: true,
+		Connection: &storage.ConnectionConfig{
+			Endpoint: "memory://test",
+		},
+	}
+	config.DefaultBackend = "memory"
+	
+	manager, err := storage.NewManager(config)
+	if err != nil {
+		t.Fatalf("Failed to create storage manager: %v", err)
+	}
+	defer manager.Stop(context.Background())
+	
+	// Create client with diversity controls
+	blockCache := cache.NewMemoryCache(100)
+	client, err := NewClient(manager, blockCache)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	
+	// Test diversity controls configuration
+	if client.diversityControls == nil {
+		t.Fatal("Diversity controls should be configured")
+	}
+	
+	// Test that we can record randomizer selections
+	client.diversityControls.RecordRandomizerSelection("test-cid-1")
+	client.diversityControls.RecordRandomizerSelection("test-cid-2")
+	client.diversityControls.RecordRandomizerSelection("test-cid-1") // Repeat
+	
+	// Check metrics
+	metrics := client.diversityControls.GetDiversityMetrics()
+	if metrics.TotalRandomizers != 2 {
+		t.Errorf("Expected 2 unique randomizers, got %d", metrics.TotalRandomizers)
+	}
+	
+	// test-cid-1 should have higher usage (2 out of 3 selections = 66.7%)
+	expectedRatio := 2.0 / 3.0
+	if metrics.MaxUsageRatio < expectedRatio-0.01 || metrics.MaxUsageRatio > expectedRatio+0.01 {
+		t.Errorf("Expected max usage ratio near %.2f, got %.2f", expectedRatio, metrics.MaxUsageRatio)
+	}
 }
 
 func TestClient_SelectRandomizersWithDiversityUnit(t *testing.T) {
