@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +13,6 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
 // uploadFile uploads a single file to NoiseFS
@@ -58,7 +55,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 			"filename":       filename,
 			"size_bytes":     fileInfo.Size(),
 			"upload_time":    uploadDuration.String(),
-			"blocks_stored":  metrics.BlocksStored,
+			"blocks_generated": metrics.BlocksGenerated,
 			"bytes_stored":   metrics.BytesStoredIPFS,
 		}
 		
@@ -71,7 +68,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		fmt.Printf("Upload completed successfully!\n")
 		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
 		fmt.Printf("Upload time: %v\n", uploadDuration)
-		fmt.Printf("Blocks stored: %d\n", metrics.BlocksStored)
+		fmt.Printf("Blocks generated: %d\n", metrics.BlocksGenerated)
 		fmt.Printf("Total bytes stored in IPFS: %s\n", formatBytes(metrics.BytesStoredIPFS))
 		
 		// Calculate and display storage efficiency
@@ -83,11 +80,12 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		fmt.Println(descriptorCID)
 	}
 
-	logger.Debug("File upload completed", 
-		"file", filePath,
-		"descriptor_cid", descriptorCID,
-		"size", fileInfo.Size(),
-		"duration", uploadDuration)
+	logger.Debug("File upload completed", map[string]interface{}{
+		"file":           filePath,
+		"descriptor_cid": descriptorCID,
+		"size":           fileInfo.Size(),
+		"duration":       uploadDuration.String(),
+	})
 
 	return nil
 }
@@ -98,8 +96,6 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		fmt.Printf("Uploading directory: %s\n", dirPath)
 	}
 
-	startTime := time.Now()
-
 	// Parse exclude patterns
 	var excludes []string
 	if excludePatterns != "" {
@@ -109,63 +105,17 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		}
 	}
 
-	// Upload the directory
-	descriptorCID, err := client.UploadDirectory(dirPath, excludes)
-	if err != nil {
-		return fmt.Errorf("directory upload failed: %w", err)
-	}
-
-	uploadDuration := time.Since(startTime)
-
-	// Get metrics for the uploaded directory
-	metrics := client.GetMetrics()
-
-	if jsonOutput {
-		result := map[string]interface{}{
-			"success":        true,
-			"descriptor_cid": descriptorCID,
-			"directory":      dirPath,
-			"upload_time":    uploadDuration.String(),
-			"blocks_stored":  metrics.BlocksStored,
-			"bytes_stored":   metrics.BytesStoredIPFS,
-		}
-		
-		if len(excludes) > 0 {
-			result["excluded_patterns"] = excludes
-		}
-		
-		jsonData, err := json.MarshalIndent(result, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal JSON: %w", err)
-		}
-		fmt.Println(string(jsonData))
-	} else if !quiet {
-		fmt.Printf("Directory upload completed successfully!\n")
-		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
-		fmt.Printf("Upload time: %v\n", uploadDuration)
-		fmt.Printf("Blocks stored: %d\n", metrics.BlocksStored)
-		fmt.Printf("Total bytes stored in IPFS: %s\n", formatBytes(metrics.BytesStoredIPFS))
-		
-		if len(excludes) > 0 {
-			fmt.Printf("Excluded patterns: %s\n", strings.Join(excludes, ", "))
-		}
-	} else {
-		fmt.Println(descriptorCID)
-	}
-
-	logger.Debug("Directory upload completed",
-		"directory", dirPath,
-		"descriptor_cid", descriptorCID,
-		"duration", uploadDuration,
-		"excludes", excludes)
-
-	return nil
+	// TODO: Implement directory upload functionality
+	// For now, return an error indicating feature is not yet implemented
+	return fmt.Errorf("directory upload not yet implemented")
 }
 
 // streamingUploadDirectory uploads a directory using streaming mode for memory efficiency
 func streamingUploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Implementation would use streaming interfaces
-	logger.Info("Streaming directory upload", "directory", dirPath)
+	logger.Info("Streaming directory upload", map[string]interface{}{
+		"directory": dirPath,
+	})
 	
 	// For now, fall back to regular directory upload
 	// TODO: Implement actual streaming upload when streaming interfaces are available
@@ -187,9 +137,10 @@ func (dbp *DirectoryBlockProcessor) ProcessDirectoryBlock(blockIndex int, block 
 		fmt.Printf("Processing block %d (%s)\n", blockIndex, formatBytes(int64(len(block.Data))))
 	}
 	
-	dbp.Logger.Debug("Processing directory block",
-		"block_index", blockIndex,
-		"block_size", len(block.Data))
+	dbp.Logger.Debug("Processing directory block", map[string]interface{}{
+		"block_index": blockIndex,
+		"block_size":  len(block.Data),
+	})
 	
 	// Block processing logic would go here
 	return nil
@@ -201,9 +152,10 @@ func (dbp *DirectoryBlockProcessor) ProcessDirectoryManifest(dirPath string, man
 		fmt.Printf("Processing directory manifest for: %s\n", dirPath)
 	}
 	
-	dbp.Logger.Debug("Processing directory manifest",
-		"directory", dirPath,
-		"manifest_size", len(manifestBlock.Data))
+	dbp.Logger.Debug("Processing directory manifest", map[string]interface{}{
+		"directory":     dirPath,
+		"manifest_size": len(manifestBlock.Data),
+	})
 	
 	// Manifest processing logic would go here
 	return nil

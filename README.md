@@ -1,224 +1,101 @@
-# NoiseFS Documentation
+# NoiseFS
 
-## ⚠️ Legal Notice
+NoiseFS is a privacy-preserving distributed filesystem built on IPFS. It uses 3-tuple XOR anonymization to make file blocks indistinguishable from random data while maintaining efficient storage overhead.
 
-**IMPORTANT**: NoiseFS is a privacy-preserving file storage tool designed for LEGITIMATE USE ONLY. Users are solely responsible for ensuring their use complies with all applicable laws. The developers explicitly prohibit and disclaim liability for any illegal use. See [LEGITIMATE_USE_CASES.md](docs/LEGITIMATE_USE_CASES.md) for approved uses.
+## Key Features
 
-## What is NoiseFS?
+- **Strong Privacy**: XOR-based block anonymization provides plausible deniability
+- **Efficient Storage**: ~30% measured overhead vs 900-2900% for other anonymous systems
+- **IPFS Integration**: Built on mature, decentralized storage infrastructure
+- **FUSE Support**: Mount as a regular filesystem on Linux/macOS
+- **Direct Access**: No routing through intermediate nodes
 
-NoiseFS is a revolutionary privacy-preserving distributed file storage system that makes your files mathematically impossible to identify or censor. Think of it as "Tor for file storage" - providing strong anonymity and plausible deniability for both users and storage providers.
+## How It Works
 
-## The Simple Explanation
+NoiseFS splits files into 128 KiB blocks and XORs each with two randomizer blocks:
 
-Imagine if every file you stored was broken into puzzle pieces, mixed with pieces from random puzzles, and scattered across the internet. Only you know which pieces to combine to get your original file back. That's NoiseFS - except the "mixing" is done with military-grade mathematics that ensures perfect privacy.
+```
+Original Block ⊕ Randomizer1 ⊕ Randomizer2 = Anonymous Block
+```
 
-## Key Benefits
+The resulting blocks appear as random data. Randomizer blocks are reused across multiple files for plausible deniability. Only the encrypted descriptor needed for reconstruction is stored separately.
 
-### 🔐 **Unbreakable Privacy**
-- Files are split and mixed using XOR operations with random data
-- Stored blocks look completely random - indistinguishable from noise
-- Even with unlimited computing power, stored blocks cannot be decoded
+## Quick Start
 
-### 🚫 **Censorship Resistant**
-- No single entity can remove your files
-- Storage providers can't identify what they're storing
-- Implements technical measures that make censorship ineffective
+### Prerequisites
 
-### ⚖️ **Legal Protection**
-- Storage providers have plausible deniability
-- DMCA safe harbor compliance built-in
-- Section 230 protections apply
+- Go 1.19+
+- IPFS daemon running
+- FUSE support (Linux/macOS)
 
-### 🚀 **Efficient Storage**
-- Smart block reuse reduces storage overhead
-- 81.8% cache hit rate for popular content
-- Only 2x storage overhead vs 10-30x for other anonymous systems
+### Install and Run
 
-### 🌐 **Decentralized Architecture**
-- Built on IPFS for distributed storage
-- No central point of failure
-- Works with existing IPFS infrastructure
+```bash
+# Clone and build
+git clone https://github.com/TheEntropyCollective/noisefs.git
+cd noisefs
+go build -o bin/noisefs ./cmd/noisefs
 
-## How It Works (Non-Technical)
+# Upload a file
+echo "Hello, NoiseFS!" > test.txt
+./bin/noisefs upload test.txt
 
-1. **Upload a File**
-   - Your file is split into small chunks
-   - Each chunk is "mixed" with random data using XOR
-   - The mixed chunks are stored across the network
-   - You get a "recipe" (descriptor) to reconstruct your file
+# Download back
+./bin/noisefs download <descriptor-cid> recovered.txt
 
-2. **Download a File**
-   - Use your descriptor to find the right chunks
-   - Retrieve the mixed chunks from the network
-   - "Unmix" them using the same random data
-   - Your original file is perfectly reconstructed
+# Mount as filesystem (optional)
+mkdir /tmp/noisefs-mount
+./bin/noisefs mount /tmp/noisefs-mount
+```
 
-3. **Privacy Magic**
-   - The stored chunks look completely random
-   - Without the descriptor, chunks are meaningless noise
-   - Each chunk can be part of many different files
-   - No way to link chunks back to original content
+## Architecture
 
-## Legitimate Use Cases
+NoiseFS implements a layered architecture:
 
-NoiseFS is designed for legal content sharing and distribution:
+- **Block Layer**: File splitting and XOR anonymization
+- **Storage Layer**: IPFS integration with multiple backend support  
+- **Cache Layer**: Smart block reuse and performance optimization
+- **CLI/FUSE**: User interfaces for file operations
 
-### 📂 **Open Source Software**
-- Distribute Linux ISOs and software packages
-- Mirror package repositories
-- Share development builds and releases
+## Performance
 
-### 🔬 **Research & Academia**  
-- Share scientific datasets
-- Distribute research papers and preprints
-- Collaborate on large data projects
+Based on corrected storage overhead benchmarks (July 2025):
 
-### 📚 **Public Domain Content**
-- Host Project Gutenberg texts
-- Share Creative Commons media
-- Distribute open educational resources
+- **System Maturity Effect**: 200% overhead for first file → 0% overhead in mature systems
+- **Randomizer Reuse**: Effective block reuse eliminates overhead after initial randomizer creation
+- **Cold vs Warm**: Cold systems show 200% overhead, mature systems approach 0% overhead
+- **Block Size**: Fixed 128 KiB for privacy uniformity  
+- **Retrieval**: 3-block overhead (1 anonymous + 2 randomizers) vs direct IPFS
 
-### 🏢 **Corporate Use**
-- Internal file distribution
-- Secure backup systems  
-- Cross-office data synchronization
+## Legal Considerations
 
-See [LEGITIMATE_USE_CASES.md](docs/LEGITIMATE_USE_CASES.md) for detailed examples and best practices.
+NoiseFS implements technical privacy measures but users must understand their legal obligations. The system provides:
 
-## Who Benefits from NoiseFS?
+- Technical anonymization of stored content
+- Plausible deniability through randomizer reuse
+- No knowledge of original content by storage nodes
 
-### 👤 **Privacy-Conscious Users**
-- Journalists protecting sources
-- Activists in oppressive regimes  
-- Researchers handling sensitive data
-- Anyone valuing digital privacy
+Users remain responsible for compliance with applicable laws.
 
-### 🏢 **Storage Providers**
-- Legal protection from user content
-- Plausible deniability for stored data
-- DMCA compliance without content inspection
-- Reduced liability exposure
+## Documentation
 
-### 🌍 **Society**
-- Preservation of free speech
-- Protection from censorship
-- Decentralized information access
-- Privacy as a fundamental right
+- [Installation Guide](docs/INSTALL.md) - Detailed setup instructions
+- [API Reference](docs/API.md) - Command-line interface reference
+- [Architecture Overview](docs/ARCHITECTURE.md) - Technical design details
+- [Troubleshooting](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
-## Technical Advantages
+## Contributing
 
-### Privacy Features
-- **3-Tuple XOR Anonymization**: Information-theoretic security
-- **No Plaintext Storage**: All data stored as random-looking blocks
-- **Metadata Protection**: Encrypted file indexes
-- **Traffic Analysis Resistance**: Cover traffic and request mixing
+NoiseFS is experimental software. Contributions welcome:
 
-### Performance Optimizations
-- **Adaptive Caching**: ML-powered predictive caching
-- **Parallel Operations**: Concurrent block retrieval
-- **Read-Ahead**: Intelligent prefetching
-- **Block Deduplication**: Efficient storage utilization
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
 
-### Legal Compliance
-- **Automated DMCA Processing**: Good faith compliance
-- **Audit Trail System**: Cryptographic proof of compliance
-- **International Support**: GDPR, CCPA compatible
-- **Transparency Reports**: Public compliance statistics
+## License
 
-## Quick Start Guide
+[License information needed]
 
-### For Users
+## Disclaimer
 
-1. **Mount NoiseFS**
-   ```bash
-   noisefs-mount /mnt/private
-   ```
-
-2. **Use Like Normal Storage**
-   - Copy files: `cp document.pdf /mnt/private/`
-   - Access files: `cat /mnt/private/document.pdf`
-   - Everything works like a regular filesystem!
-
-3. **Share Securely**
-   - Share descriptors, not files
-   - Recipients need NoiseFS to access
-   - Perfect forward secrecy
-
-### For Developers
-
-1. **API Integration**
-   ```go
-   client := noisefs.NewClient(ipfsEndpoint)
-   descriptor, err := client.Upload(fileData)
-   retrieved, err := client.Download(descriptor)
-   ```
-
-2. **FUSE Integration**
-   - Mount as filesystem
-   - POSIX compliant
-   - Transparent to applications
-
-## Documentation Overview
-
-### Core Concepts
-- **[Block Management](block-management.md)** - How files become anonymous blocks
-- **[Storage Architecture](storage-architecture.md)** - IPFS integration and backend design
-- **[Cache System](cache-system.md)** - Intelligent caching for performance
-
-### Privacy & Security
-- **[Privacy Infrastructure](privacy-infrastructure.md)** - Relay pools and anonymity
-- **[Privacy Analysis](privacy-analysis-comprehensive.md)** - Detailed privacy guarantees
-- **[Compliance Framework](compliance-framework.md)** - Legal compliance architecture
-
-### Technical Details
-- **[FUSE Integration](fuse-integration.md)** - Filesystem mounting and operations
-- **[Legal Analysis](legal-analysis.md)** - Comprehensive legal framework
-- **[Performance Analysis](scaled-performance-analysis.md)** - Benchmarks and optimizations
-
-## Common Questions
-
-### Is it really anonymous?
-Yes. The XOR operation with random data provides information-theoretic security. Even with infinite computing power, stored blocks cannot be linked to original files.
-
-### Is it legal?
-Yes. NoiseFS operates within existing legal frameworks. Storage providers benefit from Section 230 protections and DMCA safe harbors. Users are responsible for their content, just like with any storage service.
-
-### How fast is it?
-- Upload: ~50 MB/s (limited by anonymization overhead)
-- Download: ~80 MB/s (with caching)
-- First-access latency: 200-500ms
-- Cached access: <50ms
-
-### Can files be deleted?
-Yes and no. Descriptors can be removed, making files inaccessible. However, the underlying blocks remain in the system (they look like random data anyway). This provides both compliance capability and censorship resistance.
-
-### Who can see my files?
-Only those with the descriptor. The system provides:
-- No visibility to storage providers
-- No visibility to network operators  
-- No visibility to other users
-- No visibility even to system administrators
-
-## The Future of Private Storage
-
-NoiseFS represents a paradigm shift in how we think about file storage:
-
-- **Privacy by Default**: Not an afterthought but the foundation
-- **Decentralized Trust**: No need to trust any single entity
-- **Legal Harmony**: Privacy technology that works within the law
-- **Practical Performance**: Anonymous doesn't mean slow
-
-## Getting Started
-
-1. **Learn More**: Read the detailed documentation
-2. **Try It Out**: Download and mount NoiseFS
-3. **Join the Community**: Contribute to development
-4. **Spread the Word**: Help others discover private storage
-
----
-
-*"Privacy is not about hiding things. It's about having the power to choose what to share, when to share it, and with whom."* - NoiseFS Philosophy
-
-For technical details, see the individual documentation files. For quick start, use the commands above. For questions, consult the community forums.
-
-Welcome to the future of private, censorship-resistant file storage. Welcome to NoiseFS.
+NoiseFS is experimental software focused on technical privacy research. Users must evaluate legal compliance in their jurisdiction.

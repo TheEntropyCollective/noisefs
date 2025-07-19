@@ -6,19 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	fixtures "github.com/TheEntropyCollective/noisefs/tests/fixtures"
 )
 
 // UnifiedBenchmarkConfig consolidates all benchmark tool configurations

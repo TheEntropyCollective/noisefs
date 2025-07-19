@@ -5,10 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
-	"time"
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends" // Import to register backends
@@ -169,7 +168,9 @@ func applyConfigOverrides(cfg *config.Config, cmdConfig *CommandConfig) {
 		cfg.Cache.BlockCacheSize = cmdConfig.CacheSize
 	}
 	if cmdConfig.Workers != 0 {
-		cfg.Performance.Workers = cmdConfig.Workers
+		// TODO: Add Workers field to PerformanceConfig
+		// cfg.Performance.Workers = cmdConfig.Workers
+		_ = cmdConfig.Workers // Suppress unused variable warning
 	}
 	if cmdConfig.MinPersonalCacheMB != 0 {
 		cfg.Cache.MinPersonalCacheMB = cmdConfig.MinPersonalCacheMB
@@ -181,7 +182,7 @@ func applyConfigOverrides(cfg *config.Config, cmdConfig *CommandConfig) {
 		cfg.Cache.AltruisticBandwidthMB = cmdConfig.AltruisticBandwidthMB
 	}
 	if cmdConfig.MemoryLimitMB != 0 {
-		cfg.Performance.MemoryLimitMB = cmdConfig.MemoryLimitMB
+		cfg.Performance.MemoryLimit = cmdConfig.MemoryLimitMB
 	}
 	if cmdConfig.StreamBufferSize != 0 {
 		cfg.Performance.StreamBufferSize = cmdConfig.StreamBufferSize

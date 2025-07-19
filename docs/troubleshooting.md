@@ -1,296 +1,221 @@
-# NoiseFS Troubleshooting Guide
-
-This guide helps resolve common issues with NoiseFS. For additional help, use `noisefs --debug` to enable verbose logging.
+# Troubleshooting Guide
 
 ## Common Issues
 
-### IPFS Connection Errors
+### IPFS Connection Problems
 
-**Problem**: `Error: cannot connect to IPFS API: connection refused`
+#### Symptom: "Failed to connect to IPFS"
 
-**Solutions**:
-
-1. **Start IPFS daemon**
-   ```bash
-   ipfs daemon &
-   ```
-
-2. **Check IPFS is running**
-   ```bash
-   ipfs id
-   curl http://localhost:5001/api/v0/id
-   ```
-
-3. **Use custom endpoint**
-   ```bash
-   noisefs --ipfs-endpoint http://192.168.1.100:5001 upload file.txt
-   ```
-
-4. **Configure endpoint permanently**
-   ```bash
-   noisefs-config set ipfs.api_endpoint "http://192.168.1.100:5001"
-   ```
-
-### FUSE Mount Failures
-
-**Problem**: `Mount failed: operation not permitted`
+**Cause**: IPFS daemon not running or unreachable.
 
 **Solutions**:
+1. Start IPFS daemon: `ipfs daemon`
+2. Check IPFS is listening: `curl http://127.0.0.1:5001/api/v0/version`
+3. Verify NoiseFS endpoint: `export NOISEFS_IPFS_ENDPOINT="127.0.0.1:5001"`
 
-1. **Check FUSE is installed**
-   ```bash
-   # Linux
-   ls /dev/fuse
-   
-   # macOS
-   ls /Library/Filesystems/macfuse.fs
-   ```
+#### Symptom: "Connection refused on port 5001"
 
-2. **Install FUSE**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt-get install fuse
-   
-   # macOS
-   brew install --cask macfuse
-   ```
-
-3. **Add user to fuse group (Linux)**
-   ```bash
-   sudo usermod -a -G fuse $USER
-   # Log out and back in
-   ```
-
-4. **Run with privileges**
-   ```bash
-   sudo noisefs-mount /mnt/noisefs
-   ```
-
-### File Upload Failures
-
-**Problem**: `Error: failed to upload block: timeout`
+**Cause**: IPFS API not accessible or firewall blocking.
 
 **Solutions**:
+1. Check IPFS config: `ipfs config Addresses.API`
+2. Open firewall: `sudo ufw allow 5001`
+3. Bind to all interfaces: `ipfs config Addresses.API /ip4/0.0.0.0/tcp/5001`
 
-1. **Increase timeout**
-   ```bash
-   noisefs-config set ipfs.timeout 600
-   ```
+### FUSE Mount Issues
 
-2. **Check IPFS storage**
-   ```bash
-   ipfs repo stat
-   ```
+#### Symptom: "Permission denied" when mounting
 
-3. **Clear IPFS garbage**
-   ```bash
-   ipfs repo gc
-   ```
-
-4. **Reduce parallel uploads**
-   ```bash
-   noisefs-config set performance.parallel_uploads 1
-   ```
-
-### Cache Issues
-
-**Problem**: `Warning: cache full, performance degraded`
+**Cause**: User lacks FUSE permissions.
 
 **Solutions**:
+1. Install FUSE: `sudo apt install fuse` (Ubuntu) / `brew install macfuse` (macOS)
+2. Add user to fuse group: `sudo usermod -a -G fuse $USER`
+3. Logout and login again
+4. Check device permissions: `ls -l /dev/fuse`
 
-1. **Increase cache size**
-   ```bash
-   noisefs cache resize 5000
-   ```
+#### Symptom: "Transport endpoint is not connected"
 
-2. **Clear cache**
-   ```bash
-   noisefs cache clear
-   ```
-
-3. **Check cache stats**
-   ```bash
-   noisefs cache stats
-   ```
-
-4. **Disable cache temporarily**
-   ```bash
-   noisefs --no-cache upload large-file.iso
-   ```
-
-### Index Corruption
-
-**Problem**: `Error: failed to load index: invalid format`
+**Cause**: Previous mount not properly unmounted.
 
 **Solutions**:
+1. Force unmount: `sudo fusermount -uz /mount/point`
+2. Kill any hanging processes: `sudo pkill -f noisefs`
+3. Try mounting again
 
-1. **Backup corrupted index**
-   ```bash
-   mv ~/.noisefs/index.json ~/.noisefs/index.json.backup
-   ```
+### Upload/Download Failures
 
-2. **Rebuild from descriptors**
-   ```bash
-   # List known descriptor CIDs
-   ls ~/.noisefs/descriptors/
-   
-   # Re-import files
-   noisefs import --descriptor <cid> --name "recovered-file"
-   ```
+#### Symptom: "Block not found"
 
-3. **Start fresh**
-   ```bash
-   rm ~/.noisefs/index.json
-   noisefs list  # Creates new index
-   ```
+**Cause**: Required blocks not available in IPFS network.
+
+**Solutions**:
+1. Check IPFS connectivity: `ipfs swarm peers`
+2. Try pinning important blocks: `ipfs pin add <block-cid>`
+3. Verify descriptor integrity: Check CID format
+4. Wait for network propagation (may take minutes)
+
+#### Symptom: "Descriptor invalid"
+
+**Cause**: Corrupted or malformed descriptor.
+
+**Solutions**:
+1. Verify descriptor CID format
+2. Check if descriptor exists: `ipfs cat <descriptor-cid>`
+3. Try downloading descriptor separately
+4. Restore from backup if available
 
 ### Performance Issues
 
-**Problem**: Slow upload/download speeds
+#### Symptom: Very slow uploads/downloads
+
+**Cause**: Network congestion, poor IPFS connectivity, or cache misses.
 
 **Solutions**:
+1. Check IPFS peer count: `ipfs swarm peers | wc -l`
+2. Connect to more peers: `ipfs bootstrap add <peer-address>`
+3. Increase cache size: `export NOISEFS_CACHE_SIZE=500`
+4. Use local IPFS node for better performance
 
-1. **Check IPFS peers**
-   ```bash
-   ipfs swarm peers | wc -l
-   ```
+#### Symptom: High memory usage
 
-2. **Connect to more peers**
-   ```bash
-   ipfs bootstrap add default
-   ```
-
-3. **Optimize for local network**
-   ```bash
-   noisefs-config set privacy.default_level low
-   ```
-
-4. **Enable performance metrics**
-   ```bash
-   noisefs --debug status --detailed
-   ```
-
-### Web UI Issues
-
-**Problem**: `Error: TLS handshake error`
+**Cause**: Large cache size or memory leaks.
 
 **Solutions**:
+1. Reduce cache size: `export NOISEFS_CACHE_SIZE=50`
+2. Restart NoiseFS periodically
+3. Monitor with: `ps aux | grep noisefs`
+4. Check for memory leaks in logs
 
-1. **Generate certificates**
-   ```bash
-   noisefs-webui --generate-cert
-   ```
+### Build and Installation Issues
 
-2. **Use HTTP for local testing**
-   ```bash
-   noisefs-config set webui.tls.enabled false
-   ```
+#### Symptom: "Go version too old"
 
-3. **Specify custom certificates**
-   ```bash
-   noisefs-webui --cert server.crt --key server.key
-   ```
+**Cause**: NoiseFS requires Go 1.19+.
+
+**Solutions**:
+1. Update Go: Download from https://golang.org/dl/
+2. Verify version: `go version`
+3. Update PATH if needed
+
+#### Symptom: "Module not found" during build
+
+**Cause**: Go modules not properly downloaded.
+
+**Solutions**:
+1. Clean module cache: `go clean -modcache`
+2. Download dependencies: `go mod download`
+3. Verify go.mod file exists
+4. Try: `go mod tidy`
+
+### Configuration Issues
+
+#### Symptom: NoiseFS ignoring config file
+
+**Cause**: Config file in wrong location or invalid format.
+
+**Solutions**:
+1. Check config location: `~/.noisefs/config.json`
+2. Validate JSON syntax: `python -m json.tool ~/.noisefs/config.json`
+3. Use environment variables instead
+4. Check file permissions
+
+#### Symptom: "Invalid block size"
+
+**Cause**: Block size not power of 2 or too small/large.
+
+**Solutions**:
+1. Use default: `export NOISEFS_BLOCK_SIZE=131072`
+2. Valid sizes: 32768, 65536, 131072, 262144
+3. Larger blocks = better performance, worse privacy
 
 ## Diagnostic Commands
 
-### System Health Check
+### Check System Status
 
 ```bash
-# Full system status
-noisefs status --detailed
+# NoiseFS version and build info
+noisefs version
 
-# Test IPFS connectivity
-noisefs test-ipfs
+# IPFS connectivity
+noisefs status
 
-# Verify configuration
-noisefs-config validate
+# System statistics
+noisefs stats
+
+# Cache statistics
+noisefs cache-stats
 ```
 
-### Debug Mode
+### Debug Logging
 
 ```bash
 # Enable debug logging
-export NOISEFS_LOGGING_LEVEL=debug
+export NOISEFS_LOG_LEVEL=debug
+noisefs upload test.txt
 
-# Run with debug output
-noisefs --debug upload test.txt
+# Log to file
+noisefs upload test.txt 2> debug.log
 
-# Save debug log
-noisefs --debug upload test.txt 2> debug.log
+# Analyze logs
+grep ERROR debug.log
 ```
 
-### Performance Analysis
+### Network Diagnostics
 
 ```bash
-# Run benchmark
-noisefs benchmark
+# Check IPFS peers
+ipfs swarm peers
 
-# Check cache performance
-noisefs cache stats
+# Test IPFS API
+curl -X POST http://127.0.0.1:5001/api/v0/version
 
-# Monitor operations
-watch -n 1 'noisefs status'
+# Check NoiseFS connectivity
+noisefs ping
 ```
 
-## Error Messages
+## Getting Help
 
-### Common Errors and Meanings
-
-| Error | Meaning | Solution |
-|-------|---------|----------|
-| `no such file or directory` | File not found | Check file path |
-| `permission denied` | Insufficient permissions | Check file/directory permissions |
-| `address already in use` | Port conflict | Change web UI port |
-| `no space left on device` | Disk full | Free disk space |
-| `context deadline exceeded` | Operation timeout | Increase timeout setting |
-| `block not found` | Missing IPFS block | Check IPFS connectivity |
-
-## Getting More Help
-
-### Enable Verbose Logging
-
-```bash
-# Maximum debug output
-noisefs-config set logging.level debug
-noisefs-config set logging.format text
-```
-
-### Collect Diagnostic Information
-
-```bash
-# System information
-noisefs version --verbose
-noisefs status --detailed > diagnostics.txt
-noisefs cache stats >> diagnostics.txt
-ipfs version >> diagnostics.txt
-ipfs id >> diagnostics.txt
-```
-
-### Report Issues
+### Log Analysis
 
 When reporting issues, include:
 
-1. NoiseFS version: `noisefs version`
-2. Operating system and version
-3. IPFS version: `ipfs version`
-4. Error messages and debug logs
-5. Steps to reproduce the issue
+1. **NoiseFS version**: `noisefs version`
+2. **Go version**: `go version`
+3. **IPFS version**: `ipfs version`
+4. **Operating system**: `uname -a`
+5. **Error logs**: Debug output showing the issue
+6. **Reproduction steps**: Exact commands that trigger the problem
 
-Report issues at: https://github.com/TheEntropyCollective/noisefs/issues
+### Performance Benchmarks
 
-## FAQ
+```bash
+# Basic performance test
+time noisefs upload large-file.dat
+time noisefs download <descriptor> recovered.dat
 
-**Q: Can I use NoiseFS without IPFS?**
-A: No, IPFS is currently the only supported storage backend.
+# Compare with IPFS
+time ipfs add large-file.dat
+time ipfs cat <ipfs-hash> > ipfs-recovered.dat
+```
 
-**Q: Why is my upload slow?**
-A: Check your privacy level. High privacy adds overhead. Use `--privacy low` for better performance.
+### Common Solutions Summary
 
-**Q: Can I recover deleted files?**
-A: Only if you have the descriptor CID. NoiseFS doesn't store deletion history.
+| Issue | Quick Fix |
+|-------|-----------|
+| IPFS connection | `ipfs daemon` |
+| FUSE permissions | `sudo usermod -a -G fuse $USER` |
+| Slow performance | Increase cache size |
+| Block not found | Wait, check IPFS peers |
+| Build failure | Update Go version |
+| Mount failure | `fusermount -u` then retry |
 
-**Q: Is my data encrypted?**
-A: Data is anonymized through XOR operations. For additional encryption, enable `blocks.encryption` in config.
+### When to File a Bug Report
 
-**Q: Can I use NoiseFS on Windows?**
-A: Windows is not currently supported due to FUSE requirements. Use WSL2 as a workaround.
+File a bug report if:
+- Issue persists after trying troubleshooting steps
+- Error messages indicate internal NoiseFS problems
+- Performance significantly worse than expected
+- Data corruption or integrity issues occur
+
+Include detailed logs, system information, and reproduction steps for faster resolution.

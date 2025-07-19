@@ -17,24 +17,24 @@ func showMetrics(client *noisefs.Client, logger *logging.Logger) {
 	metrics := client.GetMetrics()
 
 	fmt.Println("=== NoiseFS Metrics ===")
-	fmt.Printf("Files uploaded: %d\n", metrics.FilesUploaded)
-	fmt.Printf("Files downloaded: %d\n", metrics.FilesDownloaded)
+	fmt.Printf("Files uploaded: %d\n", metrics.TotalUploads)
+	fmt.Printf("Files downloaded: %d\n", metrics.TotalDownloads)
 	fmt.Printf("Blocks generated: %d\n", metrics.BlocksGenerated)
-	fmt.Printf("Blocks stored: %d\n", metrics.BlocksStored)
-	fmt.Printf("Blocks retrieved: %d\n", metrics.BlocksRetrieved)
-	fmt.Printf("Bytes uploaded: %s\n", formatBytes(metrics.BytesUploaded))
-	fmt.Printf("Bytes downloaded: %s\n", formatBytes(metrics.BytesDownloaded))
+	fmt.Printf("Blocks reused: %d\n", metrics.BlocksReused)
+	fmt.Printf("Cache hits: %d\n", metrics.CacheHits)
+	fmt.Printf("Bytes uploaded: %s\n", formatBytes(metrics.BytesUploadedOriginal))
+	fmt.Printf("Cache misses: %d\n", metrics.CacheMisses)
 	fmt.Printf("Bytes stored in IPFS: %s\n", formatBytes(metrics.BytesStoredIPFS))
 	
 	// Calculate efficiency metrics
-	if metrics.BytesUploaded > 0 {
-		efficiency := float64(metrics.BytesStoredIPFS) / float64(metrics.BytesUploaded)
+	if metrics.BytesUploadedOriginal > 0 {
+		efficiency := float64(metrics.BytesStoredIPFS) / float64(metrics.BytesUploadedOriginal)
 		fmt.Printf("Storage efficiency: %.2fx overhead\n", efficiency)
 	}
 	
-	if metrics.BlocksGenerated > 0 && metrics.BlocksStored > 0 {
-		deduplicationRate := 1.0 - (float64(metrics.BlocksStored) / float64(metrics.BlocksGenerated))
-		fmt.Printf("Block deduplication rate: %.1f%%\n", deduplicationRate*100)
+	if metrics.BlocksGenerated > 0 && metrics.BlocksReused > 0 {
+		reuseRate := float64(metrics.BlocksReused) / float64(metrics.BlocksGenerated + metrics.BlocksReused)
+		fmt.Printf("Block reuse rate: %.1f%%\n", reuseRate*100)
 	}
 }
 
@@ -50,28 +50,28 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	
-	// Get storage manager status
-	backends := storageManager.GetBackendStatus()
+	// Get storage manager status (placeholder)
+	backends := map[string]string{"ipfs": "connected"} // TODO: implement GetBackendStatus
 	
 	if jsonOutput {
 		stats := map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
 			"noisefs": map[string]interface{}{
-				"files_uploaded":      noisefsMetrics.FilesUploaded,
-				"files_downloaded":    noisefsMetrics.FilesDownloaded,
-				"blocks_generated":    noisefsMetrics.BlocksGenerated,
-				"blocks_stored":       noisefsMetrics.BlocksStored,
-				"blocks_retrieved":    noisefsMetrics.BlocksRetrieved,
-				"bytes_uploaded":      noisefsMetrics.BytesUploaded,
-				"bytes_downloaded":    noisefsMetrics.BytesDownloaded,
-				"bytes_stored_ipfs":   noisefsMetrics.BytesStoredIPFS,
+				"total_uploads":         noisefsMetrics.TotalUploads,
+				"total_downloads":       noisefsMetrics.TotalDownloads,
+				"blocks_generated":      noisefsMetrics.BlocksGenerated,
+				"blocks_reused":         noisefsMetrics.BlocksReused,
+				"cache_hits":            noisefsMetrics.CacheHits,
+				"cache_misses":          noisefsMetrics.CacheMisses,
+				"bytes_uploaded_orig":   noisefsMetrics.BytesUploadedOriginal,
+				"bytes_stored_ipfs":     noisefsMetrics.BytesStoredIPFS,
 			},
 			"cache": map[string]interface{}{
 				"hits":           cacheStats.Hits,
 				"misses":         cacheStats.Misses,
 				"hit_rate":       float64(cacheStats.Hits) / float64(cacheStats.Hits + cacheStats.Misses),
-				"entries":        cacheStats.Entries,
-				"memory_usage":   cacheStats.MemoryUsage,
+				"size":           cacheStats.Size,
+				"evictions":      cacheStats.Evictions,
 			},
 			"memory": map[string]interface{}{
 				"alloc_mb":       float64(memStats.Alloc) / 1024 / 1024,
@@ -84,19 +84,21 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		}
 		
 		// Add efficiency calculations
-		if noisefsMetrics.BytesUploaded > 0 {
+		if noisefsMetrics.BytesUploadedOriginal > 0 {
 			stats["noisefs"].(map[string]interface{})["storage_efficiency"] = 
-				float64(noisefsMetrics.BytesStoredIPFS) / float64(noisefsMetrics.BytesUploaded)
+				float64(noisefsMetrics.BytesStoredIPFS) / float64(noisefsMetrics.BytesUploadedOriginal)
 		}
 		
-		if noisefsMetrics.BlocksGenerated > 0 && noisefsMetrics.BlocksStored > 0 {
-			stats["noisefs"].(map[string]interface{})["deduplication_rate"] = 
-				1.0 - (float64(noisefsMetrics.BlocksStored) / float64(noisefsMetrics.BlocksGenerated))
+		if noisefsMetrics.CacheHits + noisefsMetrics.CacheMisses > 0 {
+			stats["noisefs"].(map[string]interface{})["cache_hit_rate"] = 
+				float64(noisefsMetrics.CacheHits) / float64(noisefsMetrics.CacheHits + noisefsMetrics.CacheMisses)
 		}
 		
 		jsonData, err := json.MarshalIndent(stats, "", "  ")
 		if err != nil {
-			logger.Error("Failed to marshal stats JSON", "error", err)
+			logger.Error("Failed to marshal stats JSON", map[string]interface{}{
+			"error": err.Error(),
+		})
 			return
 		}
 		fmt.Println(string(jsonData))
@@ -106,24 +108,24 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 		
 		// NoiseFS metrics
 		fmt.Println("NoiseFS Operations:")
-		fmt.Printf("  Files uploaded: %d\n", noisefsMetrics.FilesUploaded)
-		fmt.Printf("  Files downloaded: %d\n", noisefsMetrics.FilesDownloaded)
+		fmt.Printf("  Files uploaded: %d\n", noisefsMetrics.TotalUploads)
+		fmt.Printf("  Files downloaded: %d\n", noisefsMetrics.TotalDownloads)
 		fmt.Printf("  Blocks generated: %d\n", noisefsMetrics.BlocksGenerated)
-		fmt.Printf("  Blocks stored: %d\n", noisefsMetrics.BlocksStored)
-		fmt.Printf("  Blocks retrieved: %d\n", noisefsMetrics.BlocksRetrieved)
-		fmt.Printf("  Bytes uploaded: %s\n", formatBytes(noisefsMetrics.BytesUploaded))
-		fmt.Printf("  Bytes downloaded: %s\n", formatBytes(noisefsMetrics.BytesDownloaded))
+		fmt.Printf("  Blocks reused: %d\n", noisefsMetrics.BlocksReused)
+		fmt.Printf("  Cache hits: %d\n", noisefsMetrics.CacheHits)
+		fmt.Printf("  Cache misses: %d\n", noisefsMetrics.CacheMisses)
+		fmt.Printf("  Bytes uploaded: %s\n", formatBytes(noisefsMetrics.BytesUploadedOriginal))
 		fmt.Printf("  Bytes stored in IPFS: %s\n", formatBytes(noisefsMetrics.BytesStoredIPFS))
 		
 		// Efficiency metrics
-		if noisefsMetrics.BytesUploaded > 0 {
-			efficiency := float64(noisefsMetrics.BytesStoredIPFS) / float64(noisefsMetrics.BytesUploaded)
+		if noisefsMetrics.BytesUploadedOriginal > 0 {
+			efficiency := float64(noisefsMetrics.BytesStoredIPFS) / float64(noisefsMetrics.BytesUploadedOriginal)
 			fmt.Printf("  Storage efficiency: %.2fx overhead\n", efficiency)
 		}
 		
-		if noisefsMetrics.BlocksGenerated > 0 && noisefsMetrics.BlocksStored > 0 {
-			deduplicationRate := 1.0 - (float64(noisefsMetrics.BlocksStored) / float64(noisefsMetrics.BlocksGenerated))
-			fmt.Printf("  Block deduplication rate: %.1f%%\n", deduplicationRate*100)
+		if noisefsMetrics.CacheHits + noisefsMetrics.CacheMisses > 0 {
+			hitRate := float64(noisefsMetrics.CacheHits) / float64(noisefsMetrics.CacheHits + noisefsMetrics.CacheMisses)
+			fmt.Printf("  NoiseFS cache hit rate: %.1f%%\n", hitRate*100)
 		}
 		
 		// Cache statistics
@@ -134,8 +136,8 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 			hitRate := float64(cacheStats.Hits) / float64(cacheStats.Hits + cacheStats.Misses)
 			fmt.Printf("  Hit rate: %.2f%%\n", hitRate*100)
 		}
-		fmt.Printf("  Cache entries: %d\n", cacheStats.Entries)
-		fmt.Printf("  Memory usage: %s\n", formatBytes(cacheStats.MemoryUsage))
+		fmt.Printf("  Cache entries: %d\n", cacheStats.Size)
+		fmt.Printf("  Cache evictions: %d\n", cacheStats.Evictions)
 		
 		// Memory statistics
 		fmt.Println("\nMemory Usage:")

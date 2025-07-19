@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -43,7 +41,7 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 			if err != nil {
 				outputPath = fmt.Sprintf("downloaded-file-%s", descriptorCID[:8])
 			} else {
-				outputPath = descriptor.Name
+				outputPath = descriptor.Filename
 			}
 		}
 	}
@@ -85,11 +83,12 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		fmt.Println(outputPath)
 	}
 
-	logger.Debug("File download completed",
-		"descriptor_cid", descriptorCID,
-		"output_path", outputPath,
-		"size", len(data),
-		"duration", totalDuration)
+	logger.Debug("File download completed", map[string]interface{}{
+		"descriptor_cid": descriptorCID,
+		"output_path":    outputPath,
+		"size":           len(data),
+		"duration":       totalDuration.String(),
+	})
 
 	return nil
 }
@@ -112,11 +111,9 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Download the directory
-	err = client.DownloadDirectory(directoryCID, outputDir)
-	if err != nil {
-		return fmt.Errorf("directory download failed: %w", err)
-	}
+	// TODO: Implement directory download functionality
+	// For now, return an error indicating feature is not yet implemented
+	return fmt.Errorf("directory download not yet implemented")
 
 	downloadDuration := time.Since(startTime)
 
@@ -135,7 +132,9 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 		return nil
 	})
 	if err != nil {
-		logger.Warn("Failed to calculate directory statistics", "error", err)
+		logger.Warn("Failed to calculate directory statistics", map[string]interface{}{
+			"error": err.Error(),
+		})
 	}
 
 	if jsonOutput {
@@ -163,12 +162,13 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 		fmt.Println(outputDir)
 	}
 
-	logger.Debug("Directory download completed",
-		"descriptor_cid", directoryCID,
-		"output_dir", outputDir,
-		"total_files", totalFiles,
-		"total_size", totalSize,
-		"duration", downloadDuration)
+	logger.Debug("Directory download completed", map[string]interface{}{
+		"descriptor_cid": directoryCID,
+		"output_dir":     outputDir,
+		"total_files":    totalFiles,
+		"total_size":     totalSize,
+		"duration":       downloadDuration,
+	})
 
 	return nil
 }
@@ -176,7 +176,9 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 // streamingDownloadDirectory downloads a directory using streaming mode for memory efficiency
 func streamingDownloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Implementation would use streaming interfaces
-	logger.Info("Streaming directory download", "directory_cid", directoryCID)
+	logger.Info("Streaming directory download", map[string]interface{}{
+		"directory_cid": directoryCID,
+	})
 	
 	// For now, fall back to regular directory download
 	// TODO: Implement actual streaming download when streaming interfaces are available
