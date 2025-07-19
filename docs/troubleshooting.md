@@ -178,7 +178,7 @@ This guide helps resolve common issues with NoiseFS. For additional help, use `n
 
 1. **Generate certificates**
    ```bash
-   noisefs webui --generate-cert
+   noisefs-webui --generate-cert
    ```
 
 2. **Use HTTP for local testing**
@@ -188,7 +188,7 @@ This guide helps resolve common issues with NoiseFS. For additional help, use `n
 
 3. **Specify custom certificates**
    ```bash
-   noisefs webui --cert server.crt --key server.key
+   noisefs-webui --cert server.crt --key server.key
    ```
 
 ## Diagnostic Commands

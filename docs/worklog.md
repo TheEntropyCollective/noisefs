@@ -74,7 +74,7 @@
 - `pkg/benchmarks/latency.go` - Advanced latency measurement tools
 - `pkg/benchmarks/baseline.go` - Baseline comparison system
 - `pkg/benchmarks/benchmark_test.go` - Comprehensive benchmark tests
-- `cmd/noisefs-benchmark/main.go` - Benchmark CLI application
+- `cmd/noisefs-tools/benchmark/unified/main.go` - Benchmark CLI application
 
 ### Sub-Phase 4.4: Advanced Caching Optimizations ✅
 **Achievements**:
@@ -201,7 +201,7 @@
 - ✅ **Descriptor System**: File metadata and reconstruction data (`pkg/descriptors/`)
 - ✅ **Basic Caching**: In-memory LRU cache system (`pkg/cache/`)
 - ✅ **CLI Application**: Command-line interface for upload/download (`cmd/noisefs/`)
-- ✅ **Web Interface**: Browser-based UI for file operations (`cmd/webui/`)
+- ✅ **Web Interface**: Browser-based UI for file operations (`cmd/noisefs-webui/`)
 - ✅ **Client Library**: High-level API for NoiseFS operations (`pkg/noisefs/`)
 
 ## Overall Project Status

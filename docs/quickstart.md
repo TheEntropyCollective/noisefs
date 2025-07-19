@@ -84,7 +84,7 @@ umount ~/noisefs-mount
 
 ```bash
 # Start web UI
-noisefs webui
+noisefs-webui
 
 # Open in browser
 open http://localhost:8080

@@ -1,97 +1,74 @@
 # NoiseFS Benchmarking Tools
 
-This directory contains all NoiseFS performance testing and benchmarking tools, organized by use case.
+This directory contains the unified NoiseFS performance testing and benchmarking tool.
 
-## 🚀 Primary Tool (Use This 95% of the Time)
+## 🚀 Unified Benchmark Tool
 
-### `benchmark/` - Unified Performance Testing
-**What it does:** Complete single-node and multi-node performance testing with automatic setup/cleanup
+### `unified/` - Complete Performance Testing Suite
+**What it does:** All-in-one benchmark tool combining basic, Docker, enterprise, and demo modes
 
 ```bash
-# Quick single-node test
-go run cmd/benchmarks/benchmark/main.go -files 10 -verbose
+# Quick single-node test (basic mode)
+go run cmd/noisefs-tools/benchmark/unified/main.go -files 10 -verbose
 
-# Multi-node cluster test (auto-manages IPFS nodes)
-go run cmd/benchmarks/benchmark/main.go -nodes 3 -files 15 -verbose
+# Multi-node cluster test
+go run cmd/noisefs-tools/benchmark/unified/main.go -nodes 3 -files 15 -verbose
 
-# Stress test
-go run cmd/benchmarks/benchmark/main.go -files 50 -file-size 262144
+# Docker multi-node testing
+go run cmd/noisefs-tools/benchmark/unified/main.go -docker -nodes 5 -files 20 -verbose
+
+# Enterprise-grade benchmarks
+go run cmd/noisefs-tools/benchmark/unified/main.go -enterprise -type all -format json
+
+# Feature demonstration mode
+go run cmd/noisefs-tools/benchmark/unified/main.go -demo
 ```
 
 **Features:**
-- ✅ Single-node and multi-node testing
-- ✅ Automatic IPFS node management
+- ✅ **Basic Mode**: Single-node and multi-node testing with automatic IPFS node management
+- ✅ **Docker Mode**: Production-like testing against containerized IPFS clusters
+- ✅ **Enterprise Mode**: Professional-grade benchmarks with FUSE testing and structured reporting  
+- ✅ **Demo Mode**: Educational tool demonstrating NoiseFS feature performance impacts
+- ✅ Unified command-line interface with mode flags
 - ✅ Cross-node replication testing
 - ✅ Concurrent operations testing
 - ✅ Clean setup/teardown
-- ✅ Performance assessment
+- ✅ Comprehensive performance assessment
 
 ---
 
-## 🔧 Specialized Tools (For Specific Scenarios)
+## 📊 Mode Selection Guide
 
-### `docker-benchmark/` - Production-Like Testing
-**What it does:** Tests against Docker containerized IPFS cluster for production validation
-
-```bash
-# Start Docker cluster first
-docker-compose -f docker-compose.test.yml up -d
-
-# Run production-like benchmark
-go run cmd/benchmarks/docker-benchmark/main.go -nodes 5 -files 20 -verbose
-
-# Cleanup
-docker-compose -f docker-compose.test.yml down -v
-```
-
-**Use when:** 
-- Testing production deployment scenarios
-- Validating containerized environments
-- Need real IPFS infrastructure testing
-
-### `enterprise-benchmark/` - Enterprise Framework
-**What it does:** Professional-grade benchmarking with FUSE filesystem testing and structured reporting
-
-```bash
-go run cmd/benchmarks/enterprise-benchmark/main.go
-```
-
-**Use when:**
-- Enterprise/professional environments
-- Need FUSE filesystem performance testing
-- Require structured JSON/text reporting
-- Configuration-driven test suites
-
-### `impact-demo/` - Educational Tool
-**What it does:** Demonstrates performance impact of specific NoiseFS features for presentations
-
-```bash
-go run cmd/benchmarks/impact-demo/main.go
-```
-
-**Use when:**
-- Educational presentations
-- Demonstrating feature impacts
-- Stakeholder communications
-- Algorithm comparison analysis
-
----
-
-## 📊 Quick Decision Guide
-
-| I want to... | Use this tool |
+| I want to... | Use this mode |
 |--------------|---------------|
-| Test performance quickly | `benchmark/` |
-| Test multi-node cluster | `benchmark/` with `-nodes N` |
-| Validate production setup | `docker-benchmark/` |
-| Professional reporting | `enterprise-benchmark/` |
-| Show feature impact | `impact-demo/` |
+| Test performance quickly | Basic mode (default) |
+| Test multi-node cluster | Basic mode with `-nodes N` |
+| Validate production setup | Docker mode `-docker` |
+| Professional reporting | Enterprise mode `-enterprise` |
+| Show feature impact | Demo mode `-demo` |
 
-## 🎯 Most Common Usage
+## 🎯 Most Common Usage Examples
 
 ```bash
-# For daily performance testing
-go run cmd/benchmarks/benchmark/main.go -nodes 2 -files 10 -verbose
+# Daily performance testing (basic mode)
+go run cmd/noisefs-tools/benchmark/unified/main.go -nodes 2 -files 10 -verbose
+
+# Production validation (docker mode)  
+go run cmd/noisefs-tools/benchmark/unified/main.go -docker -nodes 3 -duration 5m
+
+# Enterprise reporting (enterprise mode)
+go run cmd/noisefs-tools/benchmark/unified/main.go -enterprise -format json -output results.json
+
+# Educational demonstration (demo mode)
+go run cmd/noisefs-tools/benchmark/unified/main.go -demo
 ```
 
-This covers 95% of all benchmarking needs with automatic setup, comprehensive testing, and clean results.
+## 🔄 Migration from Old Tools
+
+The unified tool replaces the previous separate benchmark tools:
+- `benchmark/main.go` → `unified/main.go` (basic mode)
+- `docker-benchmark/main.go` → `unified/main.go -docker`
+- `enterprise-benchmark/main.go` → `unified/main.go -enterprise`
+- `impact-demo/main.go` → `unified/main.go -demo`
+
+All functionality has been preserved and consolidated into a single, easy-to-use interface.

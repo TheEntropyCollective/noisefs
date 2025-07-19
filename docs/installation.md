@@ -26,7 +26,7 @@
    This creates binaries in the `bin/` directory:
    - `noisefs` - Main CLI tool
    - `noisefs-mount` - FUSE mounting tool
-   - `webui` - Web interface server
+   - `noisefs-webui` - Unified web interface server (file management + announcements)
    - `noisefs-config` - Configuration tool
    - `noisefs-security` - Security utilities
 

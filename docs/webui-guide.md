@@ -10,13 +10,13 @@ NoiseFS includes a web-based user interface for managing files through your brow
 
 ```bash
 # Start web UI with defaults (https://localhost:8080)
-noisefs webui
+noisefs-webui
 
 # Start on custom port
-noisefs webui --port 9000
+noisefs-webui --port 9000
 
 # Start with HTTP (not recommended)
-noisefs webui --no-tls
+noisefs-webui --no-tls
 ```
 
 ### Configuration
@@ -78,10 +78,10 @@ The web UI uses HTTPS by default with self-signed certificates:
 
 ```bash
 # Generate custom certificates
-noisefs webui --generate-cert
+noisefs-webui --generate-cert
 
 # Use existing certificates
-noisefs webui --cert server.crt --key server.key
+noisefs-webui --cert server.crt --key server.key
 ```
 
 ### Authentication
@@ -90,10 +90,10 @@ Currently, the web UI relies on network-level security. Only bind to localhost u
 
 ```bash
 # Safe: localhost only (default)
-noisefs webui --address localhost:8080
+noisefs-webui --address localhost:8080
 
 # Unsafe without authentication
-noisefs webui --address 0.0.0.0:8080  # Accessible from network
+noisefs-webui --address 0.0.0.0:8080  # Accessible from network
 ```
 
 ### Access Control
@@ -199,7 +199,7 @@ CMD ["noisefs", "webui", "--address", "0.0.0.0:8080"]
 1. Accept the self-signed certificate
 2. Or generate a proper certificate:
    ```bash
-   noisefs webui --generate-cert --hostname noisefs.local
+   noisefs-webui --generate-cert --hostname noisefs.local
    ```
 
 ### Connection Refused
@@ -207,10 +207,10 @@ CMD ["noisefs", "webui", "--address", "0.0.0.0:8080"]
 **Problem**: Cannot connect to web UI
 
 **Solutions**:
-1. Check if web UI is running: `ps aux | grep "noisefs webui"`
+1. Check if web UI is running: `ps aux | grep "noisefs-webui"`
 2. Check port availability: `lsof -i :8080`
 3. Check firewall rules
-4. Try different port: `noisefs webui --port 9090`
+4. Try different port: `noisefs-webui --port 9090`
 
 ### Upload Failures
 

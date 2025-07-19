@@ -6,8 +6,8 @@ This guide provides comprehensive solutions for testing NoiseFS at different sca
 
 | Scale | Nodes | Method | Command |
 |-------|-------|--------|---------|
-| Unit Testing | 1 | Single Node | `go run cmd/benchmarks/benchmark/main.go` |
-| Small Team | 2-5 | Real IPFS | `go run cmd/benchmarks/benchmark/main.go -nodes 3` |
+| Unit Testing | 1 | Single Node | `go run cmd/noisefs-tools/benchmark/unified/main.go` |
+| Small Team | 2-5 | Real IPFS | `go run cmd/noisefs-tools/benchmark/unified/main.go -nodes 3` |
 | Department | 10-50 | Simulation | `go run cmd/simulation/main.go -scenario small` |
 | Organization | 100-500 | Simulation | `go run cmd/simulation/main.go -scenario medium` |
 | Enterprise | 1000+ | Simulation | `go run cmd/simulation/main.go -scenario large` |
@@ -17,7 +17,7 @@ This guide provides comprehensive solutions for testing NoiseFS at different sca
 
 ### 1. **Single Node Testing** (Most Accurate for Unit Performance)
 ```bash
-go run cmd/benchmarks/benchmark/main.go -files 50 -verbose
+go run cmd/noisefs-tools/benchmark/unified/main.go -files 50 -verbose
 ```
 - ✅ Real IPFS operations
 - ✅ Accurate latency measurements
@@ -27,7 +27,7 @@ go run cmd/benchmarks/benchmark/main.go -files 50 -verbose
 ### 2. **Multi-Node Real IPFS** (2-5 nodes)
 ```bash
 # Improved version with offline mode
-go run cmd/benchmarks/benchmark/main.go -nodes 3 -files 20 -verbose
+go run cmd/noisefs-tools/benchmark/unified/main.go -nodes 3 -files 20 -verbose
 ```
 - ✅ Real network behavior
 - ✅ Cross-node replication
@@ -51,7 +51,7 @@ go run cmd/simulation/main.go -nodes 500 -files 5000 -duration 120s
 ### 4. **Docker Cluster** (Production-like)
 ```bash
 docker-compose -f docker-compose.test.yml up -d
-go run cmd/benchmarks/docker-benchmark/main.go -nodes 5 -verbose
+go run cmd/noisefs-tools/benchmark/unified/main.go -docker -nodes 5 -verbose
 ```
 - ✅ Production-like environment
 - ✅ Container isolation
@@ -63,13 +63,13 @@ go run cmd/benchmarks/docker-benchmark/main.go -nodes 5 -verbose
 ### Phase 1: Development (Daily)
 ```bash
 # Quick performance check
-go run cmd/benchmarks/benchmark/main.go -files 10 -verbose
+go run cmd/noisefs-tools/benchmark/unified/main.go -files 10 -verbose
 ```
 
 ### Phase 2: Integration (Pre-commit)
 ```bash
 # Test with 3 nodes
-go run cmd/benchmarks/benchmark/main.go -nodes 3 -files 20
+go run cmd/noisefs-tools/benchmark/unified/main.go -nodes 3 -files 20
 
 # Simulate 100 nodes
 go run cmd/simulation/main.go -scenario medium -duration 30s
@@ -82,7 +82,7 @@ go run cmd/simulation/main.go -scenario all -duration 300s
 
 # Docker cluster test
 docker-compose -f docker-compose.test.yml up -d
-go run cmd/benchmarks/docker-benchmark/main.go -nodes 5 -files 50
+go run cmd/noisefs-tools/benchmark/unified/main.go -docker -nodes 5 -files 50
 ```
 
 ### Phase 4: Scale Validation
@@ -173,7 +173,7 @@ done
 
 ```bash
 # Test your changes quickly
-go run cmd/benchmarks/benchmark/main.go -files 10
+go run cmd/noisefs-tools/benchmark/unified/main.go -files 10
 
 # Validate at moderate scale
 go run cmd/simulation/main.go -nodes 100 -duration 30s
@@ -183,5 +183,5 @@ go run cmd/simulation/main.go -scenario all -comparison
 
 # Production readiness
 docker-compose -f docker-compose.test.yml up -d
-go run cmd/benchmarks/docker-benchmark/main.go -nodes 5 -files 100
+go run cmd/noisefs-tools/benchmark/unified/main.go -docker -nodes 5 -files 100
 ```
