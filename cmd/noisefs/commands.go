@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
@@ -27,8 +28,7 @@ func handleSubcommand(cmd string, args []string) {
 		// TODO: Implement search command
 		fmt.Println("Search command - implementation pending")
 	case "sync":
-		// TODO: Implement sync command
-		fmt.Println("Sync command - implementation pending")
+		handleSyncCommandWithSetup(args)
 	case "ls":
 		handleLsCommand(args)
 	case "share-directory":
@@ -339,4 +339,46 @@ type SnapshotInfo struct {
 type ListSnapshotsResult struct {
 	Snapshots []SnapshotInfo `json:"snapshots"`
 	Total     int            `json:"total"`
+}
+
+// handleSyncCommandWithSetup wraps handleSyncCommand with storage manager setup
+func handleSyncCommandWithSetup(args []string) {
+	// For sync commands, we parse flags manually since subcommands have their own flags
+	var parsedArgs []string
+	var configPath string
+	var quietMode bool
+	var jsonMode bool
+	
+	// Simple flag parsing for sync subcommands
+	for i, arg := range args {
+		if arg == "--config" && i+1 < len(args) {
+			configPath = args[i+1]
+		} else if arg == "--quiet" {
+			quietMode = true
+		} else if arg == "--json" {
+			jsonMode = true
+		} else if !strings.HasPrefix(arg, "--") {
+			parsedArgs = append(parsedArgs, arg)
+		}
+	}
+	
+	// Load configuration and initialize storage
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	storageManager, err := initializeStorageManager(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize storage: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// Call the actual sync command handler
+	err = handleSyncCommand(parsedArgs, storageManager, quietMode, jsonMode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Sync command failed: %v\n", err)
+		os.Exit(1)
+	}
 }
