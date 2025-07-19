@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -425,10 +427,18 @@ func createSyncEngine(storageManager *storage.Manager) (*sync.SyncEngine, error)
 		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Create directory manager
-	encryptionKey, err := crypto.GenerateKey("sync-key")
+	// Create directory manager with secure key generation
+	// Generate unique session ID for this sync session
+	sessionIDBytes := make([]byte, 16)
+	if _, err := rand.Read(sessionIDBytes); err != nil {
+		return nil, fmt.Errorf("failed to generate session ID: %w", err)
+	}
+	sessionID := hex.EncodeToString(sessionIDBytes)
+
+	// Generate cryptographically secure encryption key using proper entropy
+	encryptionKey, err := crypto.GenerateSecureSyncKey(sessionID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
+		return nil, fmt.Errorf("failed to generate secure encryption key: %w", err)
 	}
 
 	directoryManager, err := storage.NewDirectoryManager(storageManager, encryptionKey, nil)

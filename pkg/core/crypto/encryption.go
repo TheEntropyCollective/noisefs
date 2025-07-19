@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/hkdf"
+	"golang.org/x/crypto/pbkdf2"
 )
 
 // EncryptionKey represents an encryption key with metadata
@@ -272,4 +274,60 @@ func ParseKeyFromString(keyStr string) (*EncryptionKey, error) {
 		Key:  key,
 		Salt: salt,
 	}, nil
+}
+
+// GenerateSecureSyncKey generates a cryptographically secure key for sync operations
+// using proper entropy from crypto/rand instead of hardcoded parameters
+func GenerateSecureSyncKey(sessionID string, userSalt []byte) (*EncryptionKey, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID cannot be empty")
+	}
+
+	// Generate random entropy using crypto/rand
+	entropy := make([]byte, 32)
+	if _, err := rand.Read(entropy); err != nil {
+		return nil, fmt.Errorf("failed to generate entropy: %w", err)
+	}
+
+	// Create session-specific salt by combining user salt with session ID and timestamp
+	var salt []byte
+	if len(userSalt) > 0 {
+		salt = append(salt, userSalt...)
+	} else {
+		// Generate random salt if none provided
+		randomSalt := make([]byte, 16)
+		if _, err := rand.Read(randomSalt); err != nil {
+			return nil, fmt.Errorf("failed to generate salt: %w", err)
+		}
+		salt = randomSalt
+	}
+
+	// Add session ID and timestamp for uniqueness
+	salt = append(salt, []byte(sessionID)...)
+	timestamp := time.Now().UnixNano()
+	timestampBytes := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		timestampBytes[i] = byte(timestamp >> (8 * i))
+	}
+	salt = append(salt, timestampBytes...)
+
+	// Derive key using PBKDF2 with secure parameters
+	key := pbkdf2.Key(entropy, salt, 100000, 32, sha256.New)
+
+	return &EncryptionKey{
+		Key:  key,
+		Salt: salt[:32], // Keep salt to standard 32-byte length
+	}, nil
+}
+
+// GenerateSecureSyncKeyWithRotation generates a secure sync key with rotation support
+func GenerateSecureSyncKeyWithRotation(sessionID string, userSalt []byte, rotationCounter uint32) (*EncryptionKey, error) {
+	if sessionID == "" {
+		return nil, fmt.Errorf("session ID cannot be empty")
+	}
+
+	// Add rotation counter to session ID for key versioning
+	rotationID := fmt.Sprintf("%s-rotation-%d", sessionID, rotationCounter)
+	
+	return GenerateSecureSyncKey(rotationID, userSalt)
 }
