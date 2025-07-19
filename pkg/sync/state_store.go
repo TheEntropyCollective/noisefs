@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	
+	"github.com/TheEntropyCollective/noisefs/pkg/security"
 )
 
 // SyncStateStore manages persistent storage of sync state
@@ -229,5 +231,11 @@ func (s *SyncStateStore) CreateInitialState(syncID, localPath, remotePath string
 
 // getStateFile returns the file path for a sync state
 func (s *SyncStateStore) getStateFile(syncID string) string {
+	// Validate sync ID to prevent path traversal (security check)
+	if err := security.ValidateSyncID(syncID); err != nil {
+		// Log the security violation but return safe default path
+		// This prevents the application from crashing while blocking the attack
+		return filepath.Join(s.stateDir, "invalid.json")
+	}
 	return filepath.Join(s.stateDir, syncID+".json")
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	"github.com/TheEntropyCollective/noisefs/pkg/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
@@ -628,6 +629,11 @@ func (se *SyncEngine) findSessionForOperation(op SyncOperation) *SyncSession {
 
 // executeUpload executes an upload operation
 func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) error {
+	// Validate path is within allowed directory (security check)
+	if err := security.ValidatePathInBounds(op.LocalPath, session.LocalPath); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+	
 	// Check if local file exists
 	if _, err := os.Stat(op.LocalPath); os.IsNotExist(err) {
 		return fmt.Errorf("local file does not exist: %s", op.LocalPath)
@@ -651,6 +657,11 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 
 // executeDownload executes a download operation
 func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) error {
+	// Validate path is within allowed directory (security check)
+	if err := security.ValidatePathInBounds(op.LocalPath, session.LocalPath); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+	
 	// Ensure local directory exists
 	if err := os.MkdirAll(filepath.Dir(op.LocalPath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
@@ -676,6 +687,11 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 
 // executeDelete executes a delete operation
 func (se *SyncEngine) executeDelete(session *SyncSession, op SyncOperation) error {
+	// Validate path is within allowed directory (security check)
+	if err := security.ValidatePathInBounds(op.LocalPath, session.LocalPath); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+	
 	// Delete local file if it exists
 	if _, err := os.Stat(op.LocalPath); err == nil {
 		if err := os.Remove(op.LocalPath); err != nil {
@@ -700,6 +716,11 @@ func (se *SyncEngine) executeDelete(session *SyncSession, op SyncOperation) erro
 
 // executeCreateDir executes a create directory operation
 func (se *SyncEngine) executeCreateDir(session *SyncSession, op SyncOperation) error {
+	// Validate path is within allowed directory (security check)
+	if err := security.ValidatePathInBounds(op.LocalPath, session.LocalPath); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+	
 	// Create local directory
 	if err := os.MkdirAll(op.LocalPath, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
@@ -722,6 +743,11 @@ func (se *SyncEngine) executeCreateDir(session *SyncSession, op SyncOperation) e
 
 // executeDeleteDir executes a delete directory operation
 func (se *SyncEngine) executeDeleteDir(session *SyncSession, op SyncOperation) error {
+	// Validate path is within allowed directory (security check)
+	if err := security.ValidatePathInBounds(op.LocalPath, session.LocalPath); err != nil {
+		return fmt.Errorf("security validation failed: %w", err)
+	}
+	
 	// Delete local directory if it exists
 	if _, err := os.Stat(op.LocalPath); err == nil {
 		if err := os.RemoveAll(op.LocalPath); err != nil {
