@@ -9,6 +9,33 @@ import (
 	"time"
 )
 
+// Spam detection constants
+const (
+	// Default time windows
+	DefaultDuplicateWindow  = 1 * time.Hour
+	DefaultSimilarityWindow = 24 * time.Hour
+	DefaultSpamCleanupInterval = 1 * time.Hour
+	
+	// Default limits
+	DefaultMaxDuplicates = 3
+	DefaultMaxTopicsPerDescriptor = 10
+	DefaultRapidAnnouncementThreshold = 5
+	DefaultRapidAnnouncementWindow = 5 * time.Minute
+	
+	// Future timestamp tolerance
+	MaxFutureTimestamp = 300 // 5 minutes in seconds
+	
+	// TTL limits for anomaly detection
+	MaxAnomalousTTL = 7 * 24 * 3600 // 1 week in seconds
+	
+	// Scoring constants
+	DuplicateScoreWeight = 10
+	TopicSpreadScoreWeight = 5
+	HighUsageScore = 20
+	SuspiciousPatternScore = 30
+	MaxSpamScore = 100
+)
+
 // SpamDetector detects and filters spam announcements
 type SpamDetector struct {
 	// Configuration
@@ -54,14 +81,14 @@ type SpamConfig struct {
 // DefaultSpamConfig returns default spam detection configuration
 func DefaultSpamConfig() *SpamConfig {
 	return &SpamConfig{
-		DuplicateWindow:  1 * time.Hour,
-		SimilarityWindow: 24 * time.Hour,
-		MaxDuplicates:    3,
+		DuplicateWindow:  DefaultDuplicateWindow,
+		SimilarityWindow: DefaultSimilarityWindow,
+		MaxDuplicates:    DefaultMaxDuplicates,
 		SuspiciousPatterns: []string{
 			"test", "spam", "xxx", "porn",
 			"click here", "free money", "winner",
 		},
-		CleanupInterval: 1 * time.Hour,
+		CleanupInterval: DefaultSpamCleanupInterval,
 	}
 }
 
@@ -164,12 +191,12 @@ func (sd *SpamDetector) checkDescriptorSpam(ann *Announcement) (bool, string) {
 	}
 	
 	// Check if same descriptor used across many topics
-	if len(record.topics) > 10 {
+	if len(record.topics) > DefaultMaxTopicsPerDescriptor {
 		return true, "descriptor used across too many topics"
 	}
 	
 	// Check rapid reannouncement
-	if time.Since(record.lastSeen) < 5*time.Minute && record.count > 5 {
+	if time.Since(record.lastSeen) < DefaultRapidAnnouncementWindow && record.count > DefaultRapidAnnouncementThreshold {
 		return true, "rapid reannouncement of same descriptor"
 	}
 	
@@ -197,12 +224,12 @@ func (sd *SpamDetector) checkSuspiciousPatterns(ann *Announcement) (bool, string
 // checkAnomalies checks for anomalous behavior
 func (sd *SpamDetector) checkAnomalies(ann *Announcement) (bool, string) {
 	// Check for future timestamps
-	if ann.Timestamp > time.Now().Unix()+300 { // More than 5 min in future
+	if ann.Timestamp > time.Now().Unix()+MaxFutureTimestamp {
 		return true, "announcement timestamp too far in future"
 	}
 	
 	// Check for abnormally long TTL
-	if ann.TTL > 7*24*3600 { // More than 1 week
+	if ann.TTL > MaxAnomalousTTL {
 		return true, "abnormally long TTL"
 	}
 	
@@ -338,17 +365,17 @@ func (sd *SpamDetector) SpamScore(ann *Announcement) int {
 	contentHash := sd.generateContentHash(ann)
 	if record, exists := sd.recentHashes[contentHash]; exists {
 		if record.count > 1 {
-			score += record.count * 10 // Each duplicate adds 10 points
+			score += record.count * DuplicateScoreWeight
 		}
 	}
 	
 	// Check descriptor usage
 	if record, exists := sd.descriptors[ann.Descriptor]; exists {
-		if len(record.topics) > 5 {
-			score += len(record.topics) * 5 // Each extra topic adds 5 points
+		if len(record.topics) > DefaultRapidAnnouncementThreshold {
+			score += len(record.topics) * TopicSpreadScoreWeight
 		}
-		if record.count > 10 {
-			score += 20 // High usage adds 20 points
+		if record.count > DefaultMaxTopicsPerDescriptor {
+			score += HighUsageScore
 		}
 	}
 	
@@ -357,14 +384,14 @@ func (sd *SpamDetector) SpamScore(ann *Announcement) int {
 		if ann.TagBloom != "" {
 			bloom, err := DecodeBloom(ann.TagBloom)
 			if err == nil && bloom.Test(strings.ToLower(pattern)) {
-				score += 30 // Suspicious pattern adds 30 points
+				score += SuspiciousPatternScore
 			}
 		}
 	}
 	
-	// Cap at 100
-	if score > 100 {
-		score = 100
+	// Cap at maximum
+	if score > MaxSpamScore {
+		score = MaxSpamScore
 	}
 	
 	return score

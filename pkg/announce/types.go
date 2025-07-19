@@ -6,8 +6,23 @@ import (
 	"time"
 )
 
+// Announcement constants
+const (
+	// Protocol version
+	DefaultVersion = "1.0"
+	
+	// Default TTL
+	DefaultTTL = 86400 // 24 hours in seconds
+	
+	// Size class boundaries
+	SizeClassTinyLimit   = 1024 * 1024      // 1MB
+	SizeClassSmallLimit  = 10 * 1024 * 1024 // 10MB
+	SizeClassMediumLimit = 100 * 1024 * 1024 // 100MB
+	SizeClassLargeLimit  = 1024 * 1024 * 1024 // 1GB
+)
+
 // Version of the announcement protocol
-const Version = "1.0"
+const Version = DefaultVersion
 
 // Category constants for broad content classification
 const (
@@ -39,6 +54,7 @@ type Announcement struct {
 	Timestamp  int64  `json:"ts"`             // Unix timestamp
 	TTL        int64  `json:"ttl"`            // Time to live in seconds
 	Nonce      string `json:"n,omitempty"`    // Random nonce for uniqueness
+	PeerID     string `json:"pid,omitempty"`  // Peer ID of the announcer (when signed)
 	Signature  string `json:"sig,omitempty"`  // Optional IPNS signature
 }
 
@@ -49,7 +65,7 @@ func NewAnnouncement(descriptor, topicHash string) *Announcement {
 		Descriptor: descriptor,
 		TopicHash:  topicHash,
 		Timestamp:  time.Now().Unix(),
-		TTL:        86400, // 24 hours default
+		TTL:        DefaultTTL,
 	}
 }
 
@@ -117,13 +133,13 @@ func FromJSON(data []byte) (*Announcement, error) {
 // GetSizeClass determines the size class from byte count
 func GetSizeClass(sizeBytes int64) string {
 	switch {
-	case sizeBytes < 1024*1024: // < 1MB
+	case sizeBytes < SizeClassTinyLimit:
 		return SizeClassTiny
-	case sizeBytes < 10*1024*1024: // < 10MB
+	case sizeBytes < SizeClassSmallLimit:
 		return SizeClassSmall
-	case sizeBytes < 100*1024*1024: // < 100MB
+	case sizeBytes < SizeClassMediumLimit:
 		return SizeClassMedium
-	case sizeBytes < 1024*1024*1024: // < 1GB
+	case sizeBytes < SizeClassLargeLimit:
 		return SizeClassLarge
 	default:
 		return SizeClassHuge

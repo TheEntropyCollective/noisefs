@@ -6,6 +6,19 @@ import (
 	"time"
 )
 
+// Rate limiting constants
+const (
+	// Default rate limits
+	DefaultMaxPerMinute = 10  // 10 announcements per minute
+	DefaultMaxPerHour   = 100 // 100 per hour
+	DefaultMaxPerDay    = 500 // 500 per day
+	DefaultBurstSize    = 5   // Allow burst of 5
+	
+	// Cleanup timing
+	DefaultCleanupInterval = 1 * time.Hour
+	CleanupCutoffHours     = 24 // Remove records not seen in 24 hours
+)
+
 // RateLimiter provides rate limiting for announcements
 type RateLimiter struct {
 	// Configuration
@@ -51,11 +64,11 @@ type RateLimitConfig struct {
 // DefaultRateLimitConfig returns default rate limit configuration
 func DefaultRateLimitConfig() *RateLimitConfig {
 	return &RateLimitConfig{
-		MaxPerMinute:    10,    // 10 announcements per minute
-		MaxPerHour:      100,   // 100 per hour
-		MaxPerDay:       500,   // 500 per day
-		BurstSize:       5,     // Allow burst of 5
-		CleanupInterval: 1 * time.Hour,
+		MaxPerMinute:    DefaultMaxPerMinute,
+		MaxPerHour:      DefaultMaxPerHour,
+		MaxPerDay:       DefaultMaxPerDay,
+		BurstSize:       DefaultBurstSize,
+		CleanupInterval: DefaultCleanupInterval,
 	}
 }
 
@@ -227,7 +240,7 @@ func (rl *RateLimiter) cleanup() {
 	defer rl.mu.Unlock()
 	
 	now := time.Now()
-	cutoff := now.Add(-24 * time.Hour) // Remove records not seen in 24 hours
+	cutoff := now.Add(-CleanupCutoffHours * time.Hour) // Remove records not seen in 24 hours
 	
 	for key, record := range rl.records {
 		if record.lastSeen.Before(cutoff) {

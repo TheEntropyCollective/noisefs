@@ -7,6 +7,32 @@ import (
 	"time"
 )
 
+// Validation constants
+const (
+	// Length limits
+	MaxDescriptorLength = 100  // CIDs are typically ~59 chars
+	MaxTopicLength      = 256  // Reasonable topic length
+	MaxTagCount         = 50   // Prevent tag spam
+	
+	// Time limits
+	MaxTTL        = 7 * 24 * time.Hour // 1 week maximum
+	MinTTL        = 1 * time.Hour      // 1 hour minimum
+	MaxFutureTime = 5 * time.Minute    // Allow 5 min clock skew
+	
+	// Size limits
+	MaxJSONSize      = 10 * 1024 // 10KB max announcement
+	MinJSONSize      = 50        // Minimum viable announcement
+	MaxTimestampAge  = 365 * 24 * 3600 // 1 year in seconds
+	
+	// Hash validation
+	SHA256HashLength = 64 // SHA-256 hex string length
+	MinNonceLength   = 8  // Minimum nonce length
+	MaxNonceLength   = 32 // Maximum nonce length
+	
+	// Bloom filter validation
+	MinBloomLength = 4 // Minimum bloom filter length
+)
+
 // ValidationConfig holds configuration for announcement validation
 type ValidationConfig struct {
 	MaxDescriptorLength int           // Maximum descriptor CID length
@@ -16,24 +42,27 @@ type ValidationConfig struct {
 	MinTTL              time.Duration // Minimum time-to-live
 	MaxFutureTime       time.Duration // Maximum timestamp in future
 	RequiredFields      []string      // Required announcement fields
+	RequireSignatures   bool          // Whether signatures are mandatory
 }
 
 // DefaultValidationConfig returns default validation configuration
 func DefaultValidationConfig() *ValidationConfig {
 	return &ValidationConfig{
-		MaxDescriptorLength: 100,        // CIDs are typically ~59 chars
-		MaxTopicLength:      256,        // Reasonable topic length
-		MaxTagCount:         50,         // Prevent tag spam
-		MaxTTL:              7 * 24 * time.Hour,  // 1 week max
-		MinTTL:              1 * time.Hour,       // 1 hour min
-		MaxFutureTime:       5 * time.Minute,     // Allow 5 min clock skew
+		MaxDescriptorLength: MaxDescriptorLength,
+		MaxTopicLength:      MaxTopicLength,
+		MaxTagCount:         MaxTagCount,
+		MaxTTL:              MaxTTL,
+		MinTTL:              MinTTL,
+		MaxFutureTime:       MaxFutureTime,
 		RequiredFields:      []string{"v", "d", "t", "ts", "ttl"},
+		RequireSignatures:   false,      // Signatures optional by default
 	}
 }
 
 // Validator validates announcements
 type Validator struct {
-	config *ValidationConfig
+	config            *ValidationConfig
+	signatureVerifier *SignatureVerifier
 }
 
 // NewValidator creates a new announcement validator
@@ -41,7 +70,10 @@ func NewValidator(config *ValidationConfig) *Validator {
 	if config == nil {
 		config = DefaultValidationConfig()
 	}
-	return &Validator{config: config}
+	return &Validator{
+		config:            config,
+		signatureVerifier: NewSignatureVerifier(config.RequireSignatures),
+	}
 }
 
 // ValidateAnnouncement performs comprehensive validation
@@ -99,8 +131,20 @@ func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 	if ann.Nonce == "" {
 		return fmt.Errorf("missing nonce")
 	}
-	if len(ann.Nonce) < 8 || len(ann.Nonce) > 32 {
-		return fmt.Errorf("nonce length must be 8-32 characters")
+	if len(ann.Nonce) < MinNonceLength || len(ann.Nonce) > MaxNonceLength {
+		return fmt.Errorf("nonce length must be %d-%d characters", MinNonceLength, MaxNonceLength)
+	}
+	
+	// Validate peer ID if present
+	if ann.PeerID != "" {
+		if err := v.signatureVerifier.ValidatePeerID(ann.PeerID); err != nil {
+			return fmt.Errorf("invalid peer ID: %w", err)
+		}
+	}
+	
+	// Validate signature
+	if err := v.signatureVerifier.VerifyAnnouncement(ann); err != nil {
+		return fmt.Errorf("signature verification failed: %w", err)
 	}
 	
 	return nil
@@ -139,8 +183,8 @@ func (v *Validator) validateTopicHash(topicHash string) error {
 	}
 	
 	// Should be a hex-encoded SHA-256 hash (64 chars)
-	if len(topicHash) != 64 {
-		return fmt.Errorf("invalid hash length: expected 64, got %d", len(topicHash))
+	if len(topicHash) != SHA256HashLength {
+		return fmt.Errorf("invalid hash length: expected %d, got %d", SHA256HashLength, len(topicHash))
 	}
 	
 	// Validate hex encoding
@@ -160,7 +204,7 @@ func (v *Validator) validateTimestamp(timestamp int64) error {
 	now := time.Now().Unix()
 	
 	// Check if too far in the past (older than 1 year)
-	if timestamp < now - 365*24*3600 {
+	if timestamp < now - MaxTimestampAge {
 		return fmt.Errorf("timestamp too old")
 	}
 	
@@ -234,7 +278,7 @@ func (v *Validator) validateBloomFilter(bloomStr string) error {
 	}
 	
 	// Should be base64 encoded
-	if len(bloomStr) < 4 {
+	if len(bloomStr) < MinBloomLength {
 		return fmt.Errorf("bloom filter too short")
 	}
 	
@@ -261,11 +305,11 @@ func isValidBase58(s string) bool {
 // ValidateJSON validates announcement JSON before parsing
 func ValidateJSON(data []byte) error {
 	// Check size limits
-	if len(data) > 10*1024 { // 10KB max
+	if len(data) > MaxJSONSize {
 		return fmt.Errorf("announcement too large: %d bytes", len(data))
 	}
 	
-	if len(data) < 50 { // Minimum viable announcement
+	if len(data) < MinJSONSize {
 		return fmt.Errorf("announcement too small: %d bytes", len(data))
 	}
 	
