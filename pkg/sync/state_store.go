@@ -13,9 +13,12 @@ import (
 
 // SyncStateStore manages persistent storage of sync state
 type SyncStateStore struct {
-	stateDir string
-	mu       sync.RWMutex
-	cache    map[string]*SyncState
+	stateDir   string
+	mu         sync.RWMutex
+	cache      map[string]*SyncState
+	dirtyStates map[string]bool  // Track which states need saving
+	lastFlush  time.Time        // Last time dirty states were flushed
+	flushTimer *time.Timer      // Timer for periodic flush
 }
 
 // NewSyncStateStore creates a new SyncStateStore
@@ -26,10 +29,17 @@ func NewSyncStateStore(stateDir string) (*SyncStateStore, error) {
 		return nil, fmt.Errorf("failed to create state directory: %w", sanitizedErr)
 	}
 
-	return &SyncStateStore{
-		stateDir: stateDir,
-		cache:    make(map[string]*SyncState),
-	}, nil
+	store := &SyncStateStore{
+		stateDir:    stateDir,
+		cache:       make(map[string]*SyncState),
+		dirtyStates: make(map[string]bool),
+		lastFlush:   time.Now(),
+	}
+	
+	// Start periodic flush timer (5 seconds)
+	store.startFlushTimer()
+	
+	return store, nil
 }
 
 // SaveState saves sync state to persistent storage
@@ -139,24 +149,48 @@ func (s *SyncStateStore) UpdateLastSync(syncID string, timestamp time.Time) erro
 	return s.SaveState(syncID, state)
 }
 
-// AddPendingOperation adds a pending operation to the sync state
+// AddPendingOperation adds a pending operation without immediate disk write
 func (s *SyncStateStore) AddPendingOperation(syncID string, op SyncOperation) error {
-	state, err := s.LoadState(syncID)
-	if err != nil {
-		return err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	state, exists := s.cache[syncID]
+	if !exists {
+		// Load from disk if not in cache
+		s.mu.Unlock()
+		loadedState, err := s.LoadState(syncID)
+		s.mu.Lock()
+		if err != nil {
+			return err
+		}
+		state = loadedState
+		s.cache[syncID] = state
 	}
-
+	
 	state.PendingOps = append(state.PendingOps, op)
-	return s.SaveState(syncID, state)
+	s.dirtyStates[syncID] = true
+	
+	return nil
 }
 
-// RemovePendingOperation removes a pending operation from the sync state
+// RemovePendingOperation removes a pending operation without immediate disk write
 func (s *SyncStateStore) RemovePendingOperation(syncID string, opID string) error {
-	state, err := s.LoadState(syncID)
-	if err != nil {
-		return err
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	state, exists := s.cache[syncID]
+	if !exists {
+		// Load from disk if not in cache
+		s.mu.Unlock()
+		loadedState, err := s.LoadState(syncID)
+		s.mu.Lock()
+		if err != nil {
+			return err
+		}
+		state = loadedState
+		s.cache[syncID] = state
 	}
-
+	
 	// Find and remove the operation
 	for i, op := range state.PendingOps {
 		if op.ID == opID {
@@ -164,8 +198,10 @@ func (s *SyncStateStore) RemovePendingOperation(syncID string, opID string) erro
 			break
 		}
 	}
-
-	return s.SaveState(syncID, state)
+	
+	s.dirtyStates[syncID] = true
+	
+	return nil
 }
 
 // AddToHistory adds a completed operation to the sync history
@@ -244,4 +280,100 @@ func (s *SyncStateStore) getStateFile(syncID string) string {
 		return filepath.Join(s.stateDir, "invalid.json")
 	}
 	return filepath.Join(s.stateDir, syncID+".json")
+}
+
+// startFlushTimer starts the periodic flush timer
+func (s *SyncStateStore) startFlushTimer() {
+	flushInterval := 5 * time.Second
+	s.flushTimer = time.AfterFunc(flushInterval, func() {
+		s.flushDirtyStates()
+		s.startFlushTimer() // Reschedule
+	})
+}
+
+// flushDirtyStates saves all dirty states to disk
+func (s *SyncStateStore) flushDirtyStates() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if len(s.dirtyStates) == 0 {
+		return
+	}
+	
+	// Save all dirty states
+	for syncID := range s.dirtyStates {
+		if state, exists := s.cache[syncID]; exists {
+			if err := s.saveStateToFile(syncID, state); err != nil {
+				// Log error but continue with other states
+				fmt.Printf("Warning: failed to flush state %s: %v\n", syncID, err)
+				continue
+			}
+		}
+		delete(s.dirtyStates, syncID)
+	}
+	
+	s.lastFlush = time.Now()
+}
+
+// saveStateToFile saves a single state to disk (internal helper)
+func (s *SyncStateStore) saveStateToFile(syncID string, state *SyncState) error {
+	stateFile := s.getStateFile(syncID)
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal sync state: %w", err)
+	}
+
+	if err := os.WriteFile(stateFile, data, 0644); err != nil {
+		// Sanitize error to remove potential path information
+		sanitizedErr := security.SanitizeErrorForUser(err, "")
+		return fmt.Errorf("failed to write sync state file: %w", sanitizedErr)
+	}
+
+	return nil
+}
+
+// ExplicitSave forces immediate save of a specific state
+func (s *SyncStateStore) ExplicitSave(syncID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	state, exists := s.cache[syncID]
+	if !exists {
+		return fmt.Errorf("state not found in cache: %s", syncID)
+	}
+	
+	if err := s.saveStateToFile(syncID, state); err != nil {
+		return err
+	}
+	
+	// Mark as clean
+	delete(s.dirtyStates, syncID)
+	return nil
+}
+
+// Close shuts down the state store and flushes all dirty states
+func (s *SyncStateStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// Stop the flush timer
+	if s.flushTimer != nil {
+		s.flushTimer.Stop()
+	}
+	
+	// Flush all dirty states
+	var lastErr error
+	for syncID := range s.dirtyStates {
+		if state, exists := s.cache[syncID]; exists {
+			if err := s.saveStateToFile(syncID, state); err != nil {
+				lastErr = err
+			}
+		}
+	}
+	
+	// Clear cache and dirty tracking
+	s.cache = make(map[string]*SyncState)
+	s.dirtyStates = make(map[string]bool)
+	
+	return lastErr
 }

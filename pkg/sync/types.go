@@ -81,6 +81,7 @@ const (
 type SyncState struct {
 	LocalPath      string                    `json:"local_path"`
 	RemotePath     string                    `json:"remote_path"`
+	ManifestCID    string                    `json:"manifest_cid,omitempty"`    // NoiseFS directory manifest CID
 	LocalSnapshot  map[string]FileMetadata   `json:"local_snapshot"`
 	RemoteSnapshot map[string]RemoteMetadata `json:"remote_snapshot"`
 	SyncHistory    []SyncOperation           `json:"sync_history"`
