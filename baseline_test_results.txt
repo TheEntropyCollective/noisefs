@@ -1,0 +1,57 @@
+=== RUN   TestDirectoryCacheBasicOperations
+--- PASS: TestDirectoryCacheBasicOperations (0.00s)
+=== RUN   TestDirectoryCacheLRUEviction
+--- PASS: TestDirectoryCacheLRUEviction (0.00s)
+=== RUN   TestDirectoryCacheTTL
+--- PASS: TestDirectoryCacheTTL (0.15s)
+=== RUN   TestDirectoryCacheConcurrency
+--- PASS: TestDirectoryCacheConcurrency (0.00s)
+=== RUN   TestDirectoryCacheClear
+--- PASS: TestDirectoryCacheClear (0.00s)
+=== RUN   TestDirectoryCachePerformance
+=== RUN   TestDirectoryCachePerformance/CachePutPerformance
+    directory_integration_test.go:260: Put 100 manifests in 16.542µs (6045218 ops/sec)
+=== RUN   TestDirectoryCachePerformance/CacheGetPerformance
+    directory_integration_test.go:289: Get 1000 items in 96.584µs (10353682 ops/sec, 100.0% hit rate)
+=== RUN   TestDirectoryCachePerformance/LRUEvictionPerformance
+    directory_integration_test.go:314: 100 puts with eviction in 14.75µs
+--- PASS: TestDirectoryCachePerformance (0.00s)
+    --- PASS: TestDirectoryCachePerformance/CachePutPerformance (0.00s)
+    --- PASS: TestDirectoryCachePerformance/CacheGetPerformance (0.00s)
+    --- PASS: TestDirectoryCachePerformance/LRUEvictionPerformance (0.00s)
+=== RUN   TestEncryptedFileIndex_SecurePasswordHandling
+=== RUN   TestEncryptedFileIndex_SecurePasswordHandling/CreateWithStringPassword
+=== RUN   TestEncryptedFileIndex_SecurePasswordHandling/CreateWithBytePassword
+=== RUN   TestEncryptedFileIndex_SecurePasswordHandling/SecureCleanup
+=== RUN   TestEncryptedFileIndex_SecurePasswordHandling/EmptyPassword
+--- PASS: TestEncryptedFileIndex_SecurePasswordHandling (0.06s)
+    --- PASS: TestEncryptedFileIndex_SecurePasswordHandling/CreateWithStringPassword (0.02s)
+    --- PASS: TestEncryptedFileIndex_SecurePasswordHandling/CreateWithBytePassword (0.03s)
+    --- PASS: TestEncryptedFileIndex_SecurePasswordHandling/SecureCleanup (0.02s)
+    --- PASS: TestEncryptedFileIndex_SecurePasswordHandling/EmptyPassword (0.00s)
+=== RUN   TestEncryptedFileIndex_SaveAndLoad
+--- PASS: TestEncryptedFileIndex_SaveAndLoad (0.04s)
+=== RUN   TestEncryptedFileIndex_WrongPassword
+    encrypted_index_test.go:242: Saved encrypted file content length: 565 bytes
+    encrypted_index_test.go:243: File starts with: {
+          "version": "1.0-encrypted",
+          "encrypted": true,
+          "salt": "y3LcMJL/olyoNCed3zLwahsE1s9RJ7Bzt3X7
+    encrypted_index_test.go:258: Got expected error: failed to decrypt index: wrong password or corrupted file
+--- PASS: TestEncryptedFileIndex_WrongPassword (0.04s)
+=== RUN   TestFileIndexOperations
+--- PASS: TestFileIndexOperations (0.00s)
+=== RUN   TestFileIndexDirectorySupport
+--- PASS: TestFileIndexDirectorySupport (0.00s)
+=== RUN   TestFileIndexBackwardCompatibility
+--- PASS: TestFileIndexBackwardCompatibility (0.00s)
+=== RUN   TestFileIndexConcurrency
+--- PASS: TestFileIndexConcurrency (0.00s)
+=== RUN   TestExtendedAttributesPrivacy
+--- PASS: TestExtendedAttributesPrivacy (0.00s)
+=== RUN   TestExtendedAttributesNonSensitiveData
+--- PASS: TestExtendedAttributesNonSensitiveData (0.00s)
+=== RUN   TestExtendedAttributesEncryption
+--- PASS: TestExtendedAttributesEncryption (0.00s)
+PASS
+ok  	github.com/TheEntropyCollective/noisefs/pkg/fuse	0.487s

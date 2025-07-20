@@ -1,0 +1,5 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/TheEntropyCollective/noisefs/pkg/fuse
+cpu: Apple M4
+BenchmarkDirectoryCache/SmallCache_Put-10         	

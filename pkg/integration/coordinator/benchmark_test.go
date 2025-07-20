@@ -78,7 +78,6 @@ func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 			return fmt.Errorf("failed to create NoiseFS client %d: %w", i, err)
 		}
 		
-		client.SetPeerManager(peerManager)
 		bs.clients = append(bs.clients, client)
 	}
 	

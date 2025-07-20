@@ -110,7 +110,49 @@ func (t *CombinedStorageTask) Execute(ctx context.Context) (interface{}, error) 
 	return cid, nil
 }
 
-// BlockOperationBatch provides utilities for batching block operations
+// BlockOperationBatch provides utilities for batching block operations using the
+// advanced Pool infrastructure while offering SimpleWorkerPool-like convenience methods.
+//
+// This type bridges the gap between Pool's advanced features (progress tracking,
+// statistics, lifecycle management) and SimpleWorkerPool's domain-specific operations,
+// making it ideal for scenarios requiring both performance monitoring and block processing.
+//
+// Use BlockOperationBatch when you need:
+//   - NoiseFS block operations (XOR, storage, retrieval) with progress tracking
+//   - Statistics and monitoring for block processing workflows
+//   - Integration with existing Pool-based infrastructure
+//   - Task-level error handling and result tracking for blocks
+//
+// Performance Characteristics:
+//   - Slight overhead compared to SimpleWorkerPool due to task abstraction
+//   - Full Pool features: progress tracking, statistics, graceful shutdown
+//   - Memory usage: ~300-500 bytes per block operation (task + result metadata)
+//   - Best for: Monitored block operations, debugging, user-facing workflows
+//
+// Example Usage:
+//
+//	// Create pool with progress tracking
+//	config := Config{
+//		WorkerCount: runtime.NumCPU(),
+//		ProgressReporter: func(completed, total int64) {
+//			fmt.Printf("Processed %d/%d blocks\n", completed, total)
+//		},
+//	}
+//	pool := NewPool(config)
+//	pool.Start()
+//	defer pool.Shutdown()
+//	
+//	// Use batch operations with full Pool features
+//	batch := NewBlockOperationBatch(pool)
+//	
+//	// Perform operations with progress tracking
+//	anonymizedBlocks, err := batch.ParallelXOR(ctx, data, r1, r2)
+//	cids, err := batch.ParallelStorage(ctx, anonymizedBlocks, client)
+//	
+//	// Access Pool statistics
+//	stats := pool.Stats()
+//	fmt.Printf("Completed %d operations\n", stats.Completed)
+//
 type BlockOperationBatch struct {
 	pool *Pool
 }

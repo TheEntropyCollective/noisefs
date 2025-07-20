@@ -1,0 +1,6 @@
+27 fuse TestEncryptedFileIndex_SecurePasswordHandling pkg/fuse/encrypted_index_test.go:12:1
+25 fuse (*NoiseFile).uploadFile pkg/fuse/noisefile.go:170:1
+21 fuse (*NoiseFile).downloadContent pkg/fuse/noisefile.go:86:1
+18 fuse MountWithIndex pkg/fuse/mount.go:63:1
+17 fuse TestExtendedAttributesPrivacy pkg/fuse/privacy_xattr_test.go:13:1
+17 fuse TestFileIndexDirectorySupport pkg/fuse/index_test.go:14:1

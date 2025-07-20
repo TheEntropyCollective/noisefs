@@ -12,8 +12,11 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
 	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	client "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/relay"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
@@ -26,7 +29,10 @@ type SystemCoordinator struct {
 	config           *config.Config
 	storageManager   *storage.Manager
 	// blockManager is not needed - blocks are managed directly
-	noisefsClient    *noisefs.Client
+	noisefsClient    *client.Client
+	
+	// P2P components
+	libp2pHost       host.Host
 	
 	// Privacy components
 	relayPool        *relay.RelayPool
@@ -52,6 +58,10 @@ type SystemCoordinator struct {
 	
 	// Metrics
 	systemMetrics    *SystemMetrics
+	
+	// Logging
+	logger           *logging.Logger
+	
 	mu               sync.RWMutex
 }
 
@@ -71,6 +81,7 @@ func NewSystemCoordinator(cfg *config.Config) (*SystemCoordinator, error) {
 	coordinator := &SystemCoordinator{
 		config:        cfg,
 		systemMetrics: &SystemMetrics{},
+		logger:        logging.GetGlobalLogger().WithComponent("coordinator"),
 	}
 	
 	// Initialize components in dependency order
@@ -80,6 +91,10 @@ func NewSystemCoordinator(cfg *config.Config) (*SystemCoordinator, error) {
 	
 	if err := coordinator.initializeCache(); err != nil {
 		return nil, fmt.Errorf("failed to initialize cache: %w", err)
+	}
+	
+	if err := coordinator.initializeP2P(); err != nil {
+		return nil, fmt.Errorf("failed to initialize P2P: %w", err)
 	}
 	
 	if err := coordinator.initializePrivacy(); err != nil {
@@ -165,11 +180,36 @@ func (sc *SystemCoordinator) initializeCache() error {
 	return nil
 }
 
+// initializeP2P sets up the libp2p host and peer management
+func (sc *SystemCoordinator) initializeP2P() error {
+	// Create libp2p host with reasonable defaults
+	host, err := libp2p.New(
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"), // Listen on random port
+		libp2p.Ping(false),  // Disable ping service for privacy
+		libp2p.DisableRelay(), // Disable relay for now
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create libp2p host: %w", err)
+	}
+	
+	sc.libp2pHost = host
+	
+	// Create peer manager with the host
+	maxPeers := 50  // Default to 50 peers for reasonable network size
+	
+	sc.peerManager = p2p.NewPeerManager(host, maxPeers)
+	
+	logging.GetGlobalLogger().Info("P2P host initialized", 
+		"peer_id", host.ID().String(),
+		"addresses", host.Addrs(),
+	)
+	
+	return nil
+}
+
 // initializePrivacy sets up privacy components
 func (sc *SystemCoordinator) initializePrivacy() error {
-	// Peer manager creation would require a libp2p host
-	// For now, we'll skip this as it requires more setup
-	// sc.peerManager = p2p.NewPeerManager(host, maxPeers)
+	// Peer manager is now initialized in initializeP2P()
 	
 	// Create relay pool with default config
 	poolConfig := &relay.PoolConfig{
@@ -295,7 +335,7 @@ func (sc *SystemCoordinator) initializeCore() error {
 	// Block management is handled by the blocks package directly
 	
 	// Create NoiseFS client
-	noisefsClient, err := noisefs.NewClient(sc.storageManager, sc.blockCache)
+	noisefsClient, err := client.NewClient(sc.storageManager, sc.blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
@@ -312,8 +352,13 @@ func (sc *SystemCoordinator) initializeCore() error {
 
 // wireComponents connects all components together
 func (sc *SystemCoordinator) wireComponents() error {
-	// Skip peer manager wiring since we don't have it initialized
-	// In a real implementation, this would require libp2p host setup
+	// Validate that critical privacy components are initialized
+	if sc.peerManager == nil {
+		return fmt.Errorf("peer manager not initialized - privacy features unavailable")
+	}
+	if sc.libp2pHost == nil {
+		return fmt.Errorf("libp2p host not initialized - P2P features unavailable")
+	}
 	
 	// Start privacy components
 	ctx := context.Background()
@@ -321,7 +366,98 @@ func (sc *SystemCoordinator) wireComponents() error {
 		return fmt.Errorf("failed to start relay pool: %w", err)
 	}
 	
+	
+	// Log privacy status for transparency
+	sc.logPrivacyStatus()
+	
 	return nil
+}
+
+// logPrivacyStatus provides clear information about privacy features
+func (sc *SystemCoordinator) logPrivacyStatus() {
+	logger := logging.GetGlobalLogger()
+	
+	// Check P2P components
+	if sc.libp2pHost != nil && sc.peerManager != nil {
+		peerStats := sc.peerManager.GetStats()
+		logger.Info("P2P privacy layer active",
+			"peer_id", sc.libp2pHost.ID().String(),
+			"connected_peers", peerStats["connected_peers"],
+			"healthy_peers", peerStats["healthy_peers"],
+		)
+	} else {
+		logger.Warn("P2P privacy layer inactive - reduced anonymity")
+	}
+	
+	// Check relay components
+	if sc.relayPool != nil && sc.requestMixer != nil {
+		logger.Info("Relay privacy layer active",
+			"relay_pool_initialized", true,
+			"request_mixer_initialized", true,
+		)
+	} else {
+		logger.Warn("Relay privacy layer inactive - no request mixing")
+	}
+	
+	// Check cover traffic
+	if sc.coverTraffic != nil {
+		coverStats := sc.coverTraffic.GetMetrics()
+		logger.Info("Cover traffic active",
+			"total_cover_requests", coverStats.TotalCoverRequests,
+			"noise_ratio", coverStats.NoiseRatioAchieved,
+		)
+	} else {
+		logger.Warn("Cover traffic inactive - traffic analysis possible")
+	}
+	
+	// Check reuse components
+	if sc.universalPool != nil && sc.reuseEnforcer != nil {
+		logger.Info("Block reuse privacy active",
+			"universal_pool_initialized", true,
+			"reuse_enforcer_initialized", true,
+		)
+	} else {
+		logger.Warn("Block reuse privacy inactive - reduced plausible deniability")
+	}
+}
+
+// GetPrivacyStatus returns detailed privacy feature status
+func (sc *SystemCoordinator) GetPrivacyStatus() map[string]interface{} {
+	status := map[string]interface{}{
+		"p2p_enabled":           sc.libp2pHost != nil && sc.peerManager != nil,
+		"relay_enabled":         sc.relayPool != nil && sc.requestMixer != nil,
+		"cover_traffic_enabled": sc.coverTraffic != nil,
+		"block_reuse_enabled":   sc.universalPool != nil && sc.reuseEnforcer != nil,
+		"overall_privacy_score": 0.0,
+	}
+	
+	// Calculate overall privacy score
+	score := 0.0
+	if status["p2p_enabled"].(bool) {
+		score += 0.3
+	}
+	if status["relay_enabled"].(bool) {
+		score += 0.3
+	}
+	if status["cover_traffic_enabled"].(bool) {
+		score += 0.2
+	}
+	if status["block_reuse_enabled"].(bool) {
+		score += 0.2
+	}
+	
+	status["overall_privacy_score"] = score
+	
+	// Add detailed stats if available
+	if sc.peerManager != nil {
+		status["peer_stats"] = sc.peerManager.GetStats()
+	}
+	
+	if sc.coverTraffic != nil {
+		status["cover_traffic_stats"] = sc.coverTraffic.GetMetrics()
+	}
+	
+	return status
 }
 
 // UploadFile performs a complete file upload with all protections
@@ -352,8 +488,12 @@ func (sc *SystemCoordinator) UploadFile(reader io.Reader, filename string) (stri
 		},
 	)
 	if err != nil {
-		// Log error but don't fail upload
-		fmt.Printf("Warning: failed to log compliance event: %v\n", err)
+		// Log compliance logging failure securely without exposing sensitive data
+		sc.logger.Warn("Failed to log compliance event", map[string]interface{}{
+			"operation": "compliance_audit_logging",
+			"status":    "failed",
+			"context":   "file_upload_completion",
+		})
 	}
 	
 	// Update system metrics
@@ -433,6 +573,19 @@ func (sc *SystemCoordinator) GetSystemMetrics() *SystemMetrics {
 
 // Shutdown gracefully shuts down all components
 func (sc *SystemCoordinator) Shutdown() error {
+	// Stop P2P components first
+	if sc.peerManager != nil {
+		if err := sc.peerManager.Close(); err != nil {
+			logging.GetGlobalLogger().Error("failed to close peer manager", "error", err)
+		}
+	}
+	
+	if sc.libp2pHost != nil {
+		if err := sc.libp2pHost.Close(); err != nil {
+			logging.GetGlobalLogger().Error("failed to close libp2p host", "error", err)
+		}
+	}
+	
 	// Stop privacy components
 	if sc.relayPool != nil {
 		sc.relayPool.Stop()
@@ -446,7 +599,10 @@ func (sc *SystemCoordinator) Shutdown() error {
 		sc.requestMixer.Stop()
 	}
 	
-	// Storage manager cleanup would go here
+	// Stop reuse components
+	if sc.universalPool != nil {
+		sc.universalPool.Stop()
+	}
 	
 	return nil
 }
