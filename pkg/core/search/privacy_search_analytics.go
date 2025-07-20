@@ -831,7 +831,7 @@ func (pmc *PrivacyMetricsCollector) RecordMetric(metric *SearchMetric) error {
 	// Apply sampling if configured
 	if pmc.shouldSample() {
 		// Create anonymized metric
-		anonymizedMetric := &AnonymizedMetric{
+		_ = &AnonymizedMetric{
 			MetricID:          pmc.metricHasher.HashMetric(metric),
 			MetricType:        metric.MetricType,
 			Value:             float64(metric.ResultCount),
@@ -904,7 +904,9 @@ func NewSensitivityAnalyzer() *SensitivityAnalyzer {
 func NewPrivacyAggregationEngine(config *AnalyticsConfig) *PrivacyAggregationEngine {
 	return &PrivacyAggregationEngine{
 		aggregationFunctions: make(map[string]AggregationFunction),
-		noiseGenerator:       NewDummyResultGenerator(),
+		noiseGenerator:       &DummyResultGenerator{
+			templates: make([]SearchResult, 0),
+		},
 		groupingEngine:       NewPrivacyGroupingEngine(config),
 		config:               config,
 		aggregationHistory:   make(map[string]*AggregationHistory),

@@ -25,27 +25,24 @@ func CreateTestStorageManager() *MockStorageManager {
 
 // CreateRealTestStorageManager creates a real storage.Manager for testing
 func CreateRealTestStorageManager() (*storage.Manager, error) {
-	// Since we don't have a local backend implementation, we'll use IPFS backend
-	// or create a test backend registration
-	
-	// First, register a test backend if not already registered
-	storage.RegisterBackend("test", func(cfg *storage.BackendConfig) (storage.Backend, error) {
+	// Register a mock backend using the "mock" type which is already supported
+	storage.RegisterBackend("mock", func(cfg *storage.BackendConfig) (storage.Backend, error) {
 		// Create a mock backend for testing
-		return NewMockBackend("test"), nil
+		return NewMockBackend("mock"), nil
 	})
 	
 	config := storage.DefaultConfig()
 	config.Backends = make(map[string]*storage.BackendConfig)
 	
-	// Configure to use our registered test backend
-	config.Backends["test"] = &storage.BackendConfig{
-		Type:    "test",
+	// Configure to use the mock backend type (which is in the supported list)
+	config.Backends["mock"] = &storage.BackendConfig{
+		Type:    "mock",
 		Enabled: true,
 		Connection: &storage.ConnectionConfig{
 			Endpoint: "memory://test",
 		},
 	}
-	config.DefaultBackend = "test"
+	config.DefaultBackend = "mock"
 	
 	manager, err := storage.NewManager(config)
 	if err != nil {

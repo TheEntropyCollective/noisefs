@@ -2,10 +2,11 @@ package search
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/core/index"
+	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 )
 
 // TestAdvancedResultProcessorIntegration tests the advanced result processor
@@ -470,16 +471,21 @@ func TestPrivacySearchAnalyticsIntegration(t *testing.T) {
 
 // TestPhase3FullIntegration tests the complete Phase 3 integration
 func TestPhase3FullIntegration(t *testing.T) {
-	// Create index manager for integration
-	indexConfig := index.DefaultIndexManagerConfig()
-	indexManager, err := index.NewIndexManager(indexConfig)
+	// Create file index for integration
+	fileIndex := fuse.NewFileIndex("/tmp/test_index.json")
+	err := fileIndex.LoadIndex()
 	if err != nil {
-		t.Fatalf("Failed to create index manager: %v", err)
+		t.Fatalf("Failed to load file index: %v", err)
 	}
+	
+	// Add some test files to the index
+	fileIndex.AddFile("test1.txt", "QmTest1", 1000)
+	fileIndex.AddFile("test2.txt", "QmTest2", 2000)
+	fileIndex.AddFile("document.pdf", "QmDoc1", 5000)
 	
 	// Create privacy search engine with Phase 3 components
 	searchConfig := DefaultPrivacySearchConfig()
-	searchEngine, err := NewPrivacySearchEngine(indexManager, searchConfig)
+	searchEngine, err := NewPrivacySearchEngine(fileIndex, searchConfig)
 	if err != nil {
 		t.Fatalf("Failed to create privacy search engine: %v", err)
 	}
