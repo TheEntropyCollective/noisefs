@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/noisefs/noisefs/pkg/compliance/validation"
 )
 
 // TakedownProcessor handles DMCA takedown notices and compliance procedures
@@ -32,7 +34,8 @@ type ProcessorConfig struct {
 
 // DMCANoticeValidator validates incoming DMCA notices
 type DMCANoticeValidator struct {
-	config *ProcessorConfig
+	config          *ProcessorConfig
+	securityValidator *validation.InputValidator
 }
 
 // DMCANotice represents a DMCA takedown notice
@@ -108,7 +111,10 @@ func NewTakedownProcessor(database *ComplianceDatabase, config *ProcessorConfig)
 	
 	return &TakedownProcessor{
 		database:    database,
-		validator:   &DMCANoticeValidator{config: config},
+		validator:   &DMCANoticeValidator{
+			config:          config,
+			securityValidator: validation.NewInputValidator(),
+		},
 		notifier:    &UserNotificationSystem{config: config},
 		auditLogger: &ComplianceAuditLogger{logEntries: make([]*AuditLogEntry, 0)},
 		config:      config,
@@ -286,7 +292,7 @@ func (processor *TakedownProcessor) processValidNotice(notice *DMCANotice) (*Pro
 	return result, nil
 }
 
-// ValidateNotice validates a DMCA takedown notice
+// ValidateNotice validates a DMCA takedown notice with enhanced security checks
 func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*ValidationResult, error) {
 	result := &ValidationResult{
 		Valid:        true,
@@ -298,7 +304,82 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	
 	score := 1.0
 	
-	// Required fields validation
+	// SECURITY VALIDATION FIRST - Use centralized ValidationEngine
+	securityFields := map[string]string{
+		"RequestorName":      notice.RequestorName,
+		"RequestorEmail":     notice.RequestorEmail,
+		"RequestorAddress":   notice.RequestorAddress,
+		"RequestorPhone":     notice.RequestorPhone,
+		"CopyrightWork":      notice.CopyrightWork,
+		"CopyrightOwner":     notice.CopyrightOwner,
+		"RegistrationNumber": notice.RegistrationNumber,
+		"Description":        notice.Description,
+		"SwornStatement":     notice.SwornStatement,
+		"GoodFaithBelief":    notice.GoodFaithBelief,
+		"AccuracyStatement":  notice.AccuracyStatement,
+		"Signature":          notice.Signature,
+		"OriginalNotice":     notice.OriginalNotice,
+		"ProcessingNotes":    notice.ProcessingNotes,
+	}
+	
+	// Check all text fields for security threats
+	for fieldName, fieldValue := range securityFields {
+		if fieldValue == "" {
+			continue // Skip empty fields for security check
+		}
+		
+		// XSS Detection
+		if validator.securityValidator.ContainsXSS(fieldValue) {
+			result.Errors = append(result.Errors, fmt.Sprintf("XSS attack detected in field '%s'", fieldName))
+			score -= 0.5 // Heavy penalty for security issues
+		}
+		
+		// SQL Injection Detection
+		if validator.securityValidator.ContainsSQLInjection(fieldValue) {
+			result.Errors = append(result.Errors, fmt.Sprintf("SQL injection attempt detected in field '%s'", fieldName))
+			score -= 0.5 // Heavy penalty for security issues
+		}
+		
+		// Path Traversal Detection
+		if validator.securityValidator.ContainsPathTraversal(fieldValue) {
+			result.Errors = append(result.Errors, fmt.Sprintf("Path traversal attempt detected in field '%s'", fieldName))
+			score -= 0.5 // Heavy penalty for security issues
+		}
+	}
+	
+	// Validate InfringingURLs for security threats
+	for i, url := range notice.InfringingURLs {
+		if validator.securityValidator.ContainsXSS(url) {
+			result.Errors = append(result.Errors, fmt.Sprintf("XSS attack detected in InfringingURL[%d]", i))
+			score -= 0.5
+		}
+		if validator.securityValidator.ContainsSQLInjection(url) {
+			result.Errors = append(result.Errors, fmt.Sprintf("SQL injection attempt detected in InfringingURL[%d]", i))
+			score -= 0.5
+		}
+		if validator.securityValidator.ContainsPathTraversal(url) {
+			result.Errors = append(result.Errors, fmt.Sprintf("Path traversal attempt detected in InfringingURL[%d]", i))
+			score -= 0.5
+		}
+	}
+	
+	// Validate DescriptorCIDs for security threats
+	for i, cid := range notice.DescriptorCIDs {
+		if validator.securityValidator.ContainsXSS(cid) {
+			result.Errors = append(result.Errors, fmt.Sprintf("XSS attack detected in DescriptorCID[%d]", i))
+			score -= 0.5
+		}
+		if validator.securityValidator.ContainsSQLInjection(cid) {
+			result.Errors = append(result.Errors, fmt.Sprintf("SQL injection attempt detected in DescriptorCID[%d]", i))
+			score -= 0.5
+		}
+		if validator.securityValidator.ContainsPathTraversal(cid) {
+			result.Errors = append(result.Errors, fmt.Sprintf("Path traversal attempt detected in DescriptorCID[%d]", i))
+			score -= 0.5
+		}
+	}
+	
+	// BUSINESS LOGIC VALIDATION - Required fields validation
 	if notice.RequestorName == "" {
 		result.Errors = append(result.Errors, "Requestor name is required")
 		score -= 0.2
@@ -307,7 +388,7 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	if notice.RequestorEmail == "" {
 		result.Errors = append(result.Errors, "Requestor email is required")
 		score -= 0.2
-	} else if !validator.isValidEmail(notice.RequestorEmail) {
+	} else if !validator.securityValidator.ValidateEmail(notice.RequestorEmail) {
 		result.Errors = append(result.Errors, "Invalid requestor email format")
 		score -= 0.1
 	}
@@ -322,12 +403,18 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 		score -= 0.3
 	}
 	
-	// Validate descriptor CIDs format
+	// Validate descriptor CIDs format using centralized validator
 	for _, cid := range notice.DescriptorCIDs {
-		if !validator.isValidCID(cid) {
+		if !validator.securityValidator.ValidateCID(cid) {
 			result.Errors = append(result.Errors, fmt.Sprintf("Invalid descriptor CID format: %s", cid))
 			score -= 0.1
 		}
+	}
+	
+	// Validate phone number if provided
+	if notice.RequestorPhone != "" && !validator.securityValidator.ValidatePhoneNumber(notice.RequestorPhone) {
+		result.Warnings = append(result.Warnings, "Invalid phone number format")
+		score -= 0.05
 	}
 	
 	// DMCA statutory requirements
@@ -369,6 +456,7 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	if !result.Valid {
 		result.Requirements = append(result.Requirements, "All required fields must be completed")
 		result.Requirements = append(result.Requirements, "DMCA statutory requirements must be met per 17 USC 512(c)(3)")
+		result.Requirements = append(result.Requirements, "All security validations must pass")
 	}
 	
 	return result, nil
@@ -506,20 +594,7 @@ func (processor *TakedownProcessor) extractLegalBasis(notice *DMCANotice) string
 	return fmt.Sprintf("DMCA 512(c) takedown notice - Copyright: %s", notice.CopyrightWork)
 }
 
-func (validator *DMCANoticeValidator) isValidEmail(email string) bool {
-	_, err := mail.ParseAddress(email)
-	return err == nil
-}
-
-func (validator *DMCANoticeValidator) isValidCID(cid string) bool {
-	// Basic CID format validation - should start with appropriate prefix and be reasonable length
-	if len(cid) < 10 || len(cid) > 100 {
-		return false
-	}
-	// Allow alphanumeric characters and common CID prefixes
-	matched, _ := regexp.MatchString(`^[A-Za-z0-9]+$`, cid)
-	return matched
-}
+// Note: isValidEmail and isValidCID methods removed - now handled by centralized ValidationEngine
 
 func (validator *DMCANoticeValidator) isSuspiciousEmailDomain(email string) bool {
 	// List of domains that might require additional verification
