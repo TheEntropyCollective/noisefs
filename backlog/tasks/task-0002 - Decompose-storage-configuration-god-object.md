@@ -1,8 +1,9 @@
 ---
 id: task-0002
 title: Decompose storage configuration god object
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2025-07-20'
 updated_date: '2025-07-20'
 labels:
