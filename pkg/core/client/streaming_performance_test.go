@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -134,9 +135,13 @@ func TestStreamingMemoryUsage(t *testing.T) {
 				t.Fatalf("Upload failed: %v", err)
 			}
 
-			// Verify streaming behavior - should not read entire file at once
-			if reader.maxRead >= size {
-				t.Errorf("Upload read entire file at once (%d bytes), not streaming properly", reader.maxRead)
+			// Verify streaming behavior - should read at most block size at once
+			expectedMaxRead := blocks.DefaultBlockSize
+			if size < blocks.DefaultBlockSize {
+				expectedMaxRead = size // For small files, it's OK to read entire file
+			}
+			if reader.maxRead > expectedMaxRead {
+				t.Errorf("Upload read too much at once (%d bytes), expected max %d bytes", reader.maxRead, expectedMaxRead)
 			}
 
 			// Download and verify memory usage
@@ -180,7 +185,8 @@ func TestStreamingCancellation(t *testing.T) {
 			t.Error("Expected cancellation error, got success")
 		}
 
-		if err != context.DeadlineExceeded && err != context.Canceled {
+		// Check if the error is related to context cancellation (may be wrapped)
+		if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
 			t.Errorf("Expected context cancellation error, got: %v", err)
 		}
 	})

@@ -462,8 +462,8 @@ func TestStreamingMemoryEfficiency(t *testing.T) {
 	// Note: This test is more of a design validation than a hard memory test
 	// In a real implementation, you'd use memory profiling tools
 
-	// Create test that would be prohibitive to load entirely into memory in a real scenario
-	testSize := 10 * 1024 // 10KB for testing (in real usage this would be much larger)
+	// Create test that spans multiple blocks to ensure proper streaming
+	testSize := 3*blocks.DefaultBlockSize + 1000 // 3+ blocks to test true streaming
 	testData := strings.Repeat("X", testSize)
 
 	client, err := NewTestClient()
@@ -482,10 +482,11 @@ func TestStreamingMemoryEfficiency(t *testing.T) {
 		t.Fatalf("Failed to upload for memory test: %v", err)
 	}
 
-	// Verify the reader never read the entire file at once
+	// Verify the reader read at most one block at a time for multi-block files
 	// (should read in block-sized chunks)
-	if reader.maxRead >= testSize {
-		t.Errorf("Streaming upload read entire file at once (%d bytes), not truly streaming", reader.maxRead)
+	expectedMaxRead := blocks.DefaultBlockSize
+	if reader.maxRead > expectedMaxRead {
+		t.Errorf("Streaming upload read too much at once (%d bytes), expected max %d bytes", reader.maxRead, expectedMaxRead)
 	}
 
 	// Download and verify data integrity
