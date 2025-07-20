@@ -9,7 +9,7 @@ import (
 	"time"
 	
 	"github.com/TheEntropyCollective/noisefs/pkg/announce"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
 )
 
 // AnnouncementPublisher publishes announcements through Tor

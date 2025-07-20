@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 

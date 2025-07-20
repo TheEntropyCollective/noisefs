@@ -8,7 +8,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 )
 
 // BenchmarkConcurrentLoad tests cache performance under concurrent load

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )

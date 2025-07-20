@@ -1,3 +1,6 @@
+//go:build fuse
+// +build fuse
+
 package fuse
 
 import (

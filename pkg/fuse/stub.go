@@ -6,6 +6,7 @@ package fuse
 import (
 	"errors"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
@@ -20,11 +21,13 @@ type DirectoryMount struct {
 
 // MountOptions contains options for mounting the filesystem
 type MountOptions struct {
-	MountPath  string
-	VolumeName string
-	ReadOnly   bool
-	AllowOther bool
-	Debug      bool
+	MountPath     string
+	VolumeName    string
+	ReadOnly      bool
+	AllowOther    bool
+	Debug         bool
+	Security      *security.SecurityManager
+	IndexPassword string
 
 	// Directory mounting options (stub versions)
 	DirectoryDescriptor string           // Directory descriptor CID to mount

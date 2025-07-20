@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/security"
 	"golang.org/x/term"
 )
 

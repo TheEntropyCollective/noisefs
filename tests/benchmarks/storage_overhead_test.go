@@ -10,7 +10,7 @@ import (
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 	
 	// Import backends to register them
 	_ "github.com/TheEntropyCollective/noisefs/pkg/storage/backends"

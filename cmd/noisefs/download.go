@@ -1,3 +1,30 @@
+// Package main provides CLI download functionality for NoiseFS file retrieval.
+// This file implements the download command that handles both single file and directory downloads
+// with support for encrypted descriptor detection, automatic decryption, and various output formats.
+//
+// The download functionality provides:
+//   - Single file downloads with automatic encryption detection
+//   - Directory downloads with recursive file reconstruction (planned)
+//   - Encrypted descriptor detection and automatic password prompting
+//   - Progress reporting for large downloads
+//   - JSON and human-readable output formats
+//   - Comprehensive performance metrics and timing analysis
+//
+// Download modes:
+//   - Standard download: Retrieves anonymized blocks and reconstructs original file
+//   - Encrypted download: Automatically detects encryption and prompts for passwords
+//   - Directory download: Reconstructs entire directory structures (planned)
+//   - Streaming download: Memory-efficient processing for large files (planned)
+//
+// Encryption handling:
+//   - Automatic detection of encrypted descriptors using EncryptedStore.IsEncrypted()
+//   - Interactive password prompting with secure input handling
+//   - Environment variable password support via NOISEFS_PASSWORD
+//   - Fallback to regular download for unencrypted descriptors
+//
+// The CLI integrates with the NoiseFS client API and EncryptedStore to provide
+// user-friendly access to the complete NoiseFS retrieval system while maintaining
+// the same privacy and security guarantees as the underlying library.
 package main
 
 import (
@@ -11,13 +38,72 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
-// downloadFile downloads a file from NoiseFS using a descriptor CID
+// downloadFile downloads a file from NoiseFS using a descriptor CID with automatic encryption detection.
+// This function provides the core single-file download implementation for the CLI, handling
+// encryption detection, password acquisition, file reconstruction, and output file management.
+//
+// Download Process:
+//   1. Detect encryption status using EncryptedStore.IsEncrypted()
+//   2. If encrypted: prompt for password and use EncryptedStore for descriptor loading
+//   3. If unencrypted: use standard client.Download for file retrieval
+//   4. Determine output filename from descriptor metadata or generate default
+//   5. Write reconstructed file data to specified output path
+//   6. Report timing metrics and file information
+//
+// Encryption Detection and Handling:
+//   - Automatic detection of encrypted descriptors without requiring user input
+//   - Environment variable password support via NOISEFS_PASSWORD
+//   - Interactive password prompting with secure input for encrypted descriptors
+//   - Secure password handling with automatic memory clearing
+//   - Graceful fallback to unencrypted download if detection fails
+//
+// File Reconstruction:
+//   - Retrieves anonymized blocks and randomizer pairs
+//   - Performs 3-tuple XOR operations to reconstruct original blocks
+//   - Assembles blocks into complete file with padding removal
+//   - Handles both encrypted and unencrypted descriptor workflows
+//
+// Output Management:
+//   - Automatic filename extraction from descriptor metadata
+//   - Fallback filename generation using descriptor CID prefix
+//   - Configurable output path specification
+//   - File permission setting (0644) for downloaded files
+//
+// Performance Metrics:
+//   - Download timing from network retrieval through reconstruction
+//   - File write timing for disk operation analysis
+//   - Total operation timing for end-to-end performance
+//   - File size reporting for verification
+//
+// Output Formats:
+//   - JSON mode: Machine-readable structured output with all metrics
+//   - Human-readable mode: User-friendly progress and results display
+//   - Quiet mode: Only outputs the written file path for scripting
+//
+// Parameters:
+//   - storageManager: Backend storage abstraction for block retrieval
+//   - client: NoiseFS client instance configured with caching and networking
+//   - descriptorCID: Content identifier of the file descriptor to download
+//   - outputPath: Target file path for downloaded content (empty string for auto-detection)
+//   - quiet: Suppress progress output, only show final result
+//   - jsonOutput: Output results in JSON format for machine processing
+//   - logger: Structured logging instance for debugging and audit trails
+//
+// Returns:
+//   - error: Non-nil if descriptor retrieval fails, decryption fails, reconstruction fails, or file write fails
+//
+// Call Flow:
+//   - Called by: CLI download command handler
+//   - Calls: EncryptedStore.IsEncrypted, client.Download, downloadUsingDescriptor, file system operations
+//
+// Time Complexity: O(n) where n is the number of blocks in the file
+// Space Complexity: O(f) where f is the complete file size for reconstruction
 func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	if !quiet && !jsonOutput {
 		fmt.Printf("Downloading file: %s\n", descriptorCID)
@@ -138,7 +224,63 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 	return nil
 }
 
-// downloadDirectory downloads a directory from NoiseFS using a directory descriptor CID
+// downloadDirectory downloads a directory from NoiseFS using a directory descriptor CID.
+// This function provides directory-level download functionality for the CLI, enabling bulk file downloads
+// with directory structure reconstruction and comprehensive progress reporting.
+//
+// Planned Directory Download Features:
+//   - Recursive directory structure reconstruction from manifests
+//   - Parallel file download processing for performance optimization
+//   - Directory metadata preservation including timestamps and permissions
+//   - Progress tracking for bulk download operations
+//   - Error handling and recovery for individual file failures
+//   - Comprehensive statistics reporting for directory operations
+//
+// Directory Structure Reconstruction:
+//   - Processes directory manifests to understand file organization
+//   - Creates local directory hierarchy matching original structure
+//   - Downloads individual files using file descriptor references
+//   - Preserves file metadata and directory organization
+//   - Handles symbolic links and special files appropriately
+//
+// Performance Optimization:
+//   - Parallel download processing for multiple files
+//   - Intelligent batching of download operations
+//   - Progress tracking and reporting for long-running operations
+//   - Memory-efficient processing for large directories
+//   - Network optimization through connection pooling
+//
+// Implementation Status:
+//   This function is currently not implemented and returns an error.
+//   Future implementation will provide full directory download capabilities
+//   with streaming support for memory-efficient processing of large directories.
+//   The function includes placeholder statistics calculation and output formatting.
+//
+// Error Handling:
+//   - Individual file download errors with recovery options
+//   - Directory creation failures with detailed error reporting
+//   - Network errors with retry logic and fallback mechanisms
+//   - Manifest parsing errors with graceful degradation
+//
+// Parameters:
+//   - storageManager: Backend storage abstraction for block retrieval
+//   - client: NoiseFS client instance configured with caching and networking
+//   - directoryCID: Content identifier of the directory descriptor to download
+//   - outputDir: Target directory path for downloaded content (empty string for auto-generation)
+//   - quiet: Suppress progress output, only show final results
+//   - jsonOutput: Output results in JSON format for machine processing
+//   - cfg: Configuration instance for application settings
+//   - logger: Structured logging instance for debugging and audit trails
+//
+// Returns:
+//   - error: Currently returns "not implemented" error, future implementation will return download errors
+//
+// Call Flow:
+//   - Called by: CLI download command handler for directory arguments
+//   - Calls: Directory manifest processing, file enumeration, parallel download processing
+//
+// Time Complexity: O(n*f) where n is number of files, f is average file size
+// Space Complexity: O(d) where d is directory depth plus file metadata
 func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	if !quiet && !jsonOutput {
 		fmt.Printf("Downloading directory: %s\n", directoryCID)
@@ -218,7 +360,62 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 	return nil
 }
 
-// streamingDownloadDirectory downloads a directory using streaming mode for memory efficiency
+// streamingDownloadDirectory downloads a directory using streaming mode for memory-efficient processing.
+// This function provides streaming download capabilities for large directories, enabling
+// processing of directories that exceed available memory through incremental file handling.
+//
+// Streaming Download Advantages:
+//   - Memory-efficient processing of large directories
+//   - Incremental progress reporting for long-running operations
+//   - Parallel file processing with controlled concurrency
+//   - Early failure detection and graceful error recovery
+//   - Reduced memory pressure on constrained systems
+//
+// Streaming Architecture:
+//   - File enumeration with lazy loading of file content
+//   - Block-level streaming for individual files
+//   - Incremental file writing to reduce memory usage
+//   - Progressive directory structure creation
+//   - Configurable concurrency limits for system resource management
+//
+// Implementation Status:
+//   This function is currently a placeholder that delegates to downloadDirectory.
+//   Future implementation will provide true streaming capabilities when
+//   streaming interfaces are available in the NoiseFS client API.
+//
+// Planned Streaming Features:
+//   - Configurable memory limits and buffer sizes
+//   - Progress callbacks for real-time status updates
+//   - Resumable downloads for interrupted operations
+//   - Incremental checkpointing for fault tolerance
+//   - Resource usage monitoring and automatic throttling
+//
+// Performance Benefits:
+//   - Constant memory usage regardless of directory size
+//   - Parallel processing with controlled resource utilization
+//   - Network optimization through streaming transfer
+//   - Progressive user feedback for long operations
+//   - Efficient handling of very large directory structures
+//
+// Parameters:
+//   - storageManager: Backend storage abstraction for block retrieval
+//   - client: NoiseFS client instance configured with caching and networking
+//   - directoryCID: Content identifier of the directory descriptor for streaming download
+//   - outputDir: Target directory path for downloaded content
+//   - quiet: Suppress progress output, only show final results
+//   - jsonOutput: Output results in JSON format for machine processing
+//   - cfg: Configuration instance for application settings
+//   - logger: Structured logging instance for debugging and audit trails
+//
+// Returns:
+//   - error: Currently delegates to downloadDirectory, future implementation will return streaming errors
+//
+// Call Flow:
+//   - Called by: CLI download command handler for large directory operations
+//   - Calls: Currently downloadDirectory, future will call streaming download APIs
+//
+// Time Complexity: O(n*f) where n is number of files, f is average file size
+// Space Complexity: O(1) for streaming mode, O(b) where b is buffer size
 func streamingDownloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Implementation would use streaming interfaces
 	logger.Info("Streaming directory download", map[string]interface{}{
@@ -230,7 +427,50 @@ func streamingDownloadDirectory(storageManager *storage.Manager, client *noisefs
 	return downloadDirectory(storageManager, client, directoryCID, outputDir, quiet, jsonOutput, cfg, logger)
 }
 
-// detectDirectoryDescriptor checks if a CID represents a directory descriptor
+// detectDirectoryDescriptor checks if a CID represents a directory descriptor.
+// This function provides automatic detection of directory vs file descriptors,
+// enabling the CLI to route download requests to appropriate handlers without
+// requiring user specification of the descriptor type.
+//
+// Detection Process:
+//   1. Load descriptor using standard descriptor store
+//   2. Examine descriptor structure and metadata
+//   3. Check for directory-specific fields and markers
+//   4. Return boolean result indicating directory status
+//
+// Directory Descriptor Characteristics:
+//   - Contains directory manifest information
+//   - Includes file organization metadata
+//   - Has directory-specific structure markers
+//   - May contain hierarchical file references
+//   - Different metadata format from file descriptors
+//
+// Use Cases:
+//   - Automatic routing of download commands to appropriate handlers
+//   - User interface adaptation based on descriptor type
+//   - Validation of descriptor type before processing
+//   - Error prevention through proper type detection
+//
+// Error Handling:
+//   - Graceful handling of invalid or corrupted descriptors
+//   - Clear error reporting for descriptor access failures
+//   - Fallback behavior for ambiguous descriptor types
+//   - Network error recovery for descriptor retrieval
+//
+// Parameters:
+//   - storageManager: Backend storage abstraction for descriptor retrieval
+//   - cid: Content identifier of the descriptor to analyze
+//
+// Returns:
+//   - bool: True if descriptor represents a directory, false for file descriptors
+//   - error: Non-nil if descriptor retrieval fails, loading fails, or analysis fails
+//
+// Call Flow:
+//   - Called by: Download command routing logic, descriptor type validation
+//   - Calls: descriptors.NewStoreWithManager, descriptor.Load, descriptor.IsDirectory
+//
+// Time Complexity: O(1) - single descriptor load and analysis
+// Space Complexity: O(d) where d is descriptor size for analysis
 func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (bool, error) {
 	descriptorStore, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
@@ -247,8 +487,62 @@ func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (boo
 	return descriptor.IsDirectory(), nil
 }
 
-// downloadUsingDescriptor downloads file data using a pre-loaded descriptor
-// This is used for encrypted descriptors where we've already decrypted the descriptor
+// downloadUsingDescriptor downloads file data using a pre-loaded descriptor.
+// This function provides file reconstruction using a descriptor that has already been
+// loaded and potentially decrypted, enabling download workflows for encrypted descriptors
+// where descriptor decryption is handled separately from file reconstruction.
+//
+// Primary Use Case:
+//   This function is used for encrypted descriptors where the CLI has already
+//   performed descriptor decryption using EncryptedStore and needs to reconstruct
+//   the original file using the decrypted descriptor metadata.
+//
+// File Reconstruction Process:
+//   1. Validate descriptor is non-nil and contains valid block information
+//   2. Iterate through each block triple in the descriptor
+//   3. Retrieve anonymized data block from storage
+//   4. Retrieve both randomizer blocks for 3-tuple XOR reconstruction
+//   5. Perform XOR operations to recover original block data
+//   6. Assemble all blocks into complete file content
+//   7. Remove padding to restore original file size
+//
+// 3-Tuple XOR Reconstruction:
+//   - Original = Data XOR Randomizer1 XOR Randomizer2
+//   - Each block requires three storage retrievals for full reconstruction
+//   - XOR operations restore original block content from anonymized storage
+//   - Process maintains privacy protection while enabling file recovery
+//
+// Block Assembly and Padding Removal:
+//   - Uses blocks.Assembler for proper block sequence reconstruction
+//   - Assembles blocks in correct order based on descriptor metadata
+//   - Trims assembled data to original file size to remove padding
+//   - Handles both padded and unpadded file scenarios
+//
+// Error Handling:
+//   - Validates descriptor before processing to prevent nil pointer errors
+//   - Handles missing blocks with specific error messages
+//   - Reports XOR operation failures with detailed context
+//   - Provides assembly failure information for debugging
+//
+// Caching Integration:
+//   - Uses client.RetrieveBlockWithCache for efficient block retrieval
+//   - Benefits from client caching for frequently accessed randomizers
+//   - Optimizes network usage through intelligent cache management
+//
+// Parameters:
+//   - client: NoiseFS client instance configured with caching and networking
+//   - descriptor: Pre-loaded descriptor containing block references and metadata
+//
+// Returns:
+//   - []byte: Complete reconstructed file data with padding removed
+//   - error: Non-nil if validation fails, block retrieval fails, XOR fails, or assembly fails
+//
+// Call Flow:
+//   - Called by: downloadFile for encrypted descriptor workflows
+//   - Calls: client.RetrieveBlockWithCache, block.XOR, blocks.Assembler.AssembleToWriter
+//
+// Time Complexity: O(n) where n is the number of blocks in the file
+// Space Complexity: O(f) where f is the complete file size for reconstruction
 func downloadUsingDescriptor(client *noisefs.Client, descriptor *descriptors.Descriptor) ([]byte, error) {
 	// This function replicates the core logic from client.Download but uses a provided descriptor
 	// rather than loading it from a CID

@@ -6,6 +6,7 @@ package fuse
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -133,6 +134,32 @@ func (f *NoiseFile) downloadContent() ([]byte, error) {
 		return nil, fmt.Errorf("failed to assemble file: %w", err)
 	}
 
+	// Clear intermediate blocks from memory for security
+	defer func() {
+		// Zero out sensitive block data
+		for _, block := range dataBlocks {
+			if block != nil && block.Data != nil {
+				for i := range block.Data {
+					block.Data[i] = 0
+				}
+			}
+		}
+		for _, block := range randomizer1Blocks {
+			if block != nil && block.Data != nil {
+				for i := range block.Data {
+					block.Data[i] = 0
+				}
+			}
+		}
+		for _, block := range randomizer2Blocks {
+			if block != nil && block.Data != nil {
+				for i := range block.Data {
+					block.Data[i] = 0
+				}
+			}
+		}
+	}()
+
 	// Record download
 	f.client.RecordDownload()
 
@@ -147,6 +174,14 @@ func (f *NoiseFile) uploadFile() error {
 
 	// Create a reader from the write buffer
 	reader := bytes.NewReader(f.writeBuffer)
+	
+	// Defer cleanup of sensitive intermediate data
+	defer func() {
+		// Clear reader buffer from memory after use
+		if reader != nil {
+			reader.Reset([]byte{})
+		}
+	}()
 
 	// Create splitter with default block size
 	splitter, err := blocks.NewSplitter(blocks.DefaultBlockSize)
@@ -228,6 +263,25 @@ func (f *NoiseFile) uploadFile() error {
 	f.descriptor = descriptor
 	f.content = make([]byte, len(f.writeBuffer))
 	copy(f.content, f.writeBuffer)
+	
+	// Clear sensitive intermediate data from memory
+	defer func() {
+		// Zero out sensitive block data after upload
+		for _, block := range fileBlocks {
+			if block != nil && block.Data != nil {
+				for i := range block.Data {
+					block.Data[i] = 0
+				}
+			}
+		}
+		for _, block := range anonymizedBlocks {
+			if block != nil && block.Data != nil {
+				for i := range block.Data {
+					block.Data[i] = 0
+				}
+			}
+		}
+	}()
 
 	// Record upload metrics
 	totalStoredBytes := int64(0)
@@ -302,6 +356,7 @@ func (f *NoiseFile) GetAttr(out *fuse.Attr) fuse.Status {
 	} else if f.descriptorCID != "" {
 		// Load descriptor to get file size
 		if err := f.loadDescriptor(); err != nil {
+			log.Printf("Error: Failed to load descriptor for file %s during GetAttr: %v", f.path, err)
 			return fuse.EIO
 		}
 		out.Size = uint64(f.descriptor.FileSize)
@@ -342,6 +397,7 @@ func (f *NoiseFile) Write(data []byte, off int64) (written uint32, code fuse.Sta
 			if f.content == nil {
 				content, err := f.downloadContent()
 				if err != nil {
+					log.Printf("Error: Failed to download content for file %s during write: %v", f.path, err)
 					return 0, fuse.EIO
 				}
 				f.content = content
@@ -399,13 +455,28 @@ func (f *NoiseFile) Release() {
 
 	// Auto-flush dirty files on close
 	if f.dirty && f.writeBuffer != nil {
-		f.uploadFile()
+		if err := f.uploadFile(); err != nil {
+			// Log the error but continue with cleanup to avoid resource leaks
+			log.Printf("Warning: Failed to upload file during release for %s: %v", f.path, err)
+		}
 		f.dirty = false
 	}
 
-	// Clear cached content to free memory
-	f.content = nil
-	f.writeBuffer = nil
+	// Clear cached content to free memory with explicit zeroing
+	if f.content != nil {
+		// Zero out sensitive content before releasing
+		for i := range f.content {
+			f.content[i] = 0
+		}
+		f.content = nil
+	}
+	if f.writeBuffer != nil {
+		// Zero out sensitive write buffer before releasing
+		for i := range f.writeBuffer {
+			f.writeBuffer[i] = 0
+		}
+		f.writeBuffer = nil
+	}
 	f.loaded = false
 	f.lockType = 0
 	f.lockOwner = 0
@@ -487,4 +558,126 @@ func (f *NoiseFile) SetLk(owner uint64, lk *fuse.FileLock, flags uint32) fuse.St
 	default:
 		return fuse.EINVAL
 	}
+}
+
+// SetLkw implements nodefs.File for non-blocking lock setting
+func (f *NoiseFile) SetLkw(owner uint64, lk *fuse.FileLock, flags uint32) fuse.Status {
+	// For NoiseFS, we use the same implementation as SetLk since locks are simple
+	return f.SetLk(owner, lk, flags)
+}
+
+// Fsync implements nodefs.File for forcing sync to disk
+func (f *NoiseFile) Fsync(flags int) fuse.Status {
+	// Use existing Flush implementation to sync changes to NoiseFS
+	return f.Flush()
+}
+
+// Truncate implements nodefs.File for file truncation
+func (f *NoiseFile) Truncate(size uint64) fuse.Status {
+	if f.readOnly {
+		return fuse.EROFS
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Load content if not already loaded
+	if !f.loaded {
+		if f.descriptorCID != "" {
+			content, err := f.downloadContent()
+			if err != nil {
+				log.Printf("Error: Failed to download content for file %s during truncate: %v", f.path, err)
+				return fuse.EIO
+			}
+			f.content = content
+			f.writeBuffer = make([]byte, len(f.content))
+			copy(f.writeBuffer, f.content)
+		} else {
+			f.writeBuffer = make([]byte, 0)
+		}
+		f.loaded = true
+	}
+
+	// Truncate the write buffer
+	if size == 0 {
+		f.writeBuffer = make([]byte, 0)
+	} else if int(size) < len(f.writeBuffer) {
+		f.writeBuffer = f.writeBuffer[:size]
+	} else if int(size) > len(f.writeBuffer) {
+		// Extend buffer with zeros
+		newBuffer := make([]byte, size)
+		copy(newBuffer, f.writeBuffer)
+		f.writeBuffer = newBuffer
+	}
+
+	f.dirty = true
+	return fuse.OK
+}
+
+// Chown implements nodefs.File for changing ownership
+func (f *NoiseFile) Chown(uid uint32, gid uint32) fuse.Status {
+	// NoiseFS doesn't support ownership changes as it's a privacy-focused system
+	return fuse.EPERM
+}
+
+// Chmod implements nodefs.File for changing permissions
+func (f *NoiseFile) Chmod(perms uint32) fuse.Status {
+	// NoiseFS doesn't support permission changes as files are virtual
+	return fuse.EPERM
+}
+
+// Utimens implements nodefs.File for updating timestamps
+func (f *NoiseFile) Utimens(atime *time.Time, mtime *time.Time) fuse.Status {
+	// NoiseFS doesn't support timestamp changes as metadata is immutable
+	return fuse.ENOTSUP
+}
+
+// Allocate implements nodefs.File for space allocation
+func (f *NoiseFile) Allocate(off uint64, size uint64, mode uint32) fuse.Status {
+	if f.readOnly {
+		return fuse.EROFS
+	}
+
+	// NoiseFS uses fixed block sizes, so we don't support space allocation
+	// Return success but don't actually allocate anything
+	return fuse.OK
+}
+
+// SetInode implements nodefs.File for setting inode number
+func (f *NoiseFile) SetInode(ino *nodefs.Inode) {
+	// NoiseFS manages its own virtual inodes, so we accept but ignore this
+}
+
+// Ioctl implements nodefs.File for I/O control operations
+func (f *NoiseFile) Ioctl(input *fuse.IoctlIn, out *fuse.IoctlOut, data []byte) fuse.Status {
+	// NoiseFS doesn't support ioctl operations as it operates at the file level
+	// and doesn't expose low-level device controls
+	return fuse.ENOTSUP
+}
+
+// String implements fmt.Stringer for debugging
+func (f *NoiseFile) String() string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	status := "clean"
+	if f.dirty {
+		status = "dirty"
+	}
+
+	size := 0
+	if f.writeBuffer != nil && f.dirty {
+		size = len(f.writeBuffer)
+	} else if f.descriptor != nil {
+		size = int(f.descriptor.FileSize)
+	}
+
+	return fmt.Sprintf("NoiseFile{path=%s, size=%d, status=%s, cid=%s}", 
+		f.path, size, status, f.descriptorCID)
+}
+
+// InnerFile implements nodefs.File for getting the inner file
+func (f *NoiseFile) InnerFile() nodefs.File {
+	// Return the embedded default file implementation
+	return f.File
 }

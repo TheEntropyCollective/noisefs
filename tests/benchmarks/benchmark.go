@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 )
 
 // BenchmarkResult holds the results of a benchmark

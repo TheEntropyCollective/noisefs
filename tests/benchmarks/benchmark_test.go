@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 )
 
 func TestGenerateTestData(t *testing.T) {

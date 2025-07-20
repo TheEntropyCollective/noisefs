@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
 )
 
 func main() {

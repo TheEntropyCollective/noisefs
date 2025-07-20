@@ -15,7 +15,7 @@ import (
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
@@ -760,13 +760,6 @@ func (fs *NoiseFS) getEncryptionKey(encryptionKeyID string) (*crypto.EncryptionK
 		return key, nil
 	}
 
-	// Finally, check if the encryptionKeyID corresponds to a directory descriptor CID
-	// that we have a key stored for
-	for cid, key := range fs.encryptionKeys {
-		if cid == encryptionKeyID {
-			return key, nil
-		}
-	}
 
 	return nil, fmt.Errorf("encryption key not found for ID: %s", encryptionKeyID)
 }

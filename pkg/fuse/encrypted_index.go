@@ -164,6 +164,7 @@ func (eidx *EncryptedFileIndex) tryDecryptIndex(encryptedData []byte) ([]byte, e
 
 	// Clear sensitive key data
 	crypto.SecureZero(key.Key)
+	crypto.SecureZero(key.Salt)
 
 	return decryptedData, nil
 }
@@ -187,8 +188,8 @@ func (eidx *EncryptedFileIndex) parseIndexData(data []byte, wasEncrypted bool) e
 
 // SaveIndex saves the index to disk with encryption if enabled
 func (eidx *EncryptedFileIndex) SaveIndex() error {
-	eidx.mu.RLock()
-	defer eidx.mu.RUnlock()
+	eidx.mu.Lock()
+	defer eidx.mu.Unlock()
 
 	if !eidx.dirty {
 		return nil // No changes to save
@@ -205,6 +206,12 @@ func (eidx *EncryptedFileIndex) SaveIndex() error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
+	
+	// Defer cleanup of sensitive serialized data
+	defer func() {
+		// Clear serialized index data from memory
+		SecureZeroMemory(indexData)
+	}()
 
 	var finalData []byte
 
@@ -232,6 +239,9 @@ func (eidx *EncryptedFileIndex) SaveIndex() error {
 		if err != nil {
 			return fmt.Errorf("failed to marshal encrypted index: %w", err)
 		}
+		
+		// Clear sensitive encrypted data after marshaling
+		SecureZeroMemory(encryptedData)
 	} else {
 		// Save unencrypted
 		finalData = indexData
@@ -247,6 +257,12 @@ func (eidx *EncryptedFileIndex) SaveIndex() error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to rename index file: %w", err)
 	}
+
+	// Clear sensitive final data from memory after successful write
+	SecureZeroMemory(finalData)
+
+	// Reset dirty flag after successful save
+	eidx.dirty = false
 
 	return nil
 }

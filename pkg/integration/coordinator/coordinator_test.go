@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
 )
 
 func TestSystemCoordinatorCreation(t *testing.T) {

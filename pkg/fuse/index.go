@@ -109,8 +109,8 @@ func (idx *FileIndex) LoadIndex() error {
 
 // SaveIndex saves the index to disk
 func (idx *FileIndex) SaveIndex() error {
-	idx.mu.RLock()
-	defer idx.mu.RUnlock()
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 
 	if !idx.dirty {
 		return nil // No changes to save
@@ -140,12 +140,8 @@ func (idx *FileIndex) SaveIndex() error {
 		return fmt.Errorf("failed to rename index file: %w", err)
 	}
 
-	// Update dirty flag (need to upgrade lock)
-	idx.mu.RUnlock()
-	idx.mu.Lock()
+	// Mark as clean after successful save
 	idx.dirty = false
-	idx.mu.Unlock()
-	idx.mu.RLock()
 
 	return nil
 }

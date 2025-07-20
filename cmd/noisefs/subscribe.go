@@ -13,7 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/pubsub"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/announce/store"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/util"
 	shell "github.com/ipfs/go-ipfs-api"
