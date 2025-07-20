@@ -528,61 +528,6 @@ func TestDataConsistencyAndIntegrity(t *testing.T) {
 
 // Helper types and functions
 
-// ListOptions represents options for listing records with pagination and filtering
-type ListOptions struct {
-	Limit          int
-	Offset         int
-	OrderBy        string
-	OrderDirection string // ASC or DESC
-	Filters        map[string]interface{}
-}
+// ListOptions type is defined in types.go
 
-// Methods that need to be implemented - will fail compilation initially
-
-func (db *ComplianceDatabase) CreateTakedownRecord(ctx context.Context, record *TakedownRecord) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) GetTakedownRecord(ctx context.Context, takedownID string) (*TakedownRecord, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) UpdateTakedownRecord(ctx context.Context, record *TakedownRecord) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) DeleteTakedownRecord(ctx context.Context, takedownID string) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) TakedownRecordExists(ctx context.Context, takedownID string) (bool, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) ListTakedownRecords(ctx context.Context, options ListOptions) ([]*TakedownRecord, int64, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) IsDescriptorBlacklisted(ctx context.Context, descriptorCID string) (bool, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) ReinstateDescriptor(ctx context.Context, descriptorCID string, reason string) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) CreateViolationRecord(ctx context.Context, record *ViolationRecord) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) ListViolationRecords(ctx context.Context, options ListOptions) ([]*ViolationRecord, int64, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) EnableRLSPolicies(ctx context.Context) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) SetUserRole(ctx context.Context, role, userID string) context.Context {
-	panic("not implemented - TDD implementation needed")
-}
+// All repository methods are implemented in repository.go

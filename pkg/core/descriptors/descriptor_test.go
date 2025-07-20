@@ -506,3 +506,55 @@ func TestDescriptorGetRandomizerCIDs(t *testing.T) {
 		t.Error("GetRandomizerCIDs(1) should return error for out of range")
 	}
 }
+
+func TestDescriptorMarshal(t *testing.T) {
+	// Create a test descriptor
+	desc := NewDescriptor("test-marshal.txt", 1024, 1024, 128)
+	err := desc.AddBlockTriple("data1", "rand1", "rand2")
+	if err != nil {
+		t.Fatalf("Failed to add block triple: %v", err)
+	}
+
+	// Test Marshal method (should be alias for ToJSON)
+	marshalData, err := desc.Marshal()
+	if err != nil {
+		t.Errorf("Marshal() error = %v, want nil", err)
+	}
+
+	if len(marshalData) == 0 {
+		t.Error("Marshal() returned empty data")
+	}
+
+	// Test that Marshal() produces the same output as ToJSON()
+	jsonData, err := desc.ToJSON()
+	if err != nil {
+		t.Fatalf("ToJSON() error = %v", err)
+	}
+
+	if string(marshalData) != string(jsonData) {
+		t.Error("Marshal() output differs from ToJSON() output - should be identical")
+	}
+
+	// Verify the marshaled data is valid JSON that can be parsed
+	var parsed map[string]interface{}
+	err = json.Unmarshal(marshalData, &parsed)
+	if err != nil {
+		t.Errorf("Marshal() produced invalid JSON: %v", err)
+	}
+
+	// Check some expected fields
+	if parsed["filename"] != "test-marshal.txt" {
+		t.Errorf("Marshaled JSON filename = %v, want test-marshal.txt", parsed["filename"])
+	}
+
+	if parsed["file_size"] != float64(1024) {
+		t.Errorf("Marshaled JSON file_size = %v, want 1024", parsed["file_size"])
+	}
+
+	// Test Marshal with invalid descriptor (should fail)
+	invalidDesc := &Descriptor{} // Missing required fields
+	_, err = invalidDesc.Marshal()
+	if err == nil {
+		t.Error("Marshal() with invalid descriptor should return error")
+	}
+}

@@ -11,18 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// OutboxEvent represents an event for reliable outbox pattern publishing
-type OutboxEvent struct {
-	EventID     string                 `db:"event_id"`
-	EventType   string                 `db:"event_type"`
-	AggregateID string                 `db:"aggregate_id"`
-	Payload     map[string]interface{} `db:"payload"`
-	Status      string                 `db:"status"` // pending, published, failed
-	CreatedAt   time.Time              `db:"created_at"`
-	PublishedAt *time.Time             `db:"published_at"`
-	RetryCount  int                    `db:"retry_count"`
-	LastError   string                 `db:"last_error"`
-}
+// OutboxEvent type is defined in types.go
 
 // TestAtomicDMCAWorkflow tests atomic DMCA processing transactions
 func TestAtomicDMCAWorkflow(t *testing.T) {
@@ -700,69 +689,8 @@ func TestDeadlockDetectionAndResolution(t *testing.T) {
 
 // Methods that need to be implemented - will fail compilation initially
 
-type Transaction interface {
-	CreateTakedownRecord(ctx context.Context, record *TakedownRecord) error
-	UpdateTakedownRecord(ctx context.Context, record *TakedownRecord) error
-	GetTakedownRecord(ctx context.Context, takedownID string) (*TakedownRecord, error)
-	CreateAuditEntry(ctx context.Context, entry *AuditEntry) error
-	CreateViolationRecord(ctx context.Context, record *ViolationRecord) error
-	CreateOutboxEvent(ctx context.Context, event *OutboxEvent) error
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
-}
+// Transaction interface is defined in types.go
 
-func (db *ComplianceDatabase) BeginTransaction(ctx context.Context) (Transaction, error) {
-	panic("not implemented - TDD implementation needed")
-}
+// All transaction methods are implemented in transaction.go
 
-func (db *ComplianceDatabase) BeginTransactionWithIsolation(ctx context.Context, isolation pgx.TxIsoLevel) (Transaction, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) GetAuditEntry(ctx context.Context, entryID string) (*AuditEntry, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) AuditEntryExists(ctx context.Context, entryID string) (bool, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) VerifyAuditChainIntegrity(ctx context.Context) (bool, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) CreateOutboxEvent(ctx context.Context, event *OutboxEvent) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) GetOutboxEvent(ctx context.Context, eventID string) (*OutboxEvent, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) GetPendingOutboxEvents(ctx context.Context, limit int) ([]*OutboxEvent, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) GetFailedOutboxEvents(ctx context.Context, limit int) ([]*OutboxEvent, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) MarkOutboxEventPublished(ctx context.Context, eventID string) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) MarkOutboxEventFailed(ctx context.Context, eventID string, errorMsg string) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) ResetOutboxEventForRetry(ctx context.Context, eventID string) error {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) CleanupOutboxEvents(ctx context.Context, cutoffDate time.Time) (int64, error) {
-	panic("not implemented - TDD implementation needed")
-}
-
-func (db *ComplianceDatabase) WithRetry(ctx context.Context, fn func(context.Context) error) error {
-	panic("not implemented - TDD implementation needed")
-}
+// All methods implemented in actual source files
