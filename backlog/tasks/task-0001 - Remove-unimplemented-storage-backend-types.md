@@ -1,9 +1,11 @@
 ---
 id: task-0001
 title: Remove unimplemented storage backend types
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2025-07-20'
+updated_date: '2025-07-20'
 labels: []
 dependencies: []
 ---
