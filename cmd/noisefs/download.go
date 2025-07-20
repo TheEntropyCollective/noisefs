@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
 // downloadFile downloads a file from NoiseFS using a descriptor CID
@@ -22,10 +25,52 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 
 	startTime := time.Now()
 
-	// Download the file
-	data, err := client.Download(descriptorCID)
+	// Check if descriptor is encrypted
+	encryptedStore, err := descriptors.NewEncryptedStore(storageManager, nil)
 	if err != nil {
-		return fmt.Errorf("download failed: %w", err)
+		return fmt.Errorf("failed to create encrypted store: %w", err)
+	}
+
+	isEncrypted, err := encryptedStore.IsEncrypted(descriptorCID)
+	if err != nil {
+		// If we can't determine encryption status, try regular download first
+		isEncrypted = false
+	}
+
+	var data []byte
+	if isEncrypted {
+		// This is an encrypted descriptor, we need to handle it specially
+		password := os.Getenv("NOISEFS_PASSWORD")
+		if password == "" {
+			password, err = util.PromptPassword("Enter decryption password: ")
+			if err != nil {
+				return fmt.Errorf("failed to get password: %w", err)
+			}
+		}
+
+		// Create encrypted store with password
+		encStoreWithPassword, err := descriptors.NewEncryptedStoreWithPassword(storageManager, password)
+		if err != nil {
+			return fmt.Errorf("failed to create encrypted store with password: %w", err)
+		}
+
+		// Load encrypted descriptor
+		descriptor, err := encStoreWithPassword.Load(descriptorCID)
+		if err != nil {
+			return fmt.Errorf("failed to load encrypted descriptor (wrong password?): %w", err)
+		}
+
+		// Manually perform download using the decrypted descriptor
+		data, err = downloadUsingDescriptor(client, descriptor)
+		if err != nil {
+			return fmt.Errorf("download failed: %w", err)
+		}
+	} else {
+		// Regular unencrypted download
+		data, err = client.Download(descriptorCID)
+		if err != nil {
+			return fmt.Errorf("download failed: %w", err)
+		}
 	}
 
 	downloadDuration := time.Since(startTime)
@@ -200,4 +245,64 @@ func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (boo
 	// Check if this is a directory descriptor by examining its structure
 	// Directory descriptors typically have specific metadata or structure
 	return descriptor.IsDirectory(), nil
+}
+
+// downloadUsingDescriptor downloads file data using a pre-loaded descriptor
+// This is used for encrypted descriptors where we've already decrypted the descriptor
+func downloadUsingDescriptor(client *noisefs.Client, descriptor *descriptors.Descriptor) ([]byte, error) {
+	// This function replicates the core logic from client.Download but uses a provided descriptor
+	// rather than loading it from a CID
+	
+	if descriptor == nil {
+		return nil, fmt.Errorf("descriptor cannot be nil")
+	}
+
+	// Retrieve and reconstruct blocks (similar to client.DownloadWithMetadataAndProgress)
+	var originalBlocks []*blocks.Block
+
+	for _, blockInfo := range descriptor.Blocks {
+		// Retrieve anonymized data block
+		dataBlock, err := client.RetrieveBlockWithCache(blockInfo.DataCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve data block: %w", err)
+		}
+
+		// Retrieve randomizer blocks
+		randBlock1, err := client.RetrieveBlockWithCache(blockInfo.RandomizerCID1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
+		}
+
+		// Retrieve second randomizer block (3-tuple XOR)
+		randBlock2, err := client.RetrieveBlockWithCache(blockInfo.RandomizerCID2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
+		}
+
+		// XOR to get original block
+		origBlock, err := dataBlock.XOR(randBlock1, randBlock2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to XOR blocks: %w", err)
+		}
+
+		originalBlocks = append(originalBlocks, origBlock)
+	}
+
+	// Assemble file
+	assembler := blocks.NewAssembler()
+	var buf strings.Builder
+	if err := assembler.AssembleToWriter(originalBlocks, &buf); err != nil {
+		return nil, fmt.Errorf("failed to assemble file: %w", err)
+	}
+
+	// Handle padding removal (all files are padded)
+	assembledData := []byte(buf.String())
+
+	// Trim to original size (all files have padding)
+	originalSize := descriptor.GetOriginalFileSize()
+	if int64(len(assembledData)) > originalSize {
+		assembledData = assembledData[:originalSize]
+	}
+
+	return assembledData, nil
 }

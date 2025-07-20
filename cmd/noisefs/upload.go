@@ -13,6 +13,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/util"
 )
 
 // uploadFile uploads a single file to NoiseFS
@@ -41,8 +42,12 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	var descriptorCID string
 	if encrypt {
 		if password == "" {
-			// TODO: Implement interactive password prompt
-			return fmt.Errorf("password required for encrypted upload - use -p flag or NOISEFS_PASSWORD environment variable")
+			// Interactive password prompting with confirmation
+			var err error
+			password, err = util.PromptPasswordWithConfirmation("Enter encryption password")
+			if err != nil {
+				return fmt.Errorf("failed to get password: %w", err)
+			}
 		}
 		descriptorCID, err = client.EncryptedUpload(file, filename, password)
 		if err != nil {
