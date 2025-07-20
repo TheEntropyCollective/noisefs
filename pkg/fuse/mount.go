@@ -1,3 +1,4 @@
+//go:build fuse
 // +build fuse
 
 package fuse
@@ -12,10 +13,10 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/security"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/hanwen/go-fuse/v2/fuse/nodefs"
 	"github.com/hanwen/go-fuse/v2/fuse/pathfs"
@@ -23,19 +24,19 @@ import (
 
 // MountOptions contains options for mounting the filesystem
 type MountOptions struct {
-	MountPath      string
-	VolumeName     string
-	ReadOnly       bool
-	AllowOther     bool
-	Debug          bool
-	Security       *security.SecurityManager
-	IndexPassword  string
-	
+	MountPath     string
+	VolumeName    string
+	ReadOnly      bool
+	AllowOther    bool
+	Debug         bool
+	Security      *security.SecurityManager
+	IndexPassword string
+
 	// Directory mounting options
-	DirectoryDescriptor string // Directory descriptor CID to mount
-	DirectoryKey       string // Encryption key for directory
-	Subdir             string // Subdirectory to mount
-	MultiDirs          []DirectoryMount // Multiple directories to mount
+	DirectoryDescriptor string           // Directory descriptor CID to mount
+	DirectoryKey        string           // Encryption key for directory
+	Subdir              string           // Subdirectory to mount
+	MultiDirs           []DirectoryMount // Multiple directories to mount
 }
 
 // DirectoryMount represents a directory to mount
@@ -82,16 +83,16 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 			return fmt.Errorf("failed to create encrypted index: %w", err)
 		}
 		defer encIndex.Cleanup()
-		
+
 		if err := encIndex.LoadIndex(); err != nil {
 			return fmt.Errorf("failed to load encrypted index: %w", err)
 		}
-		
+
 		// Lock memory if security manager is available
 		if opts.Security != nil && opts.Security.MemoryProtection != nil {
 			encIndex.LockMemory()
 		}
-		
+
 		index = encIndex.FileIndex
 	} else {
 		// Use standard unencrypted index
@@ -107,7 +108,7 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 	if err != nil {
 		return fmt.Errorf("failed to create directory cache: %w", err)
 	}
-	
+
 	// Create NoiseFS filesystem
 	nfs := &NoiseFS{
 		FileSystem:     pathfs.NewDefaultFileSystem(),
@@ -119,7 +120,12 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 		dirCache:       dirCache,
 		encryptionKeys: make(map[string]*crypto.EncryptionKey),
 	}
-	
+
+	// Set up key resolver for directory cache
+	dirCache.SetKeyResolver(func(encryptionKeyID string) (*crypto.EncryptionKey, error) {
+		return nfs.getEncryptionKey(encryptionKeyID)
+	})
+
 	// Handle directory mounting
 	if opts.DirectoryDescriptor != "" {
 		// Add single directory to mount
@@ -127,7 +133,7 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 			return fmt.Errorf("failed to mount directory: %w", err)
 		}
 	}
-	
+
 	// Handle multiple directory mounts
 	for _, dir := range opts.MultiDirs {
 		if err := nfs.mountDirectory(dir.Name, dir.DescriptorCID, dir.EncryptionKey, ""); err != nil {
@@ -145,12 +151,12 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 		AllowOther: opts.AllowOther,
 		Debug:      opts.Debug,
 	}
-	
+
 	// Create raw filesystem
 	conn := nodefs.NewFileSystemConnector(pathFs.Root(), &nodefs.Options{
 		Debug: opts.Debug,
 	})
-	
+
 	// Create and mount the server
 	server, err := fuse.NewServer(conn.RawFS(), opts.MountPath, fuseOpts)
 	if err != nil {
@@ -193,7 +199,7 @@ func Unmount(mountPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to remove control file: %w", err)
 	}
-	
+
 	// Try to unmount using system command
 	return syscall.Unmount(mountPath, 0)
 }
@@ -205,13 +211,13 @@ type NoiseFS struct {
 	storageManager *storage.Manager
 	mountPath      string
 	readOnly       bool
-	
+
 	// Persistent file index
 	index *FileIndex
-	
+
 	// Directory manifest cache
 	dirCache *DirectoryCache
-	
+
 	// Encryption keys for directories
 	encryptionKeys map[string]*crypto.EncryptionKey
 	keyMutex       sync.RWMutex
@@ -223,7 +229,7 @@ func (fs *NoiseFS) mountDirectory(name, descriptorCID, encryptionKey, subdir str
 	if descriptorCID == "" {
 		return fmt.Errorf("directory descriptor CID is required")
 	}
-	
+
 	// Parse encryption key if provided
 	var key *crypto.EncryptionKey
 	if encryptionKey != "" {
@@ -239,30 +245,30 @@ func (fs *NoiseFS) mountDirectory(name, descriptorCID, encryptionKey, subdir str
 			Key: keyBytes,
 		}
 	}
-	
+
 	// Store encryption key
 	fs.keyMutex.Lock()
 	fs.encryptionKeys[descriptorCID] = key
 	fs.keyMutex.Unlock()
-	
+
 	// Add directory to index
 	mountPath := name
 	if mountPath == "" {
 		mountPath = "mounted-dir"
 	}
-	
+
 	// If subdir is specified, we'll need to load the manifest and navigate to it
 	if subdir != "" {
 		// This will be handled in GetAttr/OpenDir when accessing the directory
 		mountPath = filepath.Join(mountPath, subdir)
 	}
-	
+
 	// Add directory entry to index
 	fs.index.AddDirectory(mountPath, descriptorCID, encryptionKey)
-	
+
 	// The directory will be loaded on first access
 	// Cache warming happens automatically when directories are accessed
-	
+
 	return nil
 }
 
@@ -283,10 +289,10 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 				Mode: fuse.S_IFDIR | 0755,
 			}, fuse.OK
 		}
-		
+
 		// Get relative path
 		relativePath := strings.TrimPrefix(name, "files/")
-		
+
 		// First check if it's a registered directory with descriptor
 		if dirEntry, exists := fs.index.GetDirectory(relativePath); exists {
 			// Return directory attributes with metadata
@@ -297,7 +303,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 				Ctime: uint64(dirEntry.CreatedAt.Unix()),
 			}, fuse.OK
 		}
-		
+
 		// Check if it's a known file
 		entry, exists := fs.index.GetFile(relativePath)
 		if exists {
@@ -310,7 +316,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 					Ctime: uint64(entry.CreatedAt.Unix()),
 				}, fuse.OK
 			}
-			
+
 			// Return file attributes from index
 			return &fuse.Attr{
 				Mode:  fuse.S_IFREG | 0644,
@@ -320,7 +326,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 				Ctime: uint64(entry.CreatedAt.Unix()),
 			}, fuse.OK
 		}
-		
+
 		// Check if it's a directory by looking for files in subdirectories
 		if fs.index.IsDirectory(relativePath) {
 			return &fuse.Attr{
@@ -349,13 +355,13 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 		} else {
 			dirPath = strings.TrimPrefix(name, "files/")
 		}
-		
+
 		// Get files in this directory
 		files := fs.index.GetFilesInDirectory(dirPath)
-		
+
 		// Track subdirectories we've seen
 		subdirs := make(map[string]bool)
-		
+
 		// Find subdirectories by examining file paths
 		for _, entry := range fs.index.ListFiles() {
 			if strings.HasPrefix(entry.Directory, dirPath) {
@@ -367,7 +373,7 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 					}
 					relDir = strings.TrimPrefix(relDir, dirPath+"/")
 				}
-				
+
 				// Get the first component of the relative directory
 				if relDir != "" {
 					parts := strings.Split(relDir, "/")
@@ -377,10 +383,10 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 				}
 			}
 		}
-		
+
 		// Build directory entries
 		entries := make([]fuse.DirEntry, 0, len(files)+len(subdirs))
-		
+
 		// Add subdirectories
 		for subdir := range subdirs {
 			entries = append(entries, fuse.DirEntry{
@@ -388,7 +394,7 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 				Mode: fuse.S_IFDIR,
 			})
 		}
-		
+
 		// Add files
 		for _, entry := range files {
 			entries = append(entries, fuse.DirEntry{
@@ -396,7 +402,7 @@ func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry,
 				Mode: fuse.S_IFREG,
 			})
 		}
-		
+
 		return entries, fuse.OK
 	}
 
@@ -409,20 +415,20 @@ func (fs *NoiseFS) Open(name string, flags uint32, context *fuse.Context) (nodef
 	if !strings.HasPrefix(name, "files/") {
 		return nil, fuse.EINVAL
 	}
-	
+
 	// Get relative path
 	relativePath := strings.TrimPrefix(name, "files/")
-	
+
 	// Look up descriptor CID
 	entry, exists := fs.index.GetFile(relativePath)
 	if !exists {
 		return nil, fuse.ENOENT
 	}
-	
+
 	// Create NoiseFS file handle
 	readOnly := (flags & fuse.O_ANYWRITE) == 0
 	file := NewNoiseFile(fs.client, fs.storageManager, entry.DescriptorCID, relativePath, readOnly, fs.index)
-	
+
 	return file, fuse.OK
 }
 
@@ -436,13 +442,13 @@ func (fs *NoiseFS) Create(name string, flags uint32, mode uint32, context *fuse.
 	if !strings.HasPrefix(name, "files/") {
 		return nil, fuse.EINVAL
 	}
-	
+
 	// Get relative path
 	relativePath := strings.TrimPrefix(name, "files/")
-	
+
 	// Create new NoiseFS file handle with empty descriptor CID (new file)
 	file := NewNoiseFile(fs.client, fs.storageManager, "", relativePath, false, fs.index)
-	
+
 	return file, fuse.OK
 }
 
@@ -451,18 +457,18 @@ func (fs *NoiseFS) Mkdir(name string, mode uint32, context *fuse.Context) fuse.S
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Only allow directories under files/
 	if !strings.HasPrefix(name, "files/") {
 		return fuse.EINVAL
 	}
-	
+
 	// Check if directory already exists
 	relativePath := strings.TrimPrefix(name, "files/")
 	if fs.index.IsDirectory(relativePath) {
 		return fuse.Status(17) // EEXIST
 	}
-	
+
 	// For now, directories are created implicitly when files are added to them
 	// No explicit directory creation needed in the index
 	return fuse.OK
@@ -473,25 +479,25 @@ func (fs *NoiseFS) Unlink(name string, context *fuse.Context) fuse.Status {
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Only handle files under files/
 	if !strings.HasPrefix(name, "files/") {
 		return fuse.EINVAL
 	}
-	
+
 	// Get relative path
 	relativePath := strings.TrimPrefix(name, "files/")
-	
+
 	// Remove file from index
 	if !fs.index.RemoveFile(relativePath) {
 		return fuse.ENOENT
 	}
-	
+
 	// Save index
 	if err := fs.index.SaveIndex(); err != nil {
 		return fuse.EIO
 	}
-	
+
 	return fuse.OK
 }
 
@@ -500,33 +506,33 @@ func (fs *NoiseFS) Rmdir(name string, context *fuse.Context) fuse.Status {
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Only handle directories under files/
 	if !strings.HasPrefix(name, "files/") || name == "files" {
 		return fuse.EINVAL
 	}
-	
+
 	// Get relative path
 	relativePath := strings.TrimPrefix(name, "files/")
-	
+
 	// Check if directory exists
 	if !fs.index.IsDirectory(relativePath) {
 		return fuse.ENOENT
 	}
-	
+
 	// Check if directory is empty
 	files := fs.index.GetFilesInDirectory(relativePath)
 	if len(files) > 0 {
 		return fuse.Status(39) // ENOTEMPTY
 	}
-	
+
 	// Check for subdirectories
 	for _, entry := range fs.index.ListFiles() {
 		if strings.HasPrefix(entry.Directory, relativePath+"/") {
 			return fuse.Status(39) // ENOTEMPTY
 		}
 	}
-	
+
 	// Directory is empty, removal is implicit since we don't store empty directories
 	return fuse.OK
 }
@@ -536,38 +542,38 @@ func (fs *NoiseFS) Rename(oldName string, newName string, context *fuse.Context)
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Both paths must be under files/
 	if !strings.HasPrefix(oldName, "files/") || !strings.HasPrefix(newName, "files/") {
 		return fuse.EINVAL
 	}
-	
+
 	// Get relative paths
 	oldPath := strings.TrimPrefix(oldName, "files/")
 	newPath := strings.TrimPrefix(newName, "files/")
-	
+
 	// Check if source exists
 	entry, exists := fs.index.GetFile(oldPath)
 	if !exists {
 		return fuse.ENOENT
 	}
-	
+
 	// Check if destination already exists
 	if _, exists := fs.index.GetFile(newPath); exists {
 		return fuse.Status(17) // EEXIST
 	}
-	
+
 	// Remove old entry
 	fs.index.RemoveFile(oldPath)
-	
+
 	// Add new entry
 	fs.index.AddFile(newPath, entry.DescriptorCID, entry.FileSize)
-	
+
 	// Save index
 	if err := fs.index.SaveIndex(); err != nil {
 		return fuse.EIO
 	}
-	
+
 	return fuse.OK
 }
 
@@ -579,13 +585,13 @@ func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context
 	if !strings.HasPrefix(name, "files/") {
 		return nil, fuse.ENODATA
 	}
-	
+
 	relativePath := strings.TrimPrefix(name, "files/")
 	_, exists := fs.index.GetFile(relativePath)
 	if !exists {
 		return nil, fuse.ENOENT
 	}
-	
+
 	// Handle privacy-preserving attributes only
 	switch attribute {
 	case "user.noisefs.type":
@@ -600,7 +606,7 @@ func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context
 	default:
 		// PRIVACY: All sensitive attributes removed
 		// - descriptor_cid: Exposes content identifiers (breaks anonymity)
-		// - created_at/modified_at: Enable timing correlation attacks  
+		// - created_at/modified_at: Enable timing correlation attacks
 		// - file_size: May aid in fingerprinting attacks
 		// - directory: Exposes path information (breaks privacy)
 		return nil, fuse.ENODATA
@@ -613,20 +619,20 @@ func (fs *NoiseFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse
 	if !strings.HasPrefix(name, "files/") {
 		return nil, fuse.ENODATA
 	}
-	
+
 	relativePath := strings.TrimPrefix(name, "files/")
 	_, exists := fs.index.GetFile(relativePath)
 	if !exists {
 		return nil, fuse.ENOENT
 	}
-	
+
 	// Return only privacy-safe extended attributes
 	attrs := []string{
 		"user.noisefs.type",
-		"user.noisefs.version", 
+		"user.noisefs.version",
 		"user.noisefs.encrypted",
 	}
-	
+
 	return attrs, fuse.OK
 }
 
@@ -635,12 +641,12 @@ func (fs *NoiseFS) SetXAttr(name string, attribute string, data []byte, flags in
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// NoiseFS system attributes are read-only for privacy protection
 	if strings.HasPrefix(attribute, "user.noisefs.") {
 		return fuse.EPERM
 	}
-	
+
 	// For now, don't support arbitrary extended attributes
 	// This maintains privacy by preventing metadata leakage through custom attributes
 	return fuse.ENOTSUP
@@ -651,12 +657,12 @@ func (fs *NoiseFS) RemoveXAttr(name string, attribute string, context *fuse.Cont
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// NoiseFS system attributes cannot be removed for privacy protection
 	if strings.HasPrefix(attribute, "user.noisefs.") {
 		return fuse.EPERM
 	}
-	
+
 	// For now, don't support arbitrary extended attributes
 	// This maintains privacy by preventing metadata leakage through custom attributes
 	return fuse.ENOTSUP
@@ -667,12 +673,12 @@ func (fs *NoiseFS) Symlink(value string, linkName string, context *fuse.Context)
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Only allow symlinks under files/
 	if !strings.HasPrefix(linkName, "files/") {
 		return fuse.EINVAL
 	}
-	
+
 	// For now, don't support symbolic links in NoiseFS
 	// Symbolic links would require storing link targets in the index
 	// and special handling during directory listing
@@ -685,7 +691,7 @@ func (fs *NoiseFS) Readlink(name string, context *fuse.Context) (string, fuse.St
 	if !strings.HasPrefix(name, "files/") {
 		return "", fuse.EINVAL
 	}
-	
+
 	// For now, don't support symbolic links
 	return "", fuse.ENOTSUP
 }
@@ -695,36 +701,74 @@ func (fs *NoiseFS) Link(oldName string, newName string, context *fuse.Context) f
 	if fs.readOnly {
 		return fuse.EROFS
 	}
-	
+
 	// Both paths must be under files/
 	if !strings.HasPrefix(oldName, "files/") || !strings.HasPrefix(newName, "files/") {
 		return fuse.EINVAL
 	}
-	
+
 	// Get relative paths
 	oldPath := strings.TrimPrefix(oldName, "files/")
 	newPath := strings.TrimPrefix(newName, "files/")
-	
+
 	// Check if source exists
 	entry, exists := fs.index.GetFile(oldPath)
 	if !exists {
 		return fuse.ENOENT
 	}
-	
+
 	// Check if destination already exists
 	if _, exists := fs.index.GetFile(newPath); exists {
 		return fuse.Status(17) // EEXIST
 	}
-	
+
 	// Create hard link by adding another index entry with same descriptor CID
 	fs.index.AddFile(newPath, entry.DescriptorCID, entry.FileSize)
-	
+
 	// Save index
 	if err := fs.index.SaveIndex(); err != nil {
 		return fuse.EIO
 	}
-	
+
 	return fuse.OK
+}
+
+// getEncryptionKey retrieves an encryption key by its ID
+func (fs *NoiseFS) getEncryptionKey(encryptionKeyID string) (*crypto.EncryptionKey, error) {
+	fs.keyMutex.RLock()
+	defer fs.keyMutex.RUnlock()
+
+	if encryptionKeyID == "" {
+		return nil, fmt.Errorf("encryption key ID cannot be empty")
+	}
+
+	// First, check if we have a key stored for this ID directly
+	if key, exists := fs.encryptionKeys[encryptionKeyID]; exists {
+		return key, nil
+	}
+
+	// The encryptionKeyID might be a base64-encoded key string itself
+	// Try to parse it as an encoded key
+	key, err := crypto.ParseKeyFromString(encryptionKeyID)
+	if err == nil {
+		// Successfully parsed - cache it for future use
+		fs.keyMutex.RUnlock()
+		fs.keyMutex.Lock()
+		fs.encryptionKeys[encryptionKeyID] = key
+		fs.keyMutex.Unlock()
+		fs.keyMutex.RLock()
+		return key, nil
+	}
+
+	// Finally, check if the encryptionKeyID corresponds to a directory descriptor CID
+	// that we have a key stored for
+	for cid, key := range fs.encryptionKeys {
+		if cid == encryptionKeyID {
+			return key, nil
+		}
+	}
+
+	return nil, fmt.Errorf("encryption key not found for ID: %s", encryptionKeyID)
 }
 
 // AddFile adds a file to the index and saves it
@@ -764,7 +808,7 @@ func DaemonWithIndex(client *noisefs.Client, storageManager *storage.Manager, op
 		}
 		defer os.Remove(pidFile)
 	}
-	
+
 	return MountWithIndex(client, storageManager, opts, indexPath)
 }
 
@@ -774,7 +818,7 @@ func writePIDFile(pidFile string) error {
 		return err
 	}
 	defer file.Close()
-	
+
 	_, err = fmt.Fprintf(file, "%d\n", os.Getpid())
 	return err
 }
@@ -784,21 +828,21 @@ func StopDaemon(pidFile string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read PID file: %w", err)
 	}
-	
+
 	var pid int
 	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
 		return fmt.Errorf("invalid PID file format: %w", err)
 	}
-	
+
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return fmt.Errorf("failed to find process: %w", err)
 	}
-	
+
 	if err := process.Signal(syscall.SIGTERM); err != nil {
 		return fmt.Errorf("failed to terminate process: %w", err)
 	}
-	
+
 	fmt.Printf("Sent termination signal to PID %d\n", pid)
 	return nil
 }

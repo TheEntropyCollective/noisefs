@@ -1,3 +1,4 @@
+//go:build fuse
 // +build fuse
 
 package fuse
@@ -6,19 +7,19 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // TestDirectoryMountIntegration tests mounting directories via descriptor CIDs
@@ -159,7 +160,7 @@ func TestConcurrentDirectoryAccess(t *testing.T) {
 	// Run concurrent operations
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
-	
+
 	// Multiple readers
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
@@ -233,17 +234,15 @@ func TestDirectoryCachePerformance(t *testing.T) {
 	// Create test manifests
 	manifests := make([]*descriptors.DirectoryManifest, 100)
 	for i := 0; i < 100; i++ {
-		manifest := &descriptors.DirectoryManifest{
-			Version: 1,
-			Entries: make([]descriptors.DirectoryEntry, 10),
-		}
+		manifest := descriptors.NewDirectoryManifest()
 		for j := 0; j < 10; j++ {
-			manifest.Entries[j] = descriptors.DirectoryEntry{
-				Name:         fmt.Sprintf("file%d.txt", j),
-				Type:         descriptors.FileType,
-				DescriptorCID: fmt.Sprintf("Qm%d%d", i, j),
-				Size:         int64(j * 1024),
-			}
+			manifest.AddEntry(descriptors.DirectoryEntry{
+				EncryptedName: []byte(fmt.Sprintf("file%d.txt", j)),
+				CID:           fmt.Sprintf("Qm%d%d", i, j),
+				Type:          descriptors.FileType,
+				Size:          int64(j * 1024),
+				ModifiedAt:    time.Now(),
+			})
 		}
 		manifests[i] = manifest
 	}
@@ -253,13 +252,13 @@ func TestDirectoryCachePerformance(t *testing.T) {
 		start := time.Now()
 		for i, manifest := range manifests {
 			cid := fmt.Sprintf("QmDir%d", i)
-			cache.Put(cid, manifest)
+			cache.Put(cid, manifest, cid)
 		}
 		duration := time.Since(start)
-		
+
 		opsPerSec := float64(len(manifests)) / duration.Seconds()
 		t.Logf("Put %d manifests in %v (%.0f ops/sec)", len(manifests), duration, opsPerSec)
-		
+
 		if opsPerSec < 1000 {
 			t.Errorf("Cache put performance too low: %.0f ops/sec", opsPerSec)
 		}
@@ -270,15 +269,15 @@ func TestDirectoryCachePerformance(t *testing.T) {
 		// Warm cache
 		for i := 0; i < 100; i++ {
 			cid := fmt.Sprintf("QmDir%d", i)
-			cache.Put(cid, manifests[i])
+			cache.Put(cid, manifests[i], cid)
 		}
 
 		start := time.Now()
 		hits := 0
 		for i := 0; i < 1000; i++ {
 			cid := fmt.Sprintf("QmDir%d", i%100)
-			manifest, found := cache.Get(cid)
-			if found && manifest != nil {
+			manifest := cache.Get(cid)
+			if manifest != nil {
 				hits++
 			}
 		}
@@ -286,8 +285,8 @@ func TestDirectoryCachePerformance(t *testing.T) {
 
 		hitRate := float64(hits) / 1000.0
 		opsPerSec := 1000.0 / duration.Seconds()
-		
-		t.Logf("Get 1000 items in %v (%.0f ops/sec, %.1f%% hit rate)", 
+
+		t.Logf("Get 1000 items in %v (%.0f ops/sec, %.1f%% hit rate)",
 			duration, opsPerSec, hitRate*100)
 
 		if hitRate < 0.95 {
@@ -300,7 +299,7 @@ func TestDirectoryCachePerformance(t *testing.T) {
 
 	// Test LRU eviction performance
 	t.Run("LRUEvictionPerformance", func(t *testing.T) {
-		smallCache, _ := NewDirectoryCache(DirectoryCacheConfig{
+		smallCache, _ := NewDirectoryCache(&DirectoryCacheConfig{
 			MaxSize: 10,
 			TTL:     time.Minute,
 		}, storageManager)
@@ -308,7 +307,7 @@ func TestDirectoryCachePerformance(t *testing.T) {
 		start := time.Now()
 		for i := 0; i < 100; i++ {
 			cid := fmt.Sprintf("QmEvict%d", i)
-			smallCache.Put(cid, manifests[i%10])
+			smallCache.Put(cid, manifests[i%10], cid)
 		}
 		duration := time.Since(start)
 
@@ -346,7 +345,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 
 	t.Run("MountWithInvalidKey", func(t *testing.T) {
 		dirCID, _ := createTestDirectoryStructure(t, storageManager, client)
-		
+
 		opts := MountOptions{
 			MountPath:           mountDir,
 			VolumeName:          "invalid_key_test",
@@ -363,13 +362,10 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 
 	t.Run("MountEmptyDirectory", func(t *testing.T) {
 		// Create empty directory
-		emptyManifest := &descriptors.DirectoryManifest{
-			Version: 1,
-			Entries: []descriptors.DirectoryEntry{},
-		}
-		
+		emptyManifest := descriptors.NewDirectoryManifest()
+
 		dirCID := uploadManifest(t, storageManager, emptyManifest, nil)
-		
+
 		opts := MountOptions{
 			MountPath:           filepath.Join(mountDir, "empty"),
 			VolumeName:          "empty_dir_test",
@@ -377,7 +373,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 		}
 
 		os.MkdirAll(opts.MountPath, 0755)
-		
+
 		go func() {
 			MountWithIndex(client, storageManager, opts, "")
 		}()
@@ -396,7 +392,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 	t.Run("MountNestedDirectories", func(t *testing.T) {
 		// Create deeply nested directory structure
 		rootCID := createNestedDirectoryStructure(t, storageManager, client, 5)
-		
+
 		opts := MountOptions{
 			MountPath:           filepath.Join(mountDir, "nested"),
 			VolumeName:          "nested_test",
@@ -404,7 +400,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 		}
 
 		os.MkdirAll(opts.MountPath, 0755)
-		
+
 		go func() {
 			MountWithIndex(client, storageManager, opts, "")
 		}()
@@ -418,7 +414,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 				t.Errorf("Failed to read level %d: %v", i, err)
 				break
 			}
-			
+
 			found := false
 			for _, entry := range entries {
 				if entry.IsDir() && entry.Name() == fmt.Sprintf("level%d", i+1) {
@@ -427,7 +423,7 @@ func TestDirectoryMountingEdgeCases(t *testing.T) {
 					break
 				}
 			}
-			
+
 			if !found && i < 4 {
 				t.Errorf("Could not find level%d directory", i+1)
 				break
@@ -466,76 +462,75 @@ func setupTestEnvironment(t *testing.T) (string, *storage.Manager, *noisefs.Clie
 
 func createTestDirectoryStructure(t *testing.T, storageManager *storage.Manager, client *noisefs.Client) (string, string) {
 	// Create encryption key
-	key := crypto.GenerateEncryptionKey()
+	key, err := crypto.GenerateKey("test-password")
+	if err != nil {
+		t.Fatalf("Failed to generate encryption key: %v", err)
+	}
 	encodedKey := base64.StdEncoding.EncodeToString(key.Key)
 
 	// Create directory manifest
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: []descriptors.DirectoryEntry{
-			{
-				Name:          "file1.txt",
-				Type:          descriptors.FileType,
-				DescriptorCID: "QmFile1",
-				Size:          100,
-			},
-			{
-				Name:          "file2.txt", 
-				Type:          descriptors.FileType,
-				DescriptorCID: "QmFile2",
-				Size:          200,
-			},
-			{
-				Name:                "subdir",
-				Type:                descriptors.DirectoryType,
-				DirectoryDescriptorCID: "QmSubdir",
-				Size:                0,
-			},
-		},
-	}
+	manifest := descriptors.NewDirectoryManifest()
+
+	// Add entries
+	manifest.AddEntry(descriptors.DirectoryEntry{
+		EncryptedName: []byte("file1.txt"),
+		CID:           "QmFile1",
+		Type:          descriptors.FileType,
+		Size:          100,
+		ModifiedAt:    time.Now(),
+	})
+	manifest.AddEntry(descriptors.DirectoryEntry{
+		EncryptedName: []byte("file2.txt"),
+		CID:           "QmFile2",
+		Type:          descriptors.FileType,
+		Size:          200,
+		ModifiedAt:    time.Now(),
+	})
+	manifest.AddEntry(descriptors.DirectoryEntry{
+		EncryptedName: []byte("subdir"),
+		CID:           "QmSubdir",
+		Type:          descriptors.DirectoryType,
+		Size:          0,
+		ModifiedAt:    time.Now(),
+	})
 
 	// Upload manifest
 	dirCID := uploadManifest(t, storageManager, manifest, key)
-	
+
 	return dirCID, encodedKey
 }
 
 func createLargeDirectory(t *testing.T, storageManager *storage.Manager, client *noisefs.Client, fileCount int) (string, string) {
 	// Create directory manifest with many files
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: make([]descriptors.DirectoryEntry, fileCount),
-	}
+	manifest := descriptors.NewDirectoryManifest()
 
 	for i := 0; i < fileCount; i++ {
-		manifest.Entries[i] = descriptors.DirectoryEntry{
-			Name:          fmt.Sprintf("file_%04d.txt", i),
+		manifest.AddEntry(descriptors.DirectoryEntry{
+			EncryptedName: []byte(fmt.Sprintf("file_%04d.txt", i)),
+			CID:           fmt.Sprintf("QmFile%d", i),
 			Type:          descriptors.FileType,
-			DescriptorCID: fmt.Sprintf("QmFile%d", i),
 			Size:          int64(i * 100),
-		}
+			ModifiedAt:    time.Now(),
+		})
 	}
 
 	// Upload manifest
 	dirCID := uploadManifest(t, storageManager, manifest, nil)
-	
+
 	return dirCID, ""
 }
 
 func createNestedDirectoryStructure(t *testing.T, storageManager *storage.Manager, client *noisefs.Client, depth int) string {
 	if depth == 0 {
 		// Leaf directory
-		manifest := &descriptors.DirectoryManifest{
-			Version: 1,
-			Entries: []descriptors.DirectoryEntry{
-				{
-					Name:          "leaf_file.txt",
-					Type:          descriptors.FileType,
-					DescriptorCID: "QmLeafFile",
-					Size:          42,
-				},
-			},
-		}
+		manifest := descriptors.NewDirectoryManifest()
+		manifest.AddEntry(descriptors.DirectoryEntry{
+			EncryptedName: []byte("leaf_file.txt"),
+			CID:           "QmLeafFile",
+			Type:          descriptors.FileType,
+			Size:          42,
+			ModifiedAt:    time.Now(),
+		})
 		return uploadManifest(t, storageManager, manifest, nil)
 	}
 
@@ -543,41 +538,44 @@ func createNestedDirectoryStructure(t *testing.T, storageManager *storage.Manage
 	childCID := createNestedDirectoryStructure(t, storageManager, client, depth-1)
 
 	// Create parent directory
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: []descriptors.DirectoryEntry{
-			{
-				Name:          fmt.Sprintf("file_at_level%d.txt", depth),
-				Type:          descriptors.FileType,
-				DescriptorCID: fmt.Sprintf("QmFileLevel%d", depth),
-				Size:          int64(depth * 100),
-			},
-			{
-				Name:                   fmt.Sprintf("level%d", depth),
-				Type:                   descriptors.DirectoryType,
-				DirectoryDescriptorCID: childCID,
-				Size:                   0,
-			},
-		},
-	}
+	manifest := descriptors.NewDirectoryManifest()
+	manifest.AddEntry(descriptors.DirectoryEntry{
+		EncryptedName: []byte(fmt.Sprintf("file_at_level%d.txt", depth)),
+		CID:           fmt.Sprintf("QmFileLevel%d", depth),
+		Type:          descriptors.FileType,
+		Size:          int64(depth * 100),
+		ModifiedAt:    time.Now(),
+	})
+	manifest.AddEntry(descriptors.DirectoryEntry{
+		EncryptedName: []byte(fmt.Sprintf("level%d", depth)),
+		CID:           childCID,
+		Type:          descriptors.DirectoryType,
+		Size:          0,
+		ModifiedAt:    time.Now(),
+	})
 
 	return uploadManifest(t, storageManager, manifest, nil)
 }
 
 func uploadManifest(t *testing.T, storageManager *storage.Manager, manifest *descriptors.DirectoryManifest, key *crypto.EncryptionKey) string {
 	// Serialize manifest
-	data, err := manifest.Serialize(key)
+	data, err := manifest.Marshal()
 	if err != nil {
 		t.Fatalf("Failed to serialize manifest: %v", err)
 	}
 
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		t.Fatalf("Failed to create block: %v", err)
+	}
+
 	// Store in backend
-	addr, err := storageManager.Put(context.Background(), data)
+	addr, err := storageManager.Put(context.Background(), block)
 	if err != nil {
 		t.Fatalf("Failed to store manifest: %v", err)
 	}
 
-	return addr.CID
+	return addr.ID
 }
 
 // Test functions for specific scenarios
@@ -621,7 +619,7 @@ func testMountWithEncryption(t *testing.T, mountDir string, storageManager *stor
 
 	opts := MountOptions{
 		MountPath:           subMount,
-		VolumeName:          "encrypted_test", 
+		VolumeName:          "encrypted_test",
 		DirectoryDescriptor: dirCID,
 		DirectoryKey:        encKey,
 	}

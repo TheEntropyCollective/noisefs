@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // TestFuseIntegration tests the FUSE filesystem with real IPFS integration
@@ -21,7 +21,7 @@ func TestFuseIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping FUSE integration test in short mode")
 	}
-	
+
 	// Check if FUSE is available
 	if _, err := os.Stat("/dev/fuse"); err != nil {
 		t.Skip("Skipping FUSE test: /dev/fuse not available")
@@ -262,7 +262,7 @@ func testConcurrentAccess(t *testing.T, mountDir string) {
 // testLargeFiles tests handling of large files
 func testLargeFiles(t *testing.T, mountDir string) {
 	testFile := filepath.Join(mountDir, "large_file.txt")
-	
+
 	// Create a 1MB file
 	const fileSize = 1024 * 1024
 	content := make([]byte, fileSize)
@@ -434,7 +434,7 @@ func BenchmarkFuseFileOperations(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			filename := fmt.Sprintf("bench_small_%d.txt", i)
 			filepath := filepath.Join(mountDir, filename)
-			
+
 			if err := os.WriteFile(filepath, content, 0644); err != nil {
 				b.Fatalf("Failed to write file: %v", err)
 			}

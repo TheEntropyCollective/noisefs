@@ -60,12 +60,12 @@ func (b *mockBlock) XOR(other *mockBlock) (*mockBlock, error) {
 	if len(b.data) != len(other.data) {
 		return nil, errors.New("block size mismatch")
 	}
-	
+
 	result := make([]byte, len(b.data))
 	for i := range b.data {
 		result[i] = b.data[i] ^ other.data[i]
 	}
-	
+
 	return &mockBlock{data: result}, nil
 }
 
@@ -88,32 +88,32 @@ func TestFileManagerWithRealClient(t *testing.T) {
 	// This would require a real NoiseFS client setup
 	// Skip for now since it would need IPFS daemon
 	t.Skip("Skipping real client test - requires IPFS daemon")
-	
+
 	// Example of how it would work:
 	/*
-	// Create real client
-	cache := cache.NewMemoryCache(10)
-	client, err := noisefs.NewClient(mockIPFS, cache)
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-	
-	// Create file manager
-	fm := NewFileManager(client)
-	defer fm.Close()
-	
-	// Test file operations
-	// ... test code here
+		// Create real client
+		cache := cache.NewMemoryCache(10)
+		client, err := noisefs.NewClient(mockIPFS, cache)
+		if err != nil {
+			t.Fatalf("Failed to create client: %v", err)
+		}
+
+		// Create file manager
+		fm := NewFileManager(client)
+		defer fm.Close()
+
+		// Test file operations
+		// ... test code here
 	*/
 }
 
 func TestFileManagerLifecycle(t *testing.T) {
 	// Test FileManager creation and cleanup
-	
+
 	// We can't easily test with a real client without mocking
 	// but we can test the basic lifecycle
 	t.Log("FileManager lifecycle test - would need mock client")
-	
+
 	// Verify that Close() doesn't panic
 	// fm := &FileManager{uploadQueue: make(chan *File)}
 	// fm.Close() // Should not panic

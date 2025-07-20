@@ -1,3 +1,4 @@
+//go:build fuse
 // +build fuse
 
 package fuse
@@ -5,17 +6,16 @@ package fuse
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // TestEndToEndDirectoryWorkflow tests the complete directory lifecycle
@@ -154,7 +154,7 @@ func TestDirectoryWorkflowWithFailures(t *testing.T) {
 		// Test concurrent modification detection
 		// Create and mount a directory
 		dirCID, key := createTestDirectoryStructure(t, storageManager, client)
-		
+
 		mountDir1 := filepath.Join(testDir, "mount1")
 		mountDir2 := filepath.Join(testDir, "mount2")
 		os.MkdirAll(mountDir1, 0755)
@@ -197,14 +197,14 @@ func TestDirectoryWorkflowWithFailures(t *testing.T) {
 func createSourceDirectory(dir string) error {
 	// Create directory structure
 	structure := map[string]string{
-		"README.md":                    "# Test Project\nThis is a test directory for NoiseFS E2E testing.",
-		"src/main.go":                  "package main\n\nfunc main() {\n\tprintln(\"Hello, NoiseFS!\")\n}",
-		"src/utils/helper.go":          "package utils\n\nfunc Helper() string {\n\treturn \"helper\"\n}",
-		"docs/guide.md":                "# User Guide\n\nHow to use this project...",
-		"docs/images/logo.png":         "PNG_DATA_PLACEHOLDER",
-		"config/settings.json":         `{"version": "1.0", "debug": true}`,
-		"data/sample.csv":              "id,name,value\n1,test,100\n2,demo,200",
-		".gitignore":                   "*.tmp\n.DS_Store",
+		"README.md":            "# Test Project\nThis is a test directory for NoiseFS E2E testing.",
+		"src/main.go":          "package main\n\nfunc main() {\n\tprintln(\"Hello, NoiseFS!\")\n}",
+		"src/utils/helper.go":  "package utils\n\nfunc Helper() string {\n\treturn \"helper\"\n}",
+		"docs/guide.md":        "# User Guide\n\nHow to use this project...",
+		"docs/images/logo.png": "PNG_DATA_PLACEHOLDER",
+		"config/settings.json": `{"version": "1.0", "debug": true}`,
+		"data/sample.csv":      "id,name,value\n1,test,100\n2,demo,200",
+		".gitignore":           "*.tmp\n.DS_Store",
 	}
 
 	for path, content := range structure {
@@ -236,11 +236,14 @@ func testUploadDirectory(t *testing.T, sourceDir string, storageManager *storage
 	// TODO: Implement directory upload using DirectoryManager
 	// For now, skip this test until proper directory processing is implemented
 	t.Skip("Directory processing implementation pending - see DirectoryManager in storage package")
-	
+
 	// Generate encryption key
-	encKey := crypto.GenerateEncryptionKey()
+	encKey, err := crypto.GenerateKey("test-password")
+	if err != nil {
+		t.Fatalf("Failed to generate encryption key: %v", err)
+	}
 	_ = encKey // Prevent unused variable error
-	
+
 	// TODO: Complete implementation when DirectoryManager has ProcessDirectory method
 }
 
@@ -346,7 +349,7 @@ func testModifyFilesInMount(t *testing.T, mountDir string) {
 	// Test creating new file
 	newFile := filepath.Join(rootPath, "new_file.txt")
 	newContent := []byte("This file was created through FUSE mount")
-	
+
 	if err := os.WriteFile(newFile, newContent, 0644); err != nil {
 		t.Logf("Write new file failed (expected in read-only mount): %v", err)
 	} else {
@@ -364,7 +367,7 @@ func testModifyFilesInMount(t *testing.T, mountDir string) {
 	// Test modifying existing file
 	existingFile := filepath.Join(rootPath, "README.md")
 	appendContent := []byte("\n\nAppended through FUSE mount")
-	
+
 	file, err := os.OpenFile(existingFile, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		t.Logf("Open for append failed (expected in read-only mount): %v", err)
@@ -389,9 +392,9 @@ func testModifyFilesInMount(t *testing.T, mountDir string) {
 func testDownloadDirectory(t *testing.T, dirCID, encKey, downloadDir string, storageManager *storage.Manager, client *noisefs.Client) {
 	// Download directory using directory manager
 	// This simulates using the CLI download command
-	
+
 	t.Logf("Downloading directory %s to %s", dirCID, downloadDir)
-	
+
 	// In real implementation, this would use the directory manager
 	// For now, we'll just verify the structure exists in the mount
 	t.Log("Download test - using mount verification as proxy")
@@ -417,7 +420,7 @@ func testVerifyDirectoryIntegrity(t *testing.T, sourceDir, verifyDir string) {
 	// For mount verification, check against mounted directory
 	// In full implementation, would check downloaded directory
 	t.Logf("Found %d items in source directory", len(sourceFiles))
-	
+
 	// Verify file contents match
 	for relPath, info := range sourceFiles {
 		if !info.IsDir() {
@@ -427,7 +430,7 @@ func testVerifyDirectoryIntegrity(t *testing.T, sourceDir, verifyDir string) {
 				t.Errorf("Failed to read source file %s: %v", relPath, err)
 				continue
 			}
-			
+
 			t.Logf("Verified %s (%d bytes)", relPath, len(sourceContent))
 		}
 	}

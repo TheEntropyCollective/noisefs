@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/TheEntropyCollective/noisefs/pkg/compliance/validation"
 )
 
 // ComplianceAuditSystem provides comprehensive audit logging for legal compliance
@@ -20,6 +22,7 @@ type ComplianceAuditSystem struct {
 	reporter     *ComplianceReporter
 	monitor      *ComplianceMonitor
 	config       *AuditConfig
+	validator    *validation.InputValidator
 	mutex        sync.RWMutex
 }
 
@@ -192,6 +195,7 @@ type RequestorMetric struct {
 	LastActivity     time.Time `json:"last_activity"`
 }
 
+
 // NewComplianceAuditSystem creates a new compliance audit system
 func NewComplianceAuditSystem(config *AuditConfig) *ComplianceAuditSystem {
 	if config == nil {
@@ -199,7 +203,8 @@ func NewComplianceAuditSystem(config *AuditConfig) *ComplianceAuditSystem {
 	}
 	
 	system := &ComplianceAuditSystem{
-		config: config,
+		config:    config,
+		validator: validation.NewInputValidator(), // Use existing validation package
 	}
 	
 	system.logger = &AdvancedAuditLogger{
@@ -296,6 +301,26 @@ func DefaultAuditConfig() *AuditConfig {
 
 // LogComplianceEvent logs a detailed compliance event
 func (system *ComplianceAuditSystem) LogComplianceEvent(eventType, userID, targetID, action string, details map[string]interface{}) error {
+	// Validate inputs before processing
+	ctx := validation.ValidationContext{RequiredField: true, MaxLength: 100, FieldType: "eventType"}
+	if err := system.validator.ValidateSecurityInput(eventType, "eventType", ctx); err != nil {
+		return err
+	}
+	if userID != "" {
+		ctx.FieldType = "userID"
+		if err := system.validator.ValidateSecurityInput(userID, "userID", ctx); err != nil {
+			return err
+		}
+	}
+	ctx.FieldType = "targetID"
+	if err := system.validator.ValidateSecurityInput(targetID, "targetID", ctx); err != nil {
+		return err
+	}
+	ctx.FieldType = "action"
+	if err := system.validator.ValidateSecurityInput(action, "action", ctx); err != nil {
+		return err
+	}
+	
 	system.mutex.Lock()
 	defer system.mutex.Unlock()
 	
@@ -359,6 +384,23 @@ func (system *ComplianceAuditSystem) LogComplianceEvent(eventType, userID, targe
 
 // LogDMCATakedown logs a DMCA takedown event with full legal context
 func (system *ComplianceAuditSystem) LogDMCATakedown(takedownID, descriptorCID, requestorEmail, copyrightWork string) error {
+	// Validate DMCA-specific inputs
+	ctx := validation.ValidationContext{RequiredField: true, MaxLength: 100, FieldType: "takedownID"}
+	if err := system.validator.ValidateSecurityInput(takedownID, "takedownID", ctx); err != nil {
+		return err
+	}
+	if err := system.validator.ValidateCID(descriptorCID); err != nil {
+		return err
+	}
+	if err := system.validator.ValidateEmail(requestorEmail); err != nil {
+		return err
+	}
+	ctx.FieldType = "copyrightWork"
+	ctx.MaxLength = 1000
+	if err := system.validator.ValidateSecurityInput(copyrightWork, "copyrightWork", ctx); err != nil {
+		return err
+	}
+	
 	details := map[string]interface{}{
 		"takedown_id":     takedownID,
 		"requestor_email": requestorEmail,
@@ -372,6 +414,27 @@ func (system *ComplianceAuditSystem) LogDMCATakedown(takedownID, descriptorCID, 
 
 // LogCounterNotice logs a DMCA counter-notice event
 func (system *ComplianceAuditSystem) LogCounterNotice(counterNoticeID, descriptorCID, userID string, reinstatementDate time.Time) error {
+	// Validate counter-notice inputs
+	ctx := validation.ValidationContext{RequiredField: true, MaxLength: 100, FieldType: "counterNoticeID"}
+	if err := system.validator.ValidateSecurityInput(counterNoticeID, "counterNoticeID", ctx); err != nil {
+		return err
+	}
+	if err := system.validator.ValidateCID(descriptorCID); err != nil {
+		return err
+	}
+	ctx.FieldType = "userID"
+	if err := system.validator.ValidateSecurityInput(userID, "userID", ctx); err != nil {
+		return err
+	}
+	if reinstatementDate.IsZero() {
+		return validation.ValidationError{
+			Field:   "reinstatementDate",
+			Type:    validation.ErrRequiredField,
+			Message: "reinstatement date is required",
+			Value:   reinstatementDate.String(),
+		}
+	}
+	
 	details := map[string]interface{}{
 		"counter_notice_id":   counterNoticeID,
 		"reinstatement_date":  reinstatementDate.Format(time.RFC3339),
@@ -384,6 +447,20 @@ func (system *ComplianceAuditSystem) LogCounterNotice(counterNoticeID, descripto
 
 // LogReinstatement logs descriptor reinstatement after counter-notice
 func (system *ComplianceAuditSystem) LogReinstatement(descriptorCID, userID, reason string) error {
+	// Validate reinstatement inputs
+	if err := system.validator.ValidateCID(descriptorCID); err != nil {
+		return err
+	}
+	ctx := validation.ValidationContext{RequiredField: true, MaxLength: 100, FieldType: "userID"}
+	if err := system.validator.ValidateSecurityInput(userID, "userID", ctx); err != nil {
+		return err
+	}
+	ctx.FieldType = "reason"
+	ctx.MaxLength = 500
+	if err := system.validator.ValidateSecurityInput(reason, "reason", ctx); err != nil {
+		return err
+	}
+	
 	details := map[string]interface{}{
 		"reason":           reason,
 		"legal_framework":  "DMCA 512(g)",
@@ -395,6 +472,20 @@ func (system *ComplianceAuditSystem) LogReinstatement(descriptorCID, userID, rea
 
 // GenerateComplianceReport generates a comprehensive compliance report
 func (system *ComplianceAuditSystem) GenerateComplianceReport(startDate, endDate time.Time, reportType string) (*ComprehensiveComplianceReport, error) {
+	// Validate report generation inputs
+	if startDate.IsZero() || endDate.IsZero() || endDate.Before(startDate) {
+		return nil, validation.ValidationError{
+			Field:   "dateRange",
+			Type:    validation.ErrInvalidFormat,
+			Message: "invalid date range: start and end dates must be valid and end must be after start",
+			Value:   fmt.Sprintf("%v to %v", startDate, endDate),
+		}
+	}
+	ctx := validation.ValidationContext{RequiredField: true, MaxLength: 50, FieldType: "reportType"}
+	if err := system.validator.ValidateSecurityInput(reportType, "reportType", ctx); err != nil {
+		return nil, err
+	}
+	
 	system.mutex.RLock()
 	defer system.mutex.RUnlock()
 	

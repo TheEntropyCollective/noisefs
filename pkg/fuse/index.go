@@ -26,18 +26,18 @@ type IndexEntry struct {
 	CreatedAt     time.Time `json:"created_at"`
 	ModifiedAt    time.Time `json:"modified_at"`
 	Directory     string    `json:"directory,omitempty"` // Relative path within files/
-	
+
 	// New fields for directory support
-	Type                  EntryType `json:"type,omitempty"`                    // Entry type (file or directory)
+	Type                   EntryType `json:"type,omitempty"`                     // Entry type (file or directory)
 	DirectoryDescriptorCID string    `json:"directory_descriptor_cid,omitempty"` // For directories
-	EncryptionKeyID       string    `json:"encryption_key_id,omitempty"`        // Key identifier for directory encryption
+	EncryptionKeyID        string    `json:"encryption_key_id,omitempty"`        // Key identifier for directory encryption
 }
 
 // FileIndex manages the persistent mapping of files to descriptor CIDs
 type FileIndex struct {
 	Version string                 `json:"version"`
 	Entries map[string]*IndexEntry `json:"entries"` // path -> entry
-	
+
 	// Runtime fields
 	mu       sync.RWMutex
 	filePath string
@@ -59,12 +59,12 @@ func GetDefaultIndexPath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	
+
 	noisefsDir := filepath.Join(homeDir, ".noisefs")
 	if err := os.MkdirAll(noisefsDir, 0700); err != nil {
 		return "", fmt.Errorf("failed to create .noisefs directory: %w", err)
 	}
-	
+
 	return filepath.Join(noisefsDir, "index.json"), nil
 }
 
@@ -72,26 +72,26 @@ func GetDefaultIndexPath() (string, error) {
 func (idx *FileIndex) LoadIndex() error {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	// If file doesn't exist, start with empty index
 	if _, err := os.Stat(idx.filePath); os.IsNotExist(err) {
 		return nil
 	}
-	
+
 	data, err := os.ReadFile(idx.filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read index file: %w", err)
 	}
-	
+
 	var loadedIndex FileIndex
 	if err := json.Unmarshal(data, &loadedIndex); err != nil {
 		return fmt.Errorf("failed to parse index file: %w", err)
 	}
-	
+
 	// Merge loaded entries
 	if loadedIndex.Entries != nil {
 		idx.Entries = loadedIndex.Entries
-		
+
 		// Ensure backward compatibility - set type for entries without it
 		for path, entry := range idx.Entries {
 			if entry.Type == "" {
@@ -103,7 +103,7 @@ func (idx *FileIndex) LoadIndex() error {
 	}
 	idx.Version = loadedIndex.Version
 	idx.dirty = false
-	
+
 	return nil
 }
 
@@ -111,42 +111,42 @@ func (idx *FileIndex) LoadIndex() error {
 func (idx *FileIndex) SaveIndex() error {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	if !idx.dirty {
 		return nil // No changes to save
 	}
-	
+
 	// Ensure directory exists
 	dir := filepath.Dir(idx.filePath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	// Marshal to JSON
 	data, err := json.MarshalIndent(idx, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
-	
+
 	// Write to temporary file first
 	tmpPath := idx.filePath + ".tmp"
 	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write index file: %w", err)
 	}
-	
+
 	// Atomic rename
 	if err := os.Rename(tmpPath, idx.filePath); err != nil {
 		os.Remove(tmpPath) // Clean up on failure
 		return fmt.Errorf("failed to rename index file: %w", err)
 	}
-	
+
 	// Update dirty flag (need to upgrade lock)
 	idx.mu.RUnlock()
 	idx.mu.Lock()
 	idx.dirty = false
 	idx.mu.Unlock()
 	idx.mu.RLock()
-	
+
 	return nil
 }
 
@@ -154,15 +154,15 @@ func (idx *FileIndex) SaveIndex() error {
 func (idx *FileIndex) AddFile(path, descriptorCID string, fileSize int64) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Determine directory from path
 	dir := filepath.Dir(path)
 	if dir == "." {
 		dir = ""
 	}
-	
+
 	entry := &IndexEntry{
 		Filename:      filepath.Base(path),
 		DescriptorCID: descriptorCID,
@@ -172,7 +172,7 @@ func (idx *FileIndex) AddFile(path, descriptorCID string, fileSize int64) {
 		Directory:     dir,
 		Type:          FileEntryType, // Default to file type
 	}
-	
+
 	idx.Entries[path] = entry
 	idx.dirty = true
 }
@@ -181,15 +181,15 @@ func (idx *FileIndex) AddFile(path, descriptorCID string, fileSize int64) {
 func (idx *FileIndex) AddDirectory(path, descriptorCID, encryptionKeyID string) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Determine parent directory from path
 	dir := filepath.Dir(path)
 	if dir == "." {
 		dir = ""
 	}
-	
+
 	entry := &IndexEntry{
 		Filename:               filepath.Base(path),
 		DirectoryDescriptorCID: descriptorCID,
@@ -200,7 +200,7 @@ func (idx *FileIndex) AddDirectory(path, descriptorCID, encryptionKeyID string) 
 		Type:                   DirectoryEntryType,
 		EncryptionKeyID:        encryptionKeyID,
 	}
-	
+
 	idx.Entries[path] = entry
 	idx.dirty = true
 }
@@ -209,7 +209,7 @@ func (idx *FileIndex) AddDirectory(path, descriptorCID, encryptionKeyID string) 
 func (idx *FileIndex) RemoveFile(path string) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	if _, exists := idx.Entries[path]; exists {
 		delete(idx.Entries, path)
 		idx.dirty = true
@@ -222,12 +222,12 @@ func (idx *FileIndex) RemoveFile(path string) bool {
 func (idx *FileIndex) GetFile(path string) (*IndexEntry, bool) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	entry, exists := idx.Entries[path]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Return a copy to avoid race conditions
 	entryCopy := *entry
 	return &entryCopy, true
@@ -237,7 +237,7 @@ func (idx *FileIndex) GetFile(path string) (*IndexEntry, bool) {
 func (idx *FileIndex) ListFiles() map[string]*IndexEntry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	// Return a copy
 	result := make(map[string]*IndexEntry)
 	for path, entry := range idx.Entries {
@@ -251,7 +251,7 @@ func (idx *FileIndex) ListFiles() map[string]*IndexEntry {
 func (idx *FileIndex) GetFilesInDirectory(dir string) map[string]*IndexEntry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	result := make(map[string]*IndexEntry)
 	for path, entry := range idx.Entries {
 		if entry.Directory == dir {
@@ -266,12 +266,12 @@ func (idx *FileIndex) GetFilesInDirectory(dir string) map[string]*IndexEntry {
 func (idx *FileIndex) UpdateFile(path, descriptorCID string, fileSize int64) bool {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
-	
+
 	entry, exists := idx.Entries[path]
 	if !exists {
 		return false
 	}
-	
+
 	entry.DescriptorCID = descriptorCID
 	entry.FileSize = fileSize
 	entry.ModifiedAt = time.Now()
@@ -297,12 +297,12 @@ func (idx *FileIndex) IsDirty() bool {
 func (idx *FileIndex) IsDirectory(path string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	// First check if this path is explicitly registered as a directory
 	if entry, exists := idx.Entries[path]; exists && entry.Type == DirectoryEntryType {
 		return true
 	}
-	
+
 	// Then check if any files have this path as their directory
 	for _, entry := range idx.Entries {
 		if entry.Directory == path {
@@ -320,12 +320,12 @@ func (idx *FileIndex) IsDirectory(path string) bool {
 func (idx *FileIndex) GetDirectory(path string) (*IndexEntry, bool) {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	entry, exists := idx.Entries[path]
 	if !exists || entry.Type != DirectoryEntryType {
 		return nil, false
 	}
-	
+
 	// Return a copy to avoid race conditions
 	entryCopy := *entry
 	return &entryCopy, true
@@ -335,7 +335,7 @@ func (idx *FileIndex) GetDirectory(path string) (*IndexEntry, bool) {
 func (idx *FileIndex) GetDirectoriesInDirectory(dir string) map[string]*IndexEntry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	result := make(map[string]*IndexEntry)
 	for path, entry := range idx.Entries {
 		if entry.Type == DirectoryEntryType && entry.Directory == dir {
@@ -350,12 +350,12 @@ func (idx *FileIndex) GetDirectoriesInDirectory(dir string) map[string]*IndexEnt
 func (idx *FileIndex) HasDirectoryDescriptor(path string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
 	entry, exists := idx.Entries[path]
 	if !exists {
 		return false
 	}
-	
+
 	return entry.Type == DirectoryEntryType && entry.DirectoryDescriptorCID != ""
 }
 

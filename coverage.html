@@ -1,0 +1,962 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>descriptors: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/TheEntropyCollective/noisefs/pkg/core/descriptors/descriptor.go (96.6%)</option>
+				
+				<option value="file1">github.com/TheEntropyCollective/noisefs/pkg/core/descriptors/directory.go (62.4%)</option>
+				
+				<option value="file2">github.com/TheEntropyCollective/noisefs/pkg/core/descriptors/encrypted_store.go (0.0%)</option>
+				
+				<option value="file3">github.com/TheEntropyCollective/noisefs/pkg/core/descriptors/store.go (88.9%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package descriptors
+
+import (
+        "encoding/json"
+        "errors"
+        "time"
+)
+
+// BlockPair represents a data block and its corresponding randomizers (3-tuple)
+type BlockPair struct {
+        DataCID        string `json:"data_cid"`
+        RandomizerCID1 string `json:"randomizer_cid1"`
+        RandomizerCID2 string `json:"randomizer_cid2"`
+}
+
+// DescriptorType represents the type of descriptor
+type DescriptorType string
+
+const (
+        // FileType represents a regular file descriptor
+        FileType DescriptorType = "file"
+        // DirectoryType represents a directory descriptor
+        DirectoryType DescriptorType = "directory"
+)
+
+// Descriptor contains metadata needed to reconstruct a file or directory
+type Descriptor struct {
+        Version        string         `json:"version"`
+        Type           DescriptorType `json:"type"`
+        Filename       string         `json:"filename"`
+        FileSize       int64          `json:"file_size"`        // Original file size (before padding)
+        PaddedFileSize int64          `json:"padded_file_size"` // Total size including padding
+        BlockSize      int            `json:"block_size"`
+        Blocks         []BlockPair    `json:"blocks,omitempty"`       // Empty for directories
+        ManifestCID    string         `json:"manifest_cid,omitempty"` // Only for directories
+        CreatedAt      time.Time      `json:"created_at"`
+}
+
+// NewDescriptor creates a new file descriptor with padding information
+func NewDescriptor(filename string, originalFileSize int64, paddedFileSize int64, blockSize int) *Descriptor <span class="cov8" title="1">{
+        return &amp;Descriptor{
+                Version:        "4.0", // Version 4.0 - padding always included
+                Type:           FileType,
+                Filename:       filename,
+                FileSize:       originalFileSize,
+                PaddedFileSize: paddedFileSize,
+                BlockSize:      blockSize,
+                Blocks:         make([]BlockPair, 0),
+                CreatedAt:      time.Now(),
+        }
+}</span>
+
+// NewDirectoryDescriptor creates a new directory descriptor
+func NewDirectoryDescriptor(dirname string, manifestCID string) *Descriptor <span class="cov8" title="1">{
+        return &amp;Descriptor{
+                Version:        "4.0",
+                Type:           DirectoryType,
+                Filename:       dirname,
+                FileSize:       0, // Directories don't have a fixed size
+                PaddedFileSize: 0, // Not applicable for directories
+                BlockSize:      0, // Not applicable for directories
+                ManifestCID:    manifestCID,
+                CreatedAt:      time.Now(),
+        }
+}</span>
+
+// AddBlockTriple adds a data block with two randomizers (3-tuple)
+func (d *Descriptor) AddBlockTriple(dataCID, randomizerCID1, randomizerCID2 string) error <span class="cov8" title="1">{
+        if dataCID == "" || randomizerCID1 == "" || randomizerCID2 == "" </span><span class="cov8" title="1">{
+                return errors.New("all CIDs cannot be empty")
+        }</span>
+
+        <span class="cov8" title="1">if dataCID == randomizerCID1 || dataCID == randomizerCID2 || randomizerCID1 == randomizerCID2 </span><span class="cov8" title="1">{
+                return errors.New("all CIDs must be different")
+        }</span>
+
+        <span class="cov8" title="1">d.Blocks = append(d.Blocks, BlockPair{
+                DataCID:        dataCID,
+                RandomizerCID1: randomizerCID1,
+                RandomizerCID2: randomizerCID2,
+        })
+
+        return nil</span>
+}
+
+// Validate checks if the descriptor is valid
+func (d *Descriptor) Validate() error <span class="cov8" title="1">{
+        if d.Version == "" </span><span class="cov8" title="1">{
+                return errors.New("descriptor version is required")
+        }</span>
+
+        <span class="cov8" title="1">if d.Filename == "" </span><span class="cov8" title="1">{
+                return errors.New("filename is required")
+        }</span>
+
+        // Validate based on type
+        <span class="cov8" title="1">switch d.Type </span>{
+        case FileType:<span class="cov8" title="1">
+                return d.validateFile()</span>
+        case DirectoryType:<span class="cov8" title="1">
+                return d.validateDirectory()</span>
+        default:<span class="cov0" title="0">
+                return errors.New("unknown descriptor type")</span>
+        }
+}
+
+// validateFile validates file-specific fields
+func (d *Descriptor) validateFile() error <span class="cov8" title="1">{
+        if d.FileSize &lt;= 0 </span><span class="cov8" title="1">{
+                return errors.New("file size must be positive")
+        }</span>
+
+        <span class="cov8" title="1">if d.BlockSize &lt;= 0 </span><span class="cov8" title="1">{
+                return errors.New("block size must be positive")
+        }</span>
+
+        <span class="cov8" title="1">if len(d.Blocks) == 0 </span><span class="cov8" title="1">{
+                return errors.New("must contain at least one block")
+        }</span>
+
+        <span class="cov8" title="1">for i, block := range d.Blocks </span><span class="cov8" title="1">{
+                if block.DataCID == "" || block.RandomizerCID1 == "" || block.RandomizerCID2 == "" </span><span class="cov8" title="1">{
+                        return errors.New("all CIDs must be present")
+                }</span>
+
+                <span class="cov8" title="1">if block.DataCID == block.RandomizerCID1 || block.DataCID == block.RandomizerCID2 || block.RandomizerCID1 == block.RandomizerCID2 </span><span class="cov8" title="1">{
+                        return errors.New("all CIDs must be different")
+                }</span>
+                <span class="cov8" title="1">_ = i</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// validateDirectory validates directory-specific fields
+func (d *Descriptor) validateDirectory() error <span class="cov8" title="1">{
+        if d.Version != "4.0" </span><span class="cov0" title="0">{
+                return errors.New("directory descriptors require version 4.0")
+        }</span>
+
+        <span class="cov8" title="1">if d.ManifestCID == "" </span><span class="cov8" title="1">{
+                return errors.New("directory descriptor must have a manifest CID")
+        }</span>
+
+        <span class="cov8" title="1">if len(d.Blocks) &gt; 0 </span><span class="cov8" title="1">{
+                return errors.New("directory descriptors should not contain blocks")
+        }</span>
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// ToJSON serializes the descriptor to JSON
+func (d *Descriptor) ToJSON() ([]byte, error) <span class="cov8" title="1">{
+        if err := d.Validate(); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return json.MarshalIndent(d, "", "  ")</span>
+}
+
+// Marshal serializes the descriptor to JSON (alias for ToJSON)
+func (d *Descriptor) Marshal() ([]byte, error) <span class="cov8" title="1">{
+        return d.ToJSON()
+}</span>
+
+// FromJSON deserializes a descriptor from JSON
+func FromJSON(data []byte) (*Descriptor, error) <span class="cov8" title="1">{
+        if len(data) == 0 </span><span class="cov8" title="1">{
+                return nil, errors.New("empty JSON data")
+        }</span>
+
+        <span class="cov8" title="1">var desc Descriptor
+        if err := json.Unmarshal(data, &amp;desc); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">if err := desc.Validate(); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return &amp;desc, nil</span>
+}
+
+// GetRandomizerCIDs returns the randomizer CIDs for a block at the given index
+func (d *Descriptor) GetRandomizerCIDs(blockIndex int) (string, string, error) <span class="cov8" title="1">{
+        if blockIndex &lt; 0 || blockIndex &gt;= len(d.Blocks) </span><span class="cov8" title="1">{
+                return "", "", errors.New("block index out of range")
+        }</span>
+
+        <span class="cov8" title="1">block := d.Blocks[blockIndex]
+        return block.RandomizerCID1, block.RandomizerCID2, nil</span>
+}
+
+// IsFile returns true if this is a file descriptor
+func (d *Descriptor) IsFile() bool <span class="cov8" title="1">{
+        return d.Type == FileType
+}</span>
+
+// IsDirectory returns true if this is a directory descriptor
+func (d *Descriptor) IsDirectory() bool <span class="cov8" title="1">{
+        return d.Type == DirectoryType
+}</span>
+
+// IsPadded returns true if this descriptor uses padding
+func (d *Descriptor) IsPadded() bool <span class="cov8" title="1">{
+        return d.PaddedFileSize &gt; d.FileSize
+}</span>
+
+// GetOriginalFileSize returns the original file size (before padding)
+func (d *Descriptor) GetOriginalFileSize() int64 <span class="cov8" title="1">{
+        return d.FileSize
+}</span>
+
+// GetPaddedFileSize returns the total size including padding
+func (d *Descriptor) GetPaddedFileSize() int64 <span class="cov8" title="1">{
+        if d.PaddedFileSize == 0 </span><span class="cov8" title="1">{
+                return d.FileSize
+        }</span>
+        <span class="cov8" title="1">return d.PaddedFileSize</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package descriptors
+
+import (
+        "bytes"
+        "compress/gzip"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
+)
+
+// DirectoryEntry represents a single entry in a directory
+type DirectoryEntry struct {
+        EncryptedName []byte         `json:"name"`     // Encrypted filename (base64 encoded in JSON)
+        CID           string         `json:"cid"`      // CID of the file/directory descriptor
+        Type          DescriptorType `json:"type"`     // File or Directory
+        Size          int64          `json:"size"`     // Size in bytes (0 for directories)
+        ModifiedAt    time.Time      `json:"modified"` // Last modification time
+}
+
+// SnapshotInfo represents metadata about a directory snapshot
+type SnapshotInfo struct {
+        OriginalCID  string    `json:"original_cid"`  // CID of the original directory
+        CreationTime time.Time `json:"creation_time"` // When the snapshot was created
+        SnapshotName string    `json:"snapshot_name"` // User-provided name for the snapshot
+        Description  string    `json:"description"`   // Optional description of the snapshot
+        IsSnapshot   bool      `json:"is_snapshot"`   // Indicates this is a snapshot manifest
+}
+
+// DirectoryManifest represents the encrypted contents of a directory
+type DirectoryManifest struct {
+        Version      string            `json:"version"`
+        Entries      []DirectoryEntry  `json:"entries"`
+        CreatedAt    time.Time         `json:"created"`
+        ModifiedAt   time.Time         `json:"modified"`
+        Metadata     map[string][]byte `json:"metadata,omitempty"`      // Encrypted metadata (base64 encoded in JSON)
+        SnapshotInfo *SnapshotInfo     `json:"snapshot_info,omitempty"` // Snapshot metadata if this is a snapshot
+}
+
+// NewDirectoryManifest creates a new empty directory manifest
+func NewDirectoryManifest() *DirectoryManifest <span class="cov8" title="1">{
+        now := time.Now()
+        return &amp;DirectoryManifest{
+                Version:    "1.0",
+                Entries:    make([]DirectoryEntry, 0),
+                CreatedAt:  now,
+                ModifiedAt: now,
+                Metadata:   make(map[string][]byte),
+        }
+}</span>
+
+// NewSnapshotManifest creates a new snapshot manifest from an existing directory manifest
+func NewSnapshotManifest(original *DirectoryManifest, originalCID, snapshotName, description string) *DirectoryManifest <span class="cov0" title="0">{
+        now := time.Now()
+
+        // Create snapshot info
+        snapshotInfo := &amp;SnapshotInfo{
+                OriginalCID:  originalCID,
+                CreationTime: now,
+                SnapshotName: snapshotName,
+                Description:  description,
+                IsSnapshot:   true,
+        }
+
+        // Clone the original manifest entries (same file CIDs)
+        entriesCopy := make([]DirectoryEntry, len(original.Entries))
+        copy(entriesCopy, original.Entries)
+
+        // Clone metadata
+        metadataCopy := make(map[string][]byte)
+        for k, v := range original.Metadata </span><span class="cov0" title="0">{
+                metadataCopy[k] = make([]byte, len(v))
+                copy(metadataCopy[k], v)
+        }</span>
+
+        <span class="cov0" title="0">return &amp;DirectoryManifest{
+                Version:      "1.0",
+                Entries:      entriesCopy,
+                CreatedAt:    now,
+                ModifiedAt:   now,
+                Metadata:     metadataCopy,
+                SnapshotInfo: snapshotInfo,
+        }</span>
+}
+
+// AddEntry adds a new entry to the directory manifest
+func (m *DirectoryManifest) AddEntry(entry DirectoryEntry) error <span class="cov8" title="1">{
+        if len(entry.EncryptedName) == 0 </span><span class="cov8" title="1">{
+                return errors.New("encrypted name cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if entry.CID == "" </span><span class="cov8" title="1">{
+                return errors.New("CID cannot be empty")
+        }</span>
+        <span class="cov8" title="1">if entry.Type != FileType &amp;&amp; entry.Type != DirectoryType </span><span class="cov0" title="0">{
+                return errors.New("invalid entry type")
+        }</span>
+
+        <span class="cov8" title="1">m.Entries = append(m.Entries, entry)
+        m.ModifiedAt = time.Now()
+        return nil</span>
+}
+
+// Marshal serializes the manifest using JSON and gzip compression
+func (m *DirectoryManifest) Marshal() ([]byte, error) <span class="cov8" title="1">{
+        // First, encode with JSON
+        data, err := json.Marshal(m)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+        }</span>
+
+        // Then compress with gzip
+        <span class="cov8" title="1">var buf bytes.Buffer
+        gw := gzip.NewWriter(&amp;buf)
+
+        if _, err := gw.Write(data); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to compress manifest: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">if err := gw.Close(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return buf.Bytes(), nil</span>
+}
+
+// Unmarshal deserializes a manifest from JSON and gzip compressed data
+func UnmarshalDirectoryManifest(data []byte) (*DirectoryManifest, error) <span class="cov8" title="1">{
+        // First, decompress
+        gr, err := gzip.NewReader(bytes.NewReader(data))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer gr.Close()
+
+        var decompressed bytes.Buffer
+        if _, err := decompressed.ReadFrom(gr); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to decompress manifest: %w", err)
+        }</span>
+
+        // Then decode JSON
+        <span class="cov8" title="1">var manifest DirectoryManifest
+        if err := json.Unmarshal(decompressed.Bytes(), &amp;manifest); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;manifest, nil</span>
+}
+
+// Validate checks if the manifest is valid
+func (m *DirectoryManifest) Validate() error <span class="cov8" title="1">{
+        if m.Version == "" </span><span class="cov8" title="1">{
+                return errors.New("manifest version is required")
+        }</span>
+
+        // Check each entry
+        <span class="cov8" title="1">for i, entry := range m.Entries </span><span class="cov8" title="1">{
+                if len(entry.EncryptedName) == 0 </span><span class="cov0" title="0">{
+                        return fmt.Errorf("entry %d: encrypted name cannot be empty", i)
+                }</span>
+                <span class="cov8" title="1">if entry.CID == "" </span><span class="cov0" title="0">{
+                        return fmt.Errorf("entry %d: CID cannot be empty", i)
+                }</span>
+                <span class="cov8" title="1">if entry.Type != FileType &amp;&amp; entry.Type != DirectoryType </span><span class="cov8" title="1">{
+                        return fmt.Errorf("entry %d: invalid entry type", i)
+                }</span>
+                <span class="cov8" title="1">if entry.Type == FileType &amp;&amp; entry.Size &lt; 0 </span><span class="cov8" title="1">{
+                        return fmt.Errorf("entry %d: file size cannot be negative", i)
+                }</span>
+                <span class="cov8" title="1">if entry.Type == DirectoryType &amp;&amp; entry.Size != 0 </span><span class="cov8" title="1">{
+                        return fmt.Errorf("entry %d: directory size must be 0", i)
+                }</span>
+        }
+
+        // Validate snapshot info if present
+        <span class="cov8" title="1">if m.SnapshotInfo != nil </span><span class="cov0" title="0">{
+                if m.SnapshotInfo.IsSnapshot </span><span class="cov0" title="0">{
+                        if m.SnapshotInfo.OriginalCID == "" </span><span class="cov0" title="0">{
+                                return errors.New("snapshot must have original CID")
+                        }</span>
+                        <span class="cov0" title="0">if m.SnapshotInfo.SnapshotName == "" </span><span class="cov0" title="0">{
+                                return errors.New("snapshot must have a name")
+                        }</span>
+                        <span class="cov0" title="0">if m.SnapshotInfo.CreationTime.IsZero() </span><span class="cov0" title="0">{
+                                return errors.New("snapshot must have creation time")
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// GetEntryCount returns the number of entries in the directory
+func (m *DirectoryManifest) GetEntryCount() int <span class="cov8" title="1">{
+        return len(m.Entries)
+}</span>
+
+// IsEmpty returns true if the directory has no entries
+func (m *DirectoryManifest) IsEmpty() bool <span class="cov8" title="1">{
+        return len(m.Entries) == 0
+}</span>
+
+// IsSnapshot returns true if this manifest represents a snapshot
+func (m *DirectoryManifest) IsSnapshot() bool <span class="cov0" title="0">{
+        return m.SnapshotInfo != nil &amp;&amp; m.SnapshotInfo.IsSnapshot
+}</span>
+
+// GetSnapshotInfo returns the snapshot information, or nil if not a snapshot
+func (m *DirectoryManifest) GetSnapshotInfo() *SnapshotInfo <span class="cov0" title="0">{
+        return m.SnapshotInfo
+}</span>
+
+// EncryptManifest encrypts the entire manifest data
+func EncryptManifest(manifest *DirectoryManifest, key *crypto.EncryptionKey) ([]byte, error) <span class="cov8" title="1">{
+        // First validate the manifest
+        if err := manifest.Validate(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid manifest: %w", err)
+        }</span>
+
+        // Marshal the manifest
+        <span class="cov8" title="1">data, err := manifest.Marshal()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to marshal manifest: %w", err)
+        }</span>
+
+        // Encrypt the marshaled data
+        <span class="cov8" title="1">encrypted, err := crypto.Encrypt(data, key)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to encrypt manifest: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return encrypted, nil</span>
+}
+
+// DecryptManifest decrypts and unmarshals a directory manifest
+func DecryptManifest(encryptedData []byte, key *crypto.EncryptionKey) (*DirectoryManifest, error) <span class="cov8" title="1">{
+        // Decrypt the data
+        decrypted, err := crypto.Decrypt(encryptedData, key)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to decrypt manifest: %w", err)
+        }</span>
+
+        // Unmarshal the manifest
+        <span class="cov8" title="1">manifest, err := UnmarshalDirectoryManifest(decrypted)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
+        }</span>
+
+        // Validate the manifest
+        <span class="cov8" title="1">if err := manifest.Validate(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid manifest after decryption: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return manifest, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package descriptors
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+
+        "github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+        "github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
+        "github.com/TheEntropyCollective/noisefs/pkg/storage"
+)
+
+// EncryptedDescriptor represents an encrypted descriptor stored in IPFS
+type EncryptedDescriptor struct {
+        Version     string `json:"version"`
+        Salt        []byte `json:"salt"`
+        Ciphertext  []byte `json:"ciphertext"`
+        IsEncrypted bool   `json:"is_encrypted"`
+}
+
+// PasswordProvider is a function that provides the password when needed
+// The returned password should be cleared from memory after use
+//
+// Example of secure usage:
+//
+//        provider := func() (string, error) {
+//            // Prompt user for password (e.g., from terminal, secure dialog, etc.)
+//            password := getPasswordFromUser()
+//            return password, nil
+//        }
+//        store, err := NewEncryptedStore(ipfsClient, provider)
+type PasswordProvider func() (string, error)
+
+// EncryptedStore handles encrypted descriptor storage and retrieval
+type EncryptedStore struct {
+        storageManager   *storage.Manager
+        passwordProvider PasswordProvider
+}
+
+// NewEncryptedStore creates a new encrypted descriptor store
+func NewEncryptedStore(storageManager *storage.Manager, passwordProvider PasswordProvider) (*EncryptedStore, error) <span class="cov0" title="0">{
+        if storageManager == nil </span><span class="cov0" title="0">{
+                return nil, errors.New("storage manager is required")
+        }</span>
+
+        <span class="cov0" title="0">return &amp;EncryptedStore{
+                storageManager:   storageManager,
+                passwordProvider: passwordProvider,
+        }, nil</span>
+}
+
+// NewEncryptedStoreWithPassword creates a new encrypted descriptor store with a static password
+// WARNING: This is a convenience function. For better security, use NewEncryptedStore with a custom PasswordProvider
+func NewEncryptedStoreWithPassword(storageManager *storage.Manager, password string) (*EncryptedStore, error) <span class="cov0" title="0">{
+        // Create a copy of the password to avoid external modifications
+        passwordCopy := password
+
+        // Create a password provider that returns the password
+        provider := func() (string, error) </span><span class="cov0" title="0">{
+                if passwordCopy == "" </span><span class="cov0" title="0">{
+                        return "", nil
+                }</span>
+                <span class="cov0" title="0">return passwordCopy, nil</span>
+        }
+
+        <span class="cov0" title="0">return NewEncryptedStore(storageManager, provider)</span>
+}
+
+// Save stores a descriptor in IPFS with encryption
+func (s *EncryptedStore) Save(descriptor *Descriptor) (string, error) <span class="cov0" title="0">{
+        if descriptor == nil </span><span class="cov0" title="0">{
+                return "", errors.New("descriptor cannot be nil")
+        }</span>
+
+        <span class="cov0" title="0">var data []byte
+        var err error
+
+        // Get password from provider
+        password, err := s.passwordProvider()
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to get password: %w", err)
+        }</span>
+
+        // Convert password to byte slice for SecureZero
+        <span class="cov0" title="0">passwordBytes := []byte(password)
+        defer crypto.SecureZero(passwordBytes)
+
+        if password != "" </span><span class="cov0" title="0">{
+                // Encrypt the descriptor
+                data, err = s.encryptDescriptor(descriptor, password)
+                if err != nil </span><span class="cov0" title="0">{
+                        return "", fmt.Errorf("failed to encrypt descriptor: %w", err)
+                }</span>
+        } else<span class="cov0" title="0"> {
+                // Store unencrypted (for public content)
+                plainDescriptor := &amp;EncryptedDescriptor{
+                        Version:     "3.0", // New version for encrypted descriptor format
+                        Salt:        nil,
+                        Ciphertext:  nil,
+                        IsEncrypted: false,
+                }
+
+                // Serialize original descriptor and embed it
+                origData, err := descriptor.ToJSON()
+                if err != nil </span><span class="cov0" title="0">{
+                        return "", fmt.Errorf("failed to serialize descriptor: %w", err)
+                }</span>
+                <span class="cov0" title="0">plainDescriptor.Ciphertext = origData
+
+                data, err = json.MarshalIndent(plainDescriptor, "", "  ")
+                if err != nil </span><span class="cov0" title="0">{
+                        return "", fmt.Errorf("failed to serialize plain descriptor: %w", err)
+                }</span>
+        }
+
+        // Store in storage manager
+        <span class="cov0" title="0">block, err := blocks.NewBlock(data)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to create block: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">address, err := s.storageManager.Put(context.Background(), block)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to store encrypted descriptor: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">cid := address.ID
+
+        return cid, nil</span>
+}
+
+// Load retrieves and decrypts a descriptor from IPFS by its CID
+func (s *EncryptedStore) Load(cid string) (*Descriptor, error) <span class="cov0" title="0">{
+        if cid == "" </span><span class="cov0" title="0">{
+                return nil, errors.New("CID cannot be empty")
+        }</span>
+
+        // Retrieve from storage manager
+        <span class="cov0" title="0">address := &amp;storage.BlockAddress{ID: cid}
+        block, err := s.storageManager.Get(context.Background(), address)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to retrieve descriptor: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">data := block.Data
+
+        // Try to parse as encrypted descriptor first
+        var encDesc EncryptedDescriptor
+        if err := json.Unmarshal(data, &amp;encDesc); err == nil </span><span class="cov0" title="0">{
+                // This is a new format encrypted descriptor
+                if encDesc.Version == "3.0" </span><span class="cov0" title="0">{
+                        if encDesc.IsEncrypted </span><span class="cov0" title="0">{
+                                // Decrypt the descriptor
+                                return s.decryptDescriptor(&amp;encDesc)
+                        }</span> else<span class="cov0" title="0"> {
+                                // Unencrypted descriptor in new format
+                                return FromJSON(encDesc.Ciphertext)
+                        }</span>
+                }
+        }
+
+        // Fallback: try to parse as unencrypted descriptor
+        <span class="cov0" title="0">descriptor, err := FromJSON(data)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to parse descriptor (tried both encrypted and unencrypted formats): %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return descriptor, nil</span>
+}
+
+// SaveUnencrypted stores a descriptor without encryption (for public content)
+func (s *EncryptedStore) SaveUnencrypted(descriptor *Descriptor) (string, error) <span class="cov0" title="0">{
+        // Temporarily use a password provider that returns empty password
+        oldProvider := s.passwordProvider
+        s.passwordProvider = func() (string, error) </span><span class="cov0" title="0">{ return "", nil }</span>
+        <span class="cov0" title="0">defer func() </span><span class="cov0" title="0">{ s.passwordProvider = oldProvider }</span>()
+
+        <span class="cov0" title="0">return s.Save(descriptor)</span>
+}
+
+// encryptDescriptor encrypts a descriptor
+func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor, password string) ([]byte, error) <span class="cov0" title="0">{
+        // Generate encryption key from password
+        encKey, err := crypto.GenerateKey(password)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate encryption key: %w", err)
+        }</span>
+
+        // Serialize descriptor to JSON
+        <span class="cov0" title="0">plaintext, err := descriptor.ToJSON()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to serialize descriptor: %w", err)
+        }</span>
+
+        // Encrypt the descriptor
+        <span class="cov0" title="0">ciphertext, err := crypto.Encrypt(plaintext, encKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to encrypt descriptor: %w", err)
+        }</span>
+
+        // Create encrypted descriptor wrapper
+        <span class="cov0" title="0">encDesc := &amp;EncryptedDescriptor{
+                Version:     "3.0",
+                Salt:        encKey.Salt,
+                Ciphertext:  ciphertext,
+                IsEncrypted: true,
+        }
+
+        // Serialize encrypted descriptor
+        data, err := json.MarshalIndent(encDesc, "", "  ")
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to serialize encrypted descriptor: %w", err)
+        }</span>
+
+        // Clear sensitive data
+        <span class="cov0" title="0">crypto.SecureZero(encKey.Key)
+        crypto.SecureZero(plaintext)
+
+        return data, nil</span>
+}
+
+// decryptDescriptor decrypts an encrypted descriptor
+func (s *EncryptedStore) decryptDescriptor(encDesc *EncryptedDescriptor) (*Descriptor, error) <span class="cov0" title="0">{
+        // Get password from provider
+        password, err := s.passwordProvider()
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get password: %w", err)
+        }</span>
+
+        // Convert password to byte slice for SecureZero
+        <span class="cov0" title="0">passwordBytes := []byte(password)
+        defer crypto.SecureZero(passwordBytes)
+
+        if password == "" </span><span class="cov0" title="0">{
+                return nil, errors.New("password required to decrypt descriptor")
+        }</span>
+
+        // Derive encryption key from password and salt
+        <span class="cov0" title="0">encKey, err := crypto.DeriveKey(password, encDesc.Salt)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to derive encryption key: %w", err)
+        }</span>
+
+        // Decrypt the descriptor
+        <span class="cov0" title="0">plaintext, err := crypto.Decrypt(encDesc.Ciphertext, encKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to decrypt descriptor (wrong password?): %w", err)
+        }</span>
+
+        // Parse decrypted descriptor
+        <span class="cov0" title="0">descriptor, err := FromJSON(plaintext)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to parse decrypted descriptor: %w", err)
+        }</span>
+
+        // Clear sensitive data
+        <span class="cov0" title="0">crypto.SecureZero(encKey.Key)
+        crypto.SecureZero(plaintext)
+
+        return descriptor, nil</span>
+}
+
+// IsEncrypted checks if a descriptor CID points to an encrypted descriptor
+func (s *EncryptedStore) IsEncrypted(cid string) (bool, error) <span class="cov0" title="0">{
+        if cid == "" </span><span class="cov0" title="0">{
+                return false, errors.New("CID cannot be empty")
+        }</span>
+
+        // Retrieve from storage manager
+        <span class="cov0" title="0">address := &amp;storage.BlockAddress{ID: cid}
+        block, err := s.storageManager.Get(context.Background(), address)
+        if err != nil </span><span class="cov0" title="0">{
+                return false, fmt.Errorf("failed to retrieve descriptor: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">data := block.Data
+
+        // Try to parse as encrypted descriptor
+        var encDesc EncryptedDescriptor
+        if err := json.Unmarshal(data, &amp;encDesc); err == nil </span><span class="cov0" title="0">{
+                if encDesc.Version == "3.0" </span><span class="cov0" title="0">{
+                        return encDesc.IsEncrypted, nil
+                }</span>
+        }
+
+        // Unencrypted format
+        <span class="cov0" title="0">return false, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package descriptors
+
+import (
+        "context"
+        "errors"
+        "fmt"
+
+        "github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+        "github.com/TheEntropyCollective/noisefs/pkg/storage"
+)
+
+// Store handles descriptor storage and retrieval
+type Store struct {
+        storageManager *storage.Manager
+}
+
+// NewStore creates a new descriptor store using storage manager
+// This function is deprecated, use NewStoreWithManager instead
+func NewStore(storageManager *storage.Manager) (*Store, error) <span class="cov8" title="1">{
+        return NewStoreWithManager(storageManager)
+}</span>
+
+// NewStoreWithManager creates a new descriptor store with storage manager
+func NewStoreWithManager(storageManager *storage.Manager) (*Store, error) <span class="cov8" title="1">{
+        if storageManager == nil </span><span class="cov8" title="1">{
+                return nil, errors.New("storage manager is required")
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Store{
+                storageManager: storageManager,
+        }, nil</span>
+}
+
+// Save stores a descriptor in IPFS and returns its CID
+func (s *Store) Save(descriptor *Descriptor) (string, error) <span class="cov8" title="1">{
+        if descriptor == nil </span><span class="cov8" title="1">{
+                return "", errors.New("descriptor cannot be nil")
+        }</span>
+
+        // Serialize descriptor to JSON
+        <span class="cov8" title="1">data, err := descriptor.ToJSON()
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("failed to serialize descriptor: %w", err)
+        }</span>
+
+        // Store in storage manager
+        <span class="cov8" title="1">block, err := blocks.NewBlock(data)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to create block: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">address, err := s.storageManager.Put(context.Background(), block)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("failed to store descriptor: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return address.ID, nil</span>
+}
+
+// Load retrieves a descriptor from IPFS by its CID
+func (s *Store) Load(cid string) (*Descriptor, error) <span class="cov8" title="1">{
+        if cid == "" </span><span class="cov8" title="1">{
+                return nil, errors.New("CID cannot be empty")
+        }</span>
+
+        // Retrieve from storage manager
+        <span class="cov8" title="1">address := &amp;storage.BlockAddress{ID: cid}
+        block, err := s.storageManager.Get(context.Background(), address)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to retrieve descriptor: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">data := block.Data
+
+        // Deserialize descriptor
+        descriptor, err := FromJSON(data)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to deserialize descriptor: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return descriptor, nil</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

@@ -1,3 +1,4 @@
+//go:build fuse
 // +build fuse
 
 package fuse
@@ -11,11 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // BenchmarkDirectoryOperations benchmarks various directory operations
@@ -26,10 +28,10 @@ func BenchmarkDirectoryOperations(b *testing.B) {
 	defer storageManager.Stop(context.Background())
 
 	// Create test directories of various sizes
-	smallDirCID := createBenchmarkDirectory(b, storageManager, 10)      // 10 files
-	mediumDirCID := createBenchmarkDirectory(b, storageManager, 100)    // 100 files
-	largeDirCID := createBenchmarkDirectory(b, storageManager, 1000)    // 1000 files
-	xlargeDirCID := createBenchmarkDirectory(b, storageManager, 10000)  // 10000 files
+	smallDirCID := createBenchmarkDirectory(b, storageManager, 10)     // 10 files
+	mediumDirCID := createBenchmarkDirectory(b, storageManager, 100)   // 100 files
+	largeDirCID := createBenchmarkDirectory(b, storageManager, 1000)   // 1000 files
+	xlargeDirCID := createBenchmarkDirectory(b, storageManager, 10000) // 10000 files
 
 	b.Run("ListSmallDirectory", func(b *testing.B) {
 		benchmarkDirectoryListing(b, mountDir, storageManager, client, smallDirCID, 10)
@@ -187,7 +189,7 @@ func benchmarkRandomFileAccess(b *testing.B, mountDir string, storageManager *st
 		fileNum := i % fileCount
 		filename := fmt.Sprintf("file_%04d.txt", fileNum)
 		path := filepath.Join(dirPath, filename)
-		
+
 		info, err := os.Stat(path)
 		if err != nil {
 			b.Fatalf("Failed to stat %s: %v", filename, err)
@@ -224,7 +226,7 @@ func benchmarkSequentialFileAccess(b *testing.B, mountDir string, storageManager
 		// Access files sequentially
 		filename := fmt.Sprintf("file_%04d.txt", fileIndex)
 		path := filepath.Join(dirPath, filename)
-		
+
 		_, err := os.Stat(path)
 		if err != nil {
 			b.Fatalf("Failed to stat %s: %v", filename, err)
@@ -294,7 +296,7 @@ func benchmarkDirectoryTraversal(b *testing.B, mountDir string, storageManager *
 	for i := 0; i < b.N; i++ {
 		fileCount := 0
 		dirCount := 0
-		
+
 		filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -314,7 +316,7 @@ func benchmarkDirectoryTraversal(b *testing.B, mountDir string, storageManager *
 }
 
 func benchmarkCachePut(b *testing.B, storageManager *storage.Manager, cacheSize int) {
-	config := DirectoryCacheConfig{
+	config := &DirectoryCacheConfig{
 		MaxSize: cacheSize,
 		TTL:     time.Hour,
 	}
@@ -327,7 +329,7 @@ func benchmarkCachePut(b *testing.B, storageManager *storage.Manager, cacheSize 
 	// Create test manifests
 	manifests := make([]*descriptors.DirectoryManifest, b.N)
 	for i := 0; i < b.N; i++ {
-		manifests[i] = createTestManifest(i%100 + 1)
+		manifests[i] = createTestManifest(fmt.Sprintf("bench%d", i), i%100+1)
 	}
 
 	b.ResetTimer()
@@ -335,12 +337,12 @@ func benchmarkCachePut(b *testing.B, storageManager *storage.Manager, cacheSize 
 
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("QmBench%d", i)
-		cache.Put(cid, manifests[i])
+		cache.Put(cid, manifests[i], cid)
 	}
 }
 
 func benchmarkCacheGet(b *testing.B, storageManager *storage.Manager, cacheSize int) {
-	config := DirectoryCacheConfig{
+	config := &DirectoryCacheConfig{
 		MaxSize: cacheSize,
 		TTL:     time.Hour,
 	}
@@ -353,7 +355,7 @@ func benchmarkCacheGet(b *testing.B, storageManager *storage.Manager, cacheSize 
 	// Pre-populate cache
 	for i := 0; i < cacheSize; i++ {
 		cid := fmt.Sprintf("QmBench%d", i)
-		cache.Put(cid, createTestManifest(10))
+		cache.Put(cid, createTestManifest("bench", 10), cid)
 	}
 
 	b.ResetTimer()
@@ -362,7 +364,7 @@ func benchmarkCacheGet(b *testing.B, storageManager *storage.Manager, cacheSize 
 	hits := 0
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("QmBench%d", i%cacheSize)
-		if manifest, found := cache.Get(cid); found && manifest != nil {
+		if manifest := cache.Get(cid); manifest != nil {
 			hits++
 		}
 	}
@@ -371,7 +373,7 @@ func benchmarkCacheGet(b *testing.B, storageManager *storage.Manager, cacheSize 
 }
 
 func benchmarkCacheEviction(b *testing.B, storageManager *storage.Manager, cacheSize int) {
-	config := DirectoryCacheConfig{
+	config := &DirectoryCacheConfig{
 		MaxSize: cacheSize,
 		TTL:     time.Hour,
 	}
@@ -387,12 +389,12 @@ func benchmarkCacheEviction(b *testing.B, storageManager *storage.Manager, cache
 	for i := 0; i < b.N; i++ {
 		// Keep adding beyond cache size to trigger eviction
 		cid := fmt.Sprintf("QmEvict%d", i)
-		cache.Put(cid, createTestManifest(10))
+		cache.Put(cid, createTestManifest("evict", 10), cid)
 	}
 }
 
 func benchmarkCacheConcurrency(b *testing.B, storageManager *storage.Manager) {
-	config := DirectoryCacheConfig{
+	config := &DirectoryCacheConfig{
 		MaxSize: 1000,
 		TTL:     time.Hour,
 	}
@@ -405,7 +407,7 @@ func benchmarkCacheConcurrency(b *testing.B, storageManager *storage.Manager) {
 	// Pre-populate
 	for i := 0; i < 100; i++ {
 		cid := fmt.Sprintf("QmConcurrent%d", i)
-		cache.Put(cid, createTestManifest(10))
+		cache.Put(cid, createTestManifest("concurrent", 10), cid)
 	}
 
 	b.ResetTimer()
@@ -420,7 +422,7 @@ func benchmarkCacheConcurrency(b *testing.B, storageManager *storage.Manager) {
 				if j%3 == 0 {
 					// Put operation
 					cid := fmt.Sprintf("QmConcurrent%d", j)
-					cache.Put(cid, createTestManifest(5))
+					cache.Put(cid, createTestManifest("concurrent", 5), cid)
 				} else {
 					// Get operation
 					cid := fmt.Sprintf("QmConcurrent%d", j%100)
@@ -454,13 +456,13 @@ func benchmarkSingleMount(b *testing.B, storageManager *storage.Manager) {
 		start := time.Now()
 		err := MountWithIndex(client, storageManager, opts, "")
 		duration := time.Since(start)
-		
+
 		if err != nil {
 			b.Fatalf("Mount failed: %v", err)
 		}
 
 		b.ReportMetric(duration.Seconds()*1000, "ms/mount")
-		
+
 		// Cleanup
 		Unmount(mountDir)
 	}
@@ -468,7 +470,7 @@ func benchmarkSingleMount(b *testing.B, storageManager *storage.Manager) {
 
 func benchmarkMultipleMount(b *testing.B, storageManager *storage.Manager) {
 	client, _ := createBenchmarkClient(storageManager)
-	
+
 	// Create multiple directories
 	dirCIDs := make([]string, 5)
 	for i := 0; i < 5; i++ {
@@ -500,21 +502,21 @@ func benchmarkMultipleMount(b *testing.B, storageManager *storage.Manager) {
 		start := time.Now()
 		err := MountWithIndex(client, storageManager, opts, "")
 		duration := time.Since(start)
-		
+
 		if err != nil {
 			b.Fatalf("Mount failed: %v", err)
 		}
 
 		b.ReportMetric(duration.Seconds()*1000, "ms/mount")
 		b.ReportMetric(float64(len(mounts)), "dirs/mount")
-		
+
 		Unmount(mountDir)
 	}
 }
 
 func benchmarkLargeDirectoryMount(b *testing.B, storageManager *storage.Manager) {
 	client, _ := createBenchmarkClient(storageManager)
-	
+
 	// Create a very large directory
 	largeDirCID := createBenchmarkDirectory(b, storageManager, 5000)
 
@@ -535,14 +537,14 @@ func benchmarkLargeDirectoryMount(b *testing.B, storageManager *storage.Manager)
 		start := time.Now()
 		err := MountWithIndex(client, storageManager, opts, "")
 		duration := time.Since(start)
-		
+
 		if err != nil {
 			b.Fatalf("Mount failed: %v", err)
 		}
 
 		b.ReportMetric(duration.Seconds()*1000, "ms/mount")
 		b.ReportMetric(5000, "files/dir")
-		
+
 		Unmount(mountDir)
 	}
 }
@@ -580,31 +582,35 @@ func createBenchmarkClient(storageManager *storage.Manager) (*noisefs.Client, er
 }
 
 func createBenchmarkDirectory(b *testing.B, storageManager *storage.Manager, fileCount int) string {
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: make([]descriptors.DirectoryEntry, fileCount),
-	}
+	manifest := descriptors.NewDirectoryManifest()
 
 	for i := 0; i < fileCount; i++ {
-		manifest.Entries[i] = descriptors.DirectoryEntry{
-			Name:          fmt.Sprintf("file_%04d.txt", i),
+		entry := descriptors.DirectoryEntry{
+			EncryptedName: []byte(fmt.Sprintf("file_%04d.txt", i)),
+			CID:           fmt.Sprintf("QmFile%d", i),
 			Type:          descriptors.FileType,
-			DescriptorCID: fmt.Sprintf("QmFile%d", i),
 			Size:          int64(i * 100),
+			ModifiedAt:    time.Now(),
 		}
+		manifest.AddEntry(entry)
 	}
 
-	data, err := manifest.Serialize(nil)
+	data, err := manifest.Marshal()
 	if err != nil {
 		b.Fatalf("Failed to serialize manifest: %v", err)
 	}
 
-	addr, err := storageManager.Put(context.Background(), data)
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		b.Fatalf("Failed to create block: %v", err)
+	}
+
+	addr, err := storageManager.Put(context.Background(), block)
 	if err != nil {
 		b.Fatalf("Failed to store manifest: %v", err)
 	}
 
-	return addr.CID
+	return addr.ID
 }
 
 func createNestedBenchmarkDirectory(b *testing.B, storageManager *storage.Manager, depth, filesPerLevel int) string {
@@ -619,58 +625,46 @@ func createNestedBenchmarkDirectory(b *testing.B, storageManager *storage.Manage
 	}
 
 	// Create parent with files and subdirs
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: make([]descriptors.DirectoryEntry, filesPerLevel+3),
-	}
+	manifest := descriptors.NewDirectoryManifest()
 
 	// Add files
 	for i := 0; i < filesPerLevel; i++ {
-		manifest.Entries[i] = descriptors.DirectoryEntry{
-			Name:          fmt.Sprintf("file_%d_%04d.txt", depth, i),
+		entry := descriptors.DirectoryEntry{
+			EncryptedName: []byte(fmt.Sprintf("file_%d_%04d.txt", depth, i)),
+			CID:           fmt.Sprintf("QmFile%d%d", depth, i),
 			Type:          descriptors.FileType,
-			DescriptorCID: fmt.Sprintf("QmFile%d%d", depth, i),
 			Size:          int64(i * 100),
+			ModifiedAt:    time.Now(),
 		}
+		manifest.AddEntry(entry)
 	}
 
 	// Add subdirectories
 	for i := 0; i < 3; i++ {
-		manifest.Entries[filesPerLevel+i] = descriptors.DirectoryEntry{
-			Name:                   fmt.Sprintf("subdir_%d", i),
-			Type:                   descriptors.DirectoryType,
-			DirectoryDescriptorCID: childCIDs[i],
-			Size:                   0,
+		entry := descriptors.DirectoryEntry{
+			EncryptedName: []byte(fmt.Sprintf("subdir_%d", i)),
+			CID:           childCIDs[i],
+			Type:          descriptors.DirectoryType,
+			Size:          0,
+			ModifiedAt:    time.Now(),
 		}
+		manifest.AddEntry(entry)
 	}
 
-	data, err := manifest.Serialize(nil)
+	data, err := manifest.Marshal()
 	if err != nil {
 		b.Fatalf("Failed to serialize manifest: %v", err)
 	}
 
-	addr, err := storageManager.Put(context.Background(), data)
+	block, err := blocks.NewBlock(data)
+	if err != nil {
+		b.Fatalf("Failed to create block: %v", err)
+	}
+
+	addr, err := storageManager.Put(context.Background(), block)
 	if err != nil {
 		b.Fatalf("Failed to store manifest: %v", err)
 	}
 
-	return addr.CID
-}
-
-func createTestManifest(fileCount int) *descriptors.DirectoryManifest {
-	manifest := &descriptors.DirectoryManifest{
-		Version: 1,
-		Entries: make([]descriptors.DirectoryEntry, fileCount),
-	}
-
-	for i := 0; i < fileCount; i++ {
-		manifest.Entries[i] = descriptors.DirectoryEntry{
-			Name:          fmt.Sprintf("test_%d.txt", i),
-			Type:          descriptors.FileType,
-			DescriptorCID: fmt.Sprintf("QmTest%d", i),
-			Size:          int64(i * 1024),
-		}
-	}
-
-	return manifest
+	return addr.ID
 }

@@ -1,17 +1,18 @@
+//go:build fuse
 // +build fuse
 
 package fuse
 
 import (
-	"strings"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"strings"
 )
 
 // VerifyPrivacyCompliance checks that extended attributes don't expose sensitive metadata
 func VerifyPrivacyCompliance(fs *NoiseFS, filename string) []string {
 	var violations []string
 	context := &fuse.Context{}
-	
+
 	// Test ListXAttr for privacy violations
 	attrs, status := fs.ListXAttr(filename, context)
 	if status == fuse.OK {
@@ -31,23 +32,23 @@ func VerifyPrivacyCompliance(fs *NoiseFS, filename string) []string {
 			}
 		}
 	}
-	
+
 	// Test specific sensitive attributes directly
 	sensitiveAttrs := []string{
 		"user.noisefs.descriptor_cid",
-		"user.noisefs.created_at", 
+		"user.noisefs.created_at",
 		"user.noisefs.modified_at",
 		"user.noisefs.file_size",
 		"user.noisefs.directory",
 	}
-	
+
 	for _, attr := range sensitiveAttrs {
 		data, status := fs.GetXAttr(filename, attr, context)
 		if status == fuse.OK && len(data) > 0 {
 			violations = append(violations, "sensitive attribute "+attr+" is accessible")
 		}
 	}
-	
+
 	return violations
 }
 

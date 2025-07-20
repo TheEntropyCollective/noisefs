@@ -1,11 +1,12 @@
+//go:build !fuse
 // +build !fuse
 
 package fuse
 
 import (
 	"errors"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
 // Stub implementations for when FUSE is not available
@@ -19,17 +20,17 @@ type DirectoryMount struct {
 
 // MountOptions contains options for mounting the filesystem
 type MountOptions struct {
-	MountPath   string
-	VolumeName  string
-	ReadOnly    bool
-	AllowOther  bool
-	Debug       bool
-	
+	MountPath  string
+	VolumeName string
+	ReadOnly   bool
+	AllowOther bool
+	Debug      bool
+
 	// Directory mounting options (stub versions)
-	DirectoryDescriptor string // Directory descriptor CID to mount
-	DirectoryKey       string // Encryption key for directory
-	Subdir             string // Subdirectory to mount
-	MultiDirs          []DirectoryMount // Multiple directories to mount
+	DirectoryDescriptor string           // Directory descriptor CID to mount
+	DirectoryKey        string           // Encryption key for directory
+	Subdir              string           // Subdirectory to mount
+	MultiDirs           []DirectoryMount // Multiple directories to mount
 }
 
 // MountInfo contains information about mounted filesystems
