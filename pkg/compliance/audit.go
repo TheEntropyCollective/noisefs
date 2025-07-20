@@ -480,21 +480,30 @@ func (system *ComplianceAuditSystem) generateDMCAAnalysis(entries []*DetailedAud
 		ComplianceIssues: make([]string, 0),
 	}
 	
+	// Process DMCA entries and collect metrics
+	requestorMetrics := system.processDMCAEntries(entries, analysis)
+	
+	// Calculate derived metrics
+	system.calculateDMCAMetrics(analysis)
+	
+	// Generate sorted requestor list
+	analysis.TopRequestors = system.generateSortedRequestorList(requestorMetrics)
+	
+	// Assess legal risk
+	analysis.LegalRiskAssessment = system.assessLegalRisk(analysis)
+	
+	return analysis
+}
+
+// processDMCAEntries processes audit entries to extract DMCA metrics
+func (system *ComplianceAuditSystem) processDMCAEntries(entries []*DetailedAuditEntry, analysis *DMCAAnalysis) map[string]*RequestorAnalysis {
 	requestorMetrics := make(map[string]*RequestorAnalysis)
 	
 	for _, entry := range entries {
 		switch entry.EventType {
 		case "dmca_takedown":
 			analysis.TotalTakedowns++
-			if requestorEmail, ok := entry.ActionDetails["requestor_email"].(string); ok {
-				if _, exists := requestorMetrics[requestorEmail]; !exists {
-					requestorMetrics[requestorEmail] = &RequestorAnalysis{
-						RequestorEmail: requestorEmail,
-					}
-				}
-				requestorMetrics[requestorEmail].TotalRequests++
-				requestorMetrics[requestorEmail].SuccessfulTakedowns++
-			}
+			system.processRequestorMetrics(entry, requestorMetrics)
 		case "dmca_counter_notice":
 			analysis.TotalCounterNotices++
 		case "dmca_reinstatement":
@@ -502,25 +511,45 @@ func (system *ComplianceAuditSystem) generateDMCAAnalysis(entries []*DetailedAud
 		}
 	}
 	
+	return requestorMetrics
+}
+
+// processRequestorMetrics updates requestor analytics for takedown events
+func (system *ComplianceAuditSystem) processRequestorMetrics(entry *DetailedAuditEntry, requestorMetrics map[string]*RequestorAnalysis) {
+	if requestorEmail, ok := entry.ActionDetails["requestor_email"].(string); ok {
+		if _, exists := requestorMetrics[requestorEmail]; !exists {
+			requestorMetrics[requestorEmail] = &RequestorAnalysis{
+				RequestorEmail: requestorEmail,
+			}
+		}
+		requestorMetrics[requestorEmail].TotalRequests++
+		requestorMetrics[requestorEmail].SuccessfulTakedowns++
+	}
+}
+
+// calculateDMCAMetrics calculates derived DMCA compliance metrics
+func (system *ComplianceAuditSystem) calculateDMCAMetrics(analysis *DMCAAnalysis) {
 	// Calculate counter-notice ratio
 	if analysis.TotalTakedowns > 0 {
 		analysis.CounterNoticeRatio = float64(analysis.TotalCounterNotices) / float64(analysis.TotalTakedowns)
 	}
+}
+
+// generateSortedRequestorList converts requestor metrics to sorted list
+func (system *ComplianceAuditSystem) generateSortedRequestorList(requestorMetrics map[string]*RequestorAnalysis) []RequestorAnalysis {
+	var requestors []RequestorAnalysis
 	
-	// Convert requestor metrics to sorted list
+	// Convert map to slice
 	for _, metrics := range requestorMetrics {
-		analysis.TopRequestors = append(analysis.TopRequestors, *metrics)
+		requestors = append(requestors, *metrics)
 	}
 	
-	// Sort by total requests
-	sort.Slice(analysis.TopRequestors, func(i, j int) bool {
-		return analysis.TopRequestors[i].TotalRequests > analysis.TopRequestors[j].TotalRequests
+	// Sort by total requests (descending)
+	sort.Slice(requestors, func(i, j int) bool {
+		return requestors[i].TotalRequests > requestors[j].TotalRequests
 	})
 	
-	// Assess legal risk
-	analysis.LegalRiskAssessment = system.assessLegalRisk(analysis)
-	
-	return analysis
+	return requestors
 }
 
 func (system *ComplianceAuditSystem) generateComplianceAssessment(entries []*DetailedAuditEntry) *ComplianceAssessment {
@@ -529,35 +558,52 @@ func (system *ComplianceAuditSystem) generateComplianceAssessment(entries []*Det
 		Strengths: make([]string, 0),
 	}
 	
-	// Calculate compliance scores
+	// Calculate all compliance scores
+	system.calculateAllComplianceScores(assessment, entries)
+	
+	// Determine risk level based on overall score
+	assessment.RiskLevel = system.determineRiskLevel(assessment.OverallScore)
+	
+	// Identify strengths and improvement areas
+	system.identifyComplianceStrengthsAndAreas(assessment)
+	
+	return assessment
+}
+
+// calculateAllComplianceScores calculates all compliance score metrics
+func (system *ComplianceAuditSystem) calculateAllComplianceScores(assessment *ComplianceAssessment, entries []*DetailedAuditEntry) {
 	assessment.OverallScore = system.calculateComplianceScore(entries)
 	assessment.DMCACompliance = system.calculateDMCAComplianceScore(entries)
 	assessment.ProcessingCompliance = system.calculateProcessingComplianceScore(entries)
 	assessment.AuditCompliance = system.calculateAuditComplianceScore(entries)
-	
-	// Determine risk level
-	if assessment.OverallScore >= 0.9 {
-		assessment.RiskLevel = "low"
-	} else if assessment.OverallScore >= 0.7 {
-		assessment.RiskLevel = "medium"
+}
+
+// determineRiskLevel determines compliance risk level based on overall score
+func (system *ComplianceAuditSystem) determineRiskLevel(overallScore float64) string {
+	if overallScore >= 0.9 {
+		return "low"
+	} else if overallScore >= 0.7 {
+		return "medium"
 	} else {
-		assessment.RiskLevel = "high"
+		return "high"
 	}
-	
-	// Identify strengths and improvement areas
+}
+
+// identifyComplianceStrengthsAndAreas identifies compliance strengths and improvement areas
+func (system *ComplianceAuditSystem) identifyComplianceStrengthsAndAreas(assessment *ComplianceAssessment) {
+	// DMCA compliance assessment
 	if assessment.DMCACompliance >= 0.9 {
 		assessment.Strengths = append(assessment.Strengths, "Strong DMCA compliance procedures")
 	} else {
 		assessment.Areas = append(assessment.Areas, "Improve DMCA processing efficiency")
 	}
 	
+	// Audit compliance assessment
 	if assessment.AuditCompliance >= 0.9 {
 		assessment.Strengths = append(assessment.Strengths, "Excellent audit trail maintenance")
 	} else {
 		assessment.Areas = append(assessment.Areas, "Enhance audit logging completeness")
 	}
-	
-	return assessment
 }
 
 func (system *ComplianceAuditSystem) generateRecommendations(entries []*DetailedAuditEntry) []string {
