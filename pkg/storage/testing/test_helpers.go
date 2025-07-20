@@ -64,8 +64,7 @@ func CreateTestStorageManagerWithBackends() *MockStorageManager {
 	
 	// Add multiple backends
 	manager.backends["ipfs"] = NewMockBackend("ipfs")
-	manager.backends["local"] = NewMockBackend("local")
-	manager.backends["filecoin"] = NewMockBackend("filecoin")
+	manager.backends["mock"] = NewMockBackend("mock")
 	
 	manager.defaultBackend = "ipfs"
 	return manager
@@ -104,9 +103,9 @@ func CreateTestNoiseClient() (*noisefs.Client, *storage.Manager, error) {
 	config := storage.DefaultConfig()
 	config.Backends = make(map[string]*storage.BackendConfig)
 	
-	// Configure to use local memory storage which works well for testing
+	// Configure to use mock storage which works well for testing
 	config.Backends["mock"] = &storage.BackendConfig{
-		Type: storage.BackendTypeLocal,
+		Type: storage.BackendTypeMock,
 		Connection: &storage.ConnectionConfig{
 			Endpoint: "memory://test",
 		},

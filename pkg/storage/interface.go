@@ -251,12 +251,6 @@ const (
 
 // Backend type constants
 const (
-	BackendTypeIPFS      = "ipfs"
-	BackendTypeFilecoin  = "filecoin"
-	BackendTypeArweave   = "arweave"
-	BackendTypeStorJ     = "storj"
-	BackendTypeLocal     = "local"
-	BackendTypeS3        = "s3"
-	BackendTypeGCS       = "gcs"
-	BackendTypeAzure     = "azure"
+	BackendTypeIPFS = "ipfs"
+	BackendTypeMock = "mock"
 )

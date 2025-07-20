@@ -400,8 +400,7 @@ func (bc *BackendConfig) Validate() error {
 
 	// Validate supported backend types
 	validTypes := map[string]bool{
-		"ipfs": true, "filecoin": true, "arweave": true, "storj": true,
-		"local": true, "s3": true, "gcs": true, "azure": true, "mock": true,
+		"ipfs": true, "mock": true,
 	}
 	if !validTypes[bc.Type] {
 		return NewConfigError(bc.Type, fmt.Sprintf("unsupported backend type '%s'", bc.Type), nil)
