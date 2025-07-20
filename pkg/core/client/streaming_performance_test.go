@@ -21,10 +21,10 @@ func BenchmarkStreamingUpload(b *testing.B) {
 
 	// Test with different file sizes
 	sizes := []int{
-		1024,         // 1KB
-		10 * 1024,    // 10KB  
-		100 * 1024,   // 100KB
-		1024 * 1024,  // 1MB
+		1024,             // 1KB
+		10 * 1024,        // 10KB
+		100 * 1024,       // 100KB
+		1024 * 1024,      // 1MB
 		10 * 1024 * 1024, // 10MB (largest for benchmark)
 	}
 
@@ -60,10 +60,10 @@ func BenchmarkStreamingDownload(b *testing.B) {
 
 	// Test with different file sizes
 	sizes := []int{
-		1024,         // 1KB
-		10 * 1024,    // 10KB  
-		100 * 1024,   // 100KB
-		1024 * 1024,  // 1MB
+		1024,             // 1KB
+		10 * 1024,        // 10KB
+		100 * 1024,       // 100KB
+		1024 * 1024,      // 1MB
 		10 * 1024 * 1024, // 10MB
 	}
 
@@ -109,8 +109,8 @@ func TestStreamingMemoryUsage(t *testing.T) {
 
 	// Test with progressively larger files to ensure memory usage doesn't grow
 	sizes := []int{
-		100 * 1024,   // 100KB
-		1024 * 1024,  // 1MB
+		100 * 1024,       // 100KB
+		1024 * 1024,      // 1MB
 		5 * 1024 * 1024,  // 5MB
 		10 * 1024 * 1024, // 10MB
 	}
@@ -231,7 +231,7 @@ func TestStreamingProgressReporting(t *testing.T) {
 
 	t.Run("UploadProgress", func(t *testing.T) {
 		reader := bytes.NewReader(testData)
-		
+
 		var progressCalls []ProgressReport
 		progressCallback := func(operation string, bytesProcessed int64, blocksProcessed int) {
 			progressCalls = append(progressCalls, ProgressReport{
@@ -284,18 +284,18 @@ func (m *memoryTrackingReader) Read(p []byte) (n int, err error) {
 
 // slowReader simulates a slow data source for cancellation testing
 type slowReader struct {
-	data     []byte
-	pos      int
-	delay    time.Duration
+	data  []byte
+	pos   int
+	delay time.Duration
 }
 
 func (s *slowReader) Read(p []byte) (n int, err error) {
 	time.Sleep(s.delay) // Simulate slow I/O
-	
+
 	if s.pos >= len(s.data) {
 		return 0, io.EOF
 	}
-	
+
 	n = copy(p, s.data[s.pos:])
 	s.pos += n
 	return n, nil
@@ -350,7 +350,7 @@ func TestLargeFilePerformance(t *testing.T) {
 			// Upload with timing
 			uploadStart := time.Now()
 			reader := bytes.NewReader(testData)
-			
+
 			progressCallback := func(operation string, bytesProcessed int64, blocksProcessed int) {
 				progressReports++
 			}
@@ -384,7 +384,7 @@ func TestLargeFilePerformance(t *testing.T) {
 
 			t.Logf("Performance for %s:", testSize.name)
 			t.Logf("  Upload: %v (%.2f MB/s)", uploadDuration, uploadMBps)
-			t.Logf("  Download: %v (%.2f MB/s)", downloadDuration, downloadMBps) 
+			t.Logf("  Download: %v (%.2f MB/s)", downloadDuration, downloadMBps)
 			t.Logf("  Progress reports: %d", progressReports)
 			t.Logf("  Expected blocks: %d", (testSize.size+blocks.DefaultBlockSize-1)/blocks.DefaultBlockSize)
 		})

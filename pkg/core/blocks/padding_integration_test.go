@@ -74,9 +74,9 @@ func TestPaddingIntegration(t *testing.T) {
 			// Verify that the original content is preserved (trim to original size)
 			assembledData := result.Bytes()
 			originalData := []byte(tc.content)
-			
+
 			if len(assembledData) < len(originalData) {
-				t.Fatalf("Assembled data is shorter than original: got %d, expected at least %d", 
+				t.Fatalf("Assembled data is shorter than original: got %d, expected at least %d",
 					len(assembledData), len(originalData))
 			}
 
@@ -100,10 +100,10 @@ func TestPaddingIntegration(t *testing.T) {
 			// Calculate storage efficiency
 			originalSize := len(tc.content)
 			paddedSize := len(blocks) * tc.blockSize
-			
+
 			if originalSize > 0 {
 				overhead := float64(paddedSize-originalSize) / float64(originalSize) * 100
-				t.Logf("Storage efficiency: %d bytes → %d bytes (%.1f%% overhead)", 
+				t.Logf("Storage efficiency: %d bytes → %d bytes (%.1f%% overhead)",
 					originalSize, paddedSize, overhead)
 			}
 		})
@@ -175,7 +175,7 @@ func TestPaddingWithVariousBlockSizes(t *testing.T) {
 			// Check original content is preserved
 			assembledData := result.Bytes()
 			originalData := []byte(content)
-			
+
 			if !bytes.Equal(assembledData[:len(originalData)], originalData) {
 				t.Errorf("Data integrity check failed for block size %d", blockSize)
 			}

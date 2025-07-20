@@ -3,7 +3,7 @@ package noisefs
 import (
 	"sync"
 	"time"
-	
+
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
@@ -18,10 +18,10 @@ type Metrics struct {
 	TotalDownloads        int64 // Total files downloaded
 	BytesUploadedOriginal int64 // Original bytes uploaded
 	BytesStoredIPFS       int64 // Actual bytes stored in IPFS
-	
+
 	// Health monitoring (Week 1 implementation)
-	healthMonitor         *cache.CacheHealthMonitor
-	startTime             time.Time
+	healthMonitor *cache.CacheHealthMonitor
+	startTime     time.Time
 }
 
 // NewMetrics creates a new metrics tracker
@@ -80,13 +80,13 @@ func (m *Metrics) RecordDownload() {
 func (m *Metrics) GetStats() MetricsSnapshot {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	// Get health scores if monitor is available
 	var healthScore *cache.HealthScore
 	if m.healthMonitor != nil {
 		healthScore = m.healthMonitor.CalculateHealthScore()
 	}
-	
+
 	snapshot := MetricsSnapshot{
 		BlocksReused:          m.BlocksReused,
 		BlocksGenerated:       m.BlocksGenerated,
@@ -100,7 +100,7 @@ func (m *Metrics) GetStats() MetricsSnapshot {
 		CacheHitRate:          m.calculateCacheHitRate(),
 		StorageEfficiency:     m.calculateStorageEfficiency(),
 	}
-	
+
 	// Add health metrics if available
 	if healthScore != nil {
 		snapshot.CacheHealthScore = healthScore.Overall
@@ -111,7 +111,7 @@ func (m *Metrics) GetStats() MetricsSnapshot {
 		snapshot.CoordinationHealth = healthScore.CoordinationHealth
 		snapshot.AvailabilityHealth = healthScore.AvailabilityHealth
 	}
-	
+
 	return snapshot
 }
 
@@ -128,15 +128,15 @@ type MetricsSnapshot struct {
 	BlockReuseRate        float64 `json:"block_reuse_rate"`
 	CacheHitRate          float64 `json:"cache_hit_rate"`
 	StorageEfficiency     float64 `json:"storage_efficiency"`
-	
+
 	// Cache Health Metrics (Week 1 implementation)
-	CacheHealthScore      float64 `json:"cache_health_score"`      // Overall health 0-1
-	RandomizerDiversity   float64 `json:"randomizer_diversity"`    // Entropy measure 0-1
-	AverageBlockAge       float64 `json:"average_block_age"`       // Hours since last access
-	MemoryPressure        float64 `json:"memory_pressure"`         // Memory usage 0-1
-	EvictionRate          float64 `json:"eviction_rate"`           // Evictions per hour
-	CoordinationHealth    float64 `json:"coordination_health"`     // Network coordination 0-1
-	AvailabilityHealth    float64 `json:"availability_health"`     // Randomizer availability 0-1
+	CacheHealthScore    float64 `json:"cache_health_score"`   // Overall health 0-1
+	RandomizerDiversity float64 `json:"randomizer_diversity"` // Entropy measure 0-1
+	AverageBlockAge     float64 `json:"average_block_age"`    // Hours since last access
+	MemoryPressure      float64 `json:"memory_pressure"`      // Memory usage 0-1
+	EvictionRate        float64 `json:"eviction_rate"`        // Evictions per hour
+	CoordinationHealth  float64 `json:"coordination_health"`  // Network coordination 0-1
+	AvailabilityHealth  float64 `json:"availability_health"`  // Randomizer availability 0-1
 }
 
 // calculateBlockReuseRate returns the percentage of blocks that were reused
@@ -170,7 +170,7 @@ func (m *Metrics) calculateStorageEfficiency() float64 {
 func (m *Metrics) SetHealthMonitorComponents(ce *cache.CoordinationEngine, ht *cache.BlockHealthTracker) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.healthMonitor != nil {
 		if ce != nil {
 			m.healthMonitor.SetCoordinationEngine(ce)
@@ -185,7 +185,7 @@ func (m *Metrics) SetHealthMonitorComponents(ce *cache.CoordinationEngine, ht *c
 func (m *Metrics) SetAvailabilityIntegration(ai *cache.AvailabilityIntegration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.healthMonitor != nil && ai != nil {
 		m.healthMonitor.SetAvailabilityIntegration(ai)
 	}
@@ -195,7 +195,7 @@ func (m *Metrics) SetAvailabilityIntegration(ai *cache.AvailabilityIntegration) 
 func (m *Metrics) UpdateHealthMetrics(metrics *cache.HealthMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.healthMonitor != nil {
 		m.healthMonitor.UpdateMetrics(metrics)
 	}
@@ -205,7 +205,7 @@ func (m *Metrics) UpdateHealthMetrics(metrics *cache.HealthMetrics) {
 func (m *Metrics) RecordEviction() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.healthMonitor != nil {
 		m.healthMonitor.RecordEviction()
 	}
@@ -215,7 +215,7 @@ func (m *Metrics) RecordEviction() {
 func (m *Metrics) GetHealthSummary() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	if m.healthMonitor != nil {
 		return m.healthMonitor.GetHealthSummary()
 	}

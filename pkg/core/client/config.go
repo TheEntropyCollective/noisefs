@@ -10,11 +10,11 @@ import (
 
 // ClientConfig holds configuration for NoiseFS client
 type ClientConfig struct {
-	EnableAdaptiveCache   bool
-	PreferRandomizerPeers bool
-	AdaptiveCacheConfig   *cache.AdaptiveCacheConfig
+	EnableAdaptiveCache     bool
+	PreferRandomizerPeers   bool
+	AdaptiveCacheConfig     *cache.AdaptiveCacheConfig
 	DiversityControlsConfig *cache.DiversityControlsConfig
-	AvailabilityConfig    *cache.AvailabilityConfig
+	AvailabilityConfig      *cache.AvailabilityConfig
 }
 
 // NewClient creates a new NoiseFS client using storage manager
@@ -25,8 +25,8 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 		AdaptiveCacheConfig: &cache.AdaptiveCacheConfig{
 			MaxSize:            100 * 1024 * 1024, // 100MB
 			MaxItems:           10000,
-			HotTierRatio:       0.1,  // 10% hot tier
-			WarmTierRatio:      0.3,  // 30% warm tier
+			HotTierRatio:       0.1, // 10% hot tier
+			WarmTierRatio:      0.3, // 30% warm tier
 			PredictionWindow:   time.Hour * 24,
 			EvictionBatchSize:  10,
 			ExchangeInterval:   time.Minute * 15,
@@ -35,7 +35,7 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 		DiversityControlsConfig: cache.DefaultDiversityControlsConfig(),
 		AvailabilityConfig:      cache.DefaultAvailabilityConfig(),
 	}
-	
+
 	return NewClientWithConfig(storageManager, blockCache, config)
 }
 
@@ -54,11 +54,11 @@ func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache
 	if storageManager == nil {
 		return nil, errors.New("storage manager is required")
 	}
-	
+
 	if blockCache == nil {
 		return nil, errors.New("cache is required")
 	}
-	
+
 	client := &Client{
 		storageManager:        storageManager,
 		cache:                 blockCache,
@@ -66,28 +66,28 @@ func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache
 		preferRandomizerPeers: config.PreferRandomizerPeers,
 		adaptiveCacheEnabled:  config.EnableAdaptiveCache,
 	}
-	
+
 	// Initialize adaptive cache if enabled
 	if config.EnableAdaptiveCache && config.AdaptiveCacheConfig != nil {
 		adaptiveCache := cache.NewAdaptiveCache(config.AdaptiveCacheConfig)
 		client.adaptiveCache = adaptiveCache
 	}
-	
+
 	// Initialize diversity controls if configured
 	if config.DiversityControlsConfig != nil {
 		diversityControls := cache.NewRandomizerDiversityControls(config.DiversityControlsConfig)
 		client.diversityControls = diversityControls
 	}
-	
+
 	// Initialize availability integration if configured
 	if config.AvailabilityConfig != nil {
 		availabilityIntegration := cache.NewAvailabilityIntegration(storageManager, config.AvailabilityConfig)
 		client.availabilityIntegration = availabilityIntegration
-		
+
 		// Set availability integration in metrics for health monitoring
 		client.metrics.SetAvailabilityIntegration(availabilityIntegration)
 	}
-	
+
 	return client, nil
 }
 

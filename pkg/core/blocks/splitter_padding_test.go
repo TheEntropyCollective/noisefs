@@ -67,7 +67,7 @@ func TestSplitAlwaysPadded(t *testing.T) {
 			for _, block := range blocks {
 				result.Write(block.Data)
 			}
-			
+
 			// Check that the original data is preserved
 			resultData := result.Bytes()
 			if !bytes.HasPrefix(resultData, []byte(tt.input)) {
@@ -80,7 +80,7 @@ func TestSplitAlwaysPadded(t *testing.T) {
 func TestSplitBytesWithPadding(t *testing.T) {
 	blockSize := 8
 	input := []byte("12345")
-	
+
 	splitter, err := NewSplitter(blockSize)
 	if err != nil {
 		t.Fatalf("Failed to create splitter: %v", err)
@@ -117,7 +117,7 @@ func TestSplitBytesWithPadding(t *testing.T) {
 func TestPaddingRoundTrip(t *testing.T) {
 	blockSize := 10
 	originalData := "Hello, World!"
-	
+
 	splitter, err := NewSplitter(blockSize)
 	if err != nil {
 		t.Fatalf("Failed to create splitter: %v", err)
@@ -138,7 +138,7 @@ func TestPaddingRoundTrip(t *testing.T) {
 
 	// Trim to original size (simulating what download does)
 	reassembled := result.Bytes()[:len(originalData)]
-	
+
 	if string(reassembled) != originalData {
 		t.Errorf("Round trip failed: expected %q, got %q", originalData, string(reassembled))
 	}
@@ -165,7 +165,7 @@ func TestPaddingWithEmptyData(t *testing.T) {
 func TestPaddingConsistency(t *testing.T) {
 	blockSize := 128
 	testData := "This is test data that needs padding"
-	
+
 	splitter, err := NewSplitter(blockSize)
 	if err != nil {
 		t.Fatalf("Failed to create splitter: %v", err)

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // StoreBlockWithCache stores a block in IPFS and caches it
@@ -18,13 +18,13 @@ func (c *Client) StoreBlockWithCache(block *blocks.Block) (string, error) {
 // storeBlockWithStrategy stores a block using the specified peer selection strategy
 func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
 	ctx := context.Background() // TODO: Accept context parameter in future version
-	
+
 	// Use storage manager (strategy is handled at backend level)
 	cid, err := c.storeBlock(ctx, block)
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Cache the block with metadata
 	metadata := map[string]interface{}{
 		"block_type": "data",
@@ -33,7 +33,7 @@ func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (s
 	if strategy == "randomizer" {
 		metadata["is_randomizer"] = true
 	}
-	
+
 	c.cacheBlock(cid, block, metadata)
 	return cid, nil
 }
@@ -43,7 +43,7 @@ func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string
 	// Determine if this is a personal block (requested by user)
 	// or an altruistic block (for network benefit)
 	isPersonal := true // Default to personal
-	
+
 	// Check metadata for explicit origin
 	if origin, ok := metadata["requested_by_user"]; ok {
 		isPersonal = origin.(bool)
@@ -54,7 +54,7 @@ func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string
 			isPersonal = false
 		}
 	}
-	
+
 	// Store in cache with origin info
 	if altruisticCache, ok := c.cache.(*cache.AltruisticCache); ok {
 		// Use altruistic cache with explicit origin
@@ -67,9 +67,9 @@ func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string
 		// Fallback to standard cache
 		c.cache.Store(cid, block)
 	}
-	
+
 	c.cache.IncrementPopularity(cid)
-	
+
 	// Store in adaptive cache if enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
 		c.adaptiveCache.Store(cid, block)
@@ -90,42 +90,42 @@ func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []
 			return block, nil
 		}
 	}
-	
+
 	// Check standard cache
 	if block, err := c.cache.Get(cid); err == nil {
 		c.cache.IncrementPopularity(cid)
 		c.metrics.RecordCacheHit()
-		
+
 		// Update adaptive cache with access
 		if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
 			c.adaptiveCache.Store(cid, block)
 		}
-		
+
 		return block, nil
 	}
-	
+
 	// Not in cache, retrieve from IPFS with peer hints
 	c.metrics.RecordCacheMiss()
-	
+
 	var block *blocks.Block
 	var err error
-	
+
 	// Use storage manager for retrieval
 	// TODO: Implement peer hints in storage manager
 	_ = preferredPeers // TODO: Use preferredPeers for peer-aware retrieval
 	block, err = c.retrieveBlock(context.Background(), cid)
-	
+
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache for future use with metadata
 	metadata := map[string]interface{}{
-		"block_type": "data",
+		"block_type":             "data",
 		"retrieved_from_network": true,
 	}
 	c.cacheBlock(cid, block, metadata)
-	
+
 	return block, nil
 }
 
@@ -144,11 +144,11 @@ func (c *Client) storeBlockWithTracking(ctx context.Context, block *blocks.Block
 	if err != nil {
 		return "", 0, err
 	}
-	
+
 	// For simplicity, assume block size equals bytes stored
 	// In a real implementation, this might differ due to compression, overhead, etc.
 	bytesStored := int64(block.Size())
-	
+
 	return address.ID, bytesStored, nil
 }
 
@@ -166,7 +166,7 @@ func (c *Client) PreloadBlocks(ctx context.Context) error {
 	if !c.adaptiveCacheEnabled || c.adaptiveCache == nil {
 		return nil // Adaptive cache not enabled
 	}
-	
+
 	// Define block fetcher for preloading
 	blockFetcher := func(cid string) ([]byte, error) {
 		block, err := c.retrieveBlock(ctx, cid)
@@ -175,14 +175,14 @@ func (c *Client) PreloadBlocks(ctx context.Context) error {
 		}
 		return block.Data, nil
 	}
-	
+
 	return c.adaptiveCache.Preload(ctx, blockFetcher)
 }
 
 // OptimizeForRandomizers adjusts cache and peer selection for randomizer optimization
 func (c *Client) OptimizeForRandomizers() {
 	c.preferRandomizerPeers = true
-	
+
 	// Switch to randomizer-aware eviction policy if adaptive cache is enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
 		randomizerPolicy := cache.NewRandomizerAwareEvictionPolicy()

@@ -49,7 +49,6 @@ func TestNewDescriptor(t *testing.T) {
 	}
 }
 
-
 func TestDescriptorValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -412,7 +411,6 @@ func TestDescriptorRoundTrip(t *testing.T) {
 	}
 }
 
-
 func TestDescriptorAddBlockTriple(t *testing.T) {
 	desc := NewDescriptor("test.txt", 1024, 1024, 128)
 
@@ -474,10 +472,9 @@ func TestDescriptorAddBlockTriple(t *testing.T) {
 	}
 }
 
-
 func TestDescriptorGetRandomizerCIDs(t *testing.T) {
 	desc := NewDescriptor("test.txt", 1024, 1024, 128)
-	
+
 	// Add a 3-tuple block
 	err := desc.AddBlockTriple("data1", "rand1", "rand2")
 	if err != nil {

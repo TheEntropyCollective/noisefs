@@ -152,17 +152,17 @@ func DeriveDirectoryKey(masterKey *EncryptionKey, directoryPath string) (*Encryp
 	if masterKey == nil || len(masterKey.Key) == 0 {
 		return nil, fmt.Errorf("master key is required")
 	}
-	
+
 	// Use HKDF to derive a directory-specific key
 	info := []byte("noisefs-directory:" + directoryPath)
 	hkdf := hkdf.New(sha256.New, masterKey.Key, masterKey.Salt, info)
-	
+
 	// Derive a 32-byte key
 	derivedKey := make([]byte, 32)
 	if _, err := io.ReadFull(hkdf, derivedKey); err != nil {
 		return nil, fmt.Errorf("failed to derive directory key: %w", err)
 	}
-	
+
 	return &EncryptionKey{
 		Key:  derivedKey,
 		Salt: masterKey.Salt, // Reuse the master key's salt
@@ -174,11 +174,11 @@ func EncryptFileName(filename string, dirKey *EncryptionKey) ([]byte, error) {
 	if filename == "" {
 		return nil, fmt.Errorf("filename cannot be empty")
 	}
-	
+
 	if dirKey == nil {
 		return nil, fmt.Errorf("directory key cannot be nil")
 	}
-	
+
 	return Encrypt([]byte(filename), dirKey)
 }
 
@@ -187,16 +187,16 @@ func DecryptFileName(encryptedName []byte, dirKey *EncryptionKey) (string, error
 	if len(encryptedName) == 0 {
 		return "", fmt.Errorf("encrypted name cannot be empty")
 	}
-	
+
 	if dirKey == nil {
 		return "", fmt.Errorf("directory key cannot be nil")
 	}
-	
+
 	decrypted, err := Decrypt(encryptedName, dirKey)
 	if err != nil {
 		return "", err
 	}
-	
+
 	return string(decrypted), nil
 }
 
@@ -209,12 +209,12 @@ func (k *EncryptionKey) String() string {
 		Key:  base64.StdEncoding.EncodeToString(k.Key),
 		Salt: base64.StdEncoding.EncodeToString(k.Salt),
 	}
-	
+
 	data, err := json.Marshal(keyData)
 	if err != nil {
 		return ""
 	}
-	
+
 	return base64.StdEncoding.EncodeToString(data)
 }
 
@@ -229,7 +229,7 @@ func (k *EncryptionKey) UnmarshalText(text []byte) error {
 	if err != nil {
 		return err
 	}
-	
+
 	k.Key = parsed.Key
 	k.Salt = parsed.Salt
 	return nil
@@ -240,34 +240,34 @@ func ParseKeyFromString(keyStr string) (*EncryptionKey, error) {
 	if keyStr == "" {
 		return nil, fmt.Errorf("key string cannot be empty")
 	}
-	
+
 	// Decode base64 string
 	data, err := base64.StdEncoding.DecodeString(keyStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode key string: %w", err)
 	}
-	
+
 	// Parse JSON
 	var keyData struct {
 		Key  string `json:"key"`
 		Salt string `json:"salt"`
 	}
-	
+
 	if err := json.Unmarshal(data, &keyData); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal key data: %w", err)
 	}
-	
+
 	// Decode key and salt
 	key, err := base64.StdEncoding.DecodeString(keyData.Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode key: %w", err)
 	}
-	
+
 	salt, err := base64.StdEncoding.DecodeString(keyData.Salt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode salt: %w", err)
 	}
-	
+
 	return &EncryptionKey{
 		Key:  key,
 		Salt: salt,
@@ -326,6 +326,6 @@ func GenerateSecureSyncKeyWithRotation(sessionID string, userSalt []byte, rotati
 
 	// Add rotation counter to session ID for key versioning
 	rotationID := fmt.Sprintf("%s-rotation-%d", sessionID, rotationCounter)
-	
+
 	return GenerateSecureSyncKey(rotationID, userSalt)
 }

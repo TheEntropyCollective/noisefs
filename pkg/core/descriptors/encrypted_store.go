@@ -21,14 +21,15 @@ type EncryptedDescriptor struct {
 
 // PasswordProvider is a function that provides the password when needed
 // The returned password should be cleared from memory after use
-// 
+//
 // Example of secure usage:
-//   provider := func() (string, error) {
-//       // Prompt user for password (e.g., from terminal, secure dialog, etc.)
-//       password := getPasswordFromUser()
-//       return password, nil
-//   }
-//   store, err := NewEncryptedStore(ipfsClient, provider)
+//
+//	provider := func() (string, error) {
+//	    // Prompt user for password (e.g., from terminal, secure dialog, etc.)
+//	    password := getPasswordFromUser()
+//	    return password, nil
+//	}
+//	store, err := NewEncryptedStore(ipfsClient, provider)
 type PasswordProvider func() (string, error)
 
 // EncryptedStore handles encrypted descriptor storage and retrieval
@@ -42,7 +43,7 @@ func NewEncryptedStore(storageManager *storage.Manager, passwordProvider Passwor
 	if storageManager == nil {
 		return nil, errors.New("storage manager is required")
 	}
-	
+
 	return &EncryptedStore{
 		storageManager:   storageManager,
 		passwordProvider: passwordProvider,
@@ -54,7 +55,7 @@ func NewEncryptedStore(storageManager *storage.Manager, passwordProvider Passwor
 func NewEncryptedStoreWithPassword(storageManager *storage.Manager, password string) (*EncryptedStore, error) {
 	// Create a copy of the password to avoid external modifications
 	passwordCopy := password
-	
+
 	// Create a password provider that returns the password
 	provider := func() (string, error) {
 		if passwordCopy == "" {
@@ -62,7 +63,7 @@ func NewEncryptedStoreWithPassword(storageManager *storage.Manager, password str
 		}
 		return passwordCopy, nil
 	}
-	
+
 	return NewEncryptedStore(storageManager, provider)
 }
 
@@ -80,7 +81,7 @@ func (s *EncryptedStore) Save(descriptor *Descriptor) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get password: %w", err)
 	}
-	
+
 	// Convert password to byte slice for SecureZero
 	passwordBytes := []byte(password)
 	defer crypto.SecureZero(passwordBytes)
@@ -118,12 +119,12 @@ func (s *EncryptedStore) Save(descriptor *Descriptor) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create block: %w", err)
 	}
-	
+
 	address, err := s.storageManager.Put(context.Background(), block)
 	if err != nil {
 		return "", fmt.Errorf("failed to store encrypted descriptor: %w", err)
 	}
-	
+
 	cid := address.ID
 
 	return cid, nil
@@ -226,11 +227,11 @@ func (s *EncryptedStore) decryptDescriptor(encDesc *EncryptedDescriptor) (*Descr
 	if err != nil {
 		return nil, fmt.Errorf("failed to get password: %w", err)
 	}
-	
+
 	// Convert password to byte slice for SecureZero
 	passwordBytes := []byte(password)
 	defer crypto.SecureZero(passwordBytes)
-	
+
 	if password == "" {
 		return nil, errors.New("password required to decrypt descriptor")
 	}

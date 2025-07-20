@@ -25,25 +25,24 @@ func NewBlock(data []byte) (*Block, error) {
 	if len(data) == 0 {
 		return nil, errors.New("block data cannot be empty")
 	}
-	
+
 	return &Block{
 		ID:   generateBlockID(data),
 		Data: data,
 	}, nil
 }
 
-
 // NewRandomBlock creates a new block filled with random data
 func NewRandomBlock(size int) (*Block, error) {
 	if size <= 0 {
 		return nil, errors.New("block size must be positive")
 	}
-	
+
 	data := make([]byte, size)
 	if _, err := rand.Read(data); err != nil {
 		return nil, fmt.Errorf("failed to generate random data: %w", err)
 	}
-	
+
 	return NewBlock(data)
 }
 
@@ -56,12 +55,12 @@ func (b *Block) XOR(randomizer1, randomizer2 *Block) (*Block, error) {
 	if len(b.Data) != len(randomizer2.Data) {
 		return nil, errors.New("data block and randomizer2 must have the same size")
 	}
-	
+
 	result := make([]byte, len(b.Data))
 	for i := range b.Data {
 		result[i] = b.Data[i] ^ randomizer1.Data[i] ^ randomizer2.Data[i]
 	}
-	
+
 	return NewBlock(result)
 }
 
@@ -74,31 +73,29 @@ func (b *Block) Size() int {
 // Uses constant-time comparison to prevent timing attacks
 func (b *Block) VerifyIntegrity() bool {
 	expectedID := generateBlockID(b.Data)
-	
+
 	// Convert strings to byte slices for constant-time comparison
 	expected, err := hex.DecodeString(expectedID)
 	if err != nil {
 		return false
 	}
-	
+
 	actual, err := hex.DecodeString(b.ID)
 	if err != nil {
 		return false
 	}
-	
+
 	// Ensure both slices are the same length
 	if len(expected) != len(actual) {
 		return false
 	}
-	
+
 	// Use constant-time comparison to prevent timing attacks
 	return subtle.ConstantTimeCompare(expected, actual) == 1
 }
-
 
 // generateBlockID generates a content-addressed identifier for a block
 func generateBlockID(data []byte) string {
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
-

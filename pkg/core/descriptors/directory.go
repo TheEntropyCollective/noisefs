@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
-	
+
 	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 )
 
@@ -22,11 +22,11 @@ type DirectoryEntry struct {
 
 // SnapshotInfo represents metadata about a directory snapshot
 type SnapshotInfo struct {
-	OriginalCID   string    `json:"original_cid"`   // CID of the original directory
-	CreationTime  time.Time `json:"creation_time"`  // When the snapshot was created
-	SnapshotName  string    `json:"snapshot_name"`  // User-provided name for the snapshot
-	Description   string    `json:"description"`    // Optional description of the snapshot
-	IsSnapshot    bool      `json:"is_snapshot"`    // Indicates this is a snapshot manifest
+	OriginalCID  string    `json:"original_cid"`  // CID of the original directory
+	CreationTime time.Time `json:"creation_time"` // When the snapshot was created
+	SnapshotName string    `json:"snapshot_name"` // User-provided name for the snapshot
+	Description  string    `json:"description"`   // Optional description of the snapshot
+	IsSnapshot   bool      `json:"is_snapshot"`   // Indicates this is a snapshot manifest
 }
 
 // DirectoryManifest represents the encrypted contents of a directory
@@ -35,7 +35,7 @@ type DirectoryManifest struct {
 	Entries      []DirectoryEntry  `json:"entries"`
 	CreatedAt    time.Time         `json:"created"`
 	ModifiedAt   time.Time         `json:"modified"`
-	Metadata     map[string][]byte `json:"metadata,omitempty"` // Encrypted metadata (base64 encoded in JSON)
+	Metadata     map[string][]byte `json:"metadata,omitempty"`      // Encrypted metadata (base64 encoded in JSON)
 	SnapshotInfo *SnapshotInfo     `json:"snapshot_info,omitempty"` // Snapshot metadata if this is a snapshot
 }
 
@@ -54,27 +54,27 @@ func NewDirectoryManifest() *DirectoryManifest {
 // NewSnapshotManifest creates a new snapshot manifest from an existing directory manifest
 func NewSnapshotManifest(original *DirectoryManifest, originalCID, snapshotName, description string) *DirectoryManifest {
 	now := time.Now()
-	
+
 	// Create snapshot info
 	snapshotInfo := &SnapshotInfo{
-		OriginalCID:   originalCID,
-		CreationTime:  now,
-		SnapshotName:  snapshotName,
-		Description:   description,
-		IsSnapshot:    true,
+		OriginalCID:  originalCID,
+		CreationTime: now,
+		SnapshotName: snapshotName,
+		Description:  description,
+		IsSnapshot:   true,
 	}
-	
+
 	// Clone the original manifest entries (same file CIDs)
 	entriesCopy := make([]DirectoryEntry, len(original.Entries))
 	copy(entriesCopy, original.Entries)
-	
+
 	// Clone metadata
 	metadataCopy := make(map[string][]byte)
 	for k, v := range original.Metadata {
 		metadataCopy[k] = make([]byte, len(v))
 		copy(metadataCopy[k], v)
 	}
-	
+
 	return &DirectoryManifest{
 		Version:      "1.0",
 		Entries:      entriesCopy,
@@ -96,7 +96,7 @@ func (m *DirectoryManifest) AddEntry(entry DirectoryEntry) error {
 	if entry.Type != FileType && entry.Type != DirectoryType {
 		return errors.New("invalid entry type")
 	}
-	
+
 	m.Entries = append(m.Entries, entry)
 	m.ModifiedAt = time.Now()
 	return nil
@@ -109,19 +109,19 @@ func (m *DirectoryManifest) Marshal() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
-	
+
 	// Then compress with gzip
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)
-	
+
 	if _, err := gw.Write(data); err != nil {
 		return nil, fmt.Errorf("failed to compress manifest: %w", err)
 	}
-	
+
 	if err := gw.Close(); err != nil {
 		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
 	}
-	
+
 	return buf.Bytes(), nil
 }
 
@@ -133,18 +133,18 @@ func UnmarshalDirectoryManifest(data []byte) (*DirectoryManifest, error) {
 		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 	}
 	defer gr.Close()
-	
+
 	var decompressed bytes.Buffer
 	if _, err := decompressed.ReadFrom(gr); err != nil {
 		return nil, fmt.Errorf("failed to decompress manifest: %w", err)
 	}
-	
+
 	// Then decode JSON
 	var manifest DirectoryManifest
 	if err := json.Unmarshal(decompressed.Bytes(), &manifest); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
-	
+
 	return &manifest, nil
 }
 
@@ -153,7 +153,7 @@ func (m *DirectoryManifest) Validate() error {
 	if m.Version == "" {
 		return errors.New("manifest version is required")
 	}
-	
+
 	// Check each entry
 	for i, entry := range m.Entries {
 		if len(entry.EncryptedName) == 0 {
@@ -172,7 +172,7 @@ func (m *DirectoryManifest) Validate() error {
 			return fmt.Errorf("entry %d: directory size must be 0", i)
 		}
 	}
-	
+
 	// Validate snapshot info if present
 	if m.SnapshotInfo != nil {
 		if m.SnapshotInfo.IsSnapshot {
@@ -187,7 +187,7 @@ func (m *DirectoryManifest) Validate() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -217,19 +217,19 @@ func EncryptManifest(manifest *DirectoryManifest, key *crypto.EncryptionKey) ([]
 	if err := manifest.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid manifest: %w", err)
 	}
-	
+
 	// Marshal the manifest
 	data, err := manifest.Marshal()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
-	
+
 	// Encrypt the marshaled data
 	encrypted, err := crypto.Encrypt(data, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt manifest: %w", err)
 	}
-	
+
 	return encrypted, nil
 }
 
@@ -240,17 +240,17 @@ func DecryptManifest(encryptedData []byte, key *crypto.EncryptionKey) (*Director
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt manifest: %w", err)
 	}
-	
+
 	// Unmarshal the manifest
 	manifest, err := UnmarshalDirectoryManifest(decrypted)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
-	
+
 	// Validate the manifest
 	if err := manifest.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid manifest after decryption: %w", err)
 	}
-	
+
 	return manifest, nil
 }

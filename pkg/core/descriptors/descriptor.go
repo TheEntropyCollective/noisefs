@@ -31,7 +31,7 @@ type Descriptor struct {
 	FileSize       int64          `json:"file_size"`        // Original file size (before padding)
 	PaddedFileSize int64          `json:"padded_file_size"` // Total size including padding
 	BlockSize      int            `json:"block_size"`
-	Blocks         []BlockPair    `json:"blocks,omitempty"` // Empty for directories
+	Blocks         []BlockPair    `json:"blocks,omitempty"`       // Empty for directories
 	ManifestCID    string         `json:"manifest_cid,omitempty"` // Only for directories
 	CreatedAt      time.Time      `json:"created_at"`
 }
@@ -56,31 +56,30 @@ func NewDirectoryDescriptor(dirname string, manifestCID string) *Descriptor {
 		Version:        "4.0",
 		Type:           DirectoryType,
 		Filename:       dirname,
-		FileSize:       0,              // Directories don't have a fixed size
-		PaddedFileSize: 0,              // Not applicable for directories
-		BlockSize:      0,              // Not applicable for directories
+		FileSize:       0, // Directories don't have a fixed size
+		PaddedFileSize: 0, // Not applicable for directories
+		BlockSize:      0, // Not applicable for directories
 		ManifestCID:    manifestCID,
 		CreatedAt:      time.Now(),
 	}
 }
-
 
 // AddBlockTriple adds a data block with two randomizers (3-tuple)
 func (d *Descriptor) AddBlockTriple(dataCID, randomizerCID1, randomizerCID2 string) error {
 	if dataCID == "" || randomizerCID1 == "" || randomizerCID2 == "" {
 		return errors.New("all CIDs cannot be empty")
 	}
-	
+
 	if dataCID == randomizerCID1 || dataCID == randomizerCID2 || randomizerCID1 == randomizerCID2 {
 		return errors.New("all CIDs must be different")
 	}
-	
+
 	d.Blocks = append(d.Blocks, BlockPair{
 		DataCID:        dataCID,
 		RandomizerCID1: randomizerCID1,
 		RandomizerCID2: randomizerCID2,
 	})
-	
+
 	return nil
 }
 
@@ -89,11 +88,11 @@ func (d *Descriptor) Validate() error {
 	if d.Version == "" {
 		return errors.New("descriptor version is required")
 	}
-	
+
 	if d.Filename == "" {
 		return errors.New("filename is required")
 	}
-	
+
 	// Validate based on type
 	switch d.Type {
 	case FileType:
@@ -110,26 +109,26 @@ func (d *Descriptor) validateFile() error {
 	if d.FileSize <= 0 {
 		return errors.New("file size must be positive")
 	}
-	
+
 	if d.BlockSize <= 0 {
 		return errors.New("block size must be positive")
 	}
-	
+
 	if len(d.Blocks) == 0 {
 		return errors.New("must contain at least one block")
 	}
-	
+
 	for i, block := range d.Blocks {
 		if block.DataCID == "" || block.RandomizerCID1 == "" || block.RandomizerCID2 == "" {
 			return errors.New("all CIDs must be present")
 		}
-		
+
 		if block.DataCID == block.RandomizerCID1 || block.DataCID == block.RandomizerCID2 || block.RandomizerCID1 == block.RandomizerCID2 {
 			return errors.New("all CIDs must be different")
 		}
 		_ = i
 	}
-	
+
 	return nil
 }
 
@@ -138,15 +137,15 @@ func (d *Descriptor) validateDirectory() error {
 	if d.Version != "4.0" {
 		return errors.New("directory descriptors require version 4.0")
 	}
-	
+
 	if d.ManifestCID == "" {
 		return errors.New("directory descriptor must have a manifest CID")
 	}
-	
+
 	if len(d.Blocks) > 0 {
 		return errors.New("directory descriptors should not contain blocks")
 	}
-	
+
 	return nil
 }
 
@@ -155,7 +154,7 @@ func (d *Descriptor) ToJSON() ([]byte, error) {
 	if err := d.Validate(); err != nil {
 		return nil, err
 	}
-	
+
 	return json.MarshalIndent(d, "", "  ")
 }
 
@@ -169,26 +168,25 @@ func FromJSON(data []byte) (*Descriptor, error) {
 	if len(data) == 0 {
 		return nil, errors.New("empty JSON data")
 	}
-	
+
 	var desc Descriptor
 	if err := json.Unmarshal(data, &desc); err != nil {
 		return nil, err
 	}
-	
+
 	if err := desc.Validate(); err != nil {
 		return nil, err
 	}
-	
+
 	return &desc, nil
 }
-
 
 // GetRandomizerCIDs returns the randomizer CIDs for a block at the given index
 func (d *Descriptor) GetRandomizerCIDs(blockIndex int) (string, string, error) {
 	if blockIndex < 0 || blockIndex >= len(d.Blocks) {
 		return "", "", errors.New("block index out of range")
 	}
-	
+
 	block := d.Blocks[blockIndex]
 	return block.RandomizerCID1, block.RandomizerCID2, nil
 }

@@ -150,7 +150,7 @@ func TestGenerateSecureSyncKey(t *testing.T) {
 					zeroCount++
 				}
 			}
-			
+
 			// A truly random 32-byte key should not have more than ~75% zeros
 			if zeroCount > 24 {
 				t.Errorf("Key has too many zero bytes (%d/32), indicating poor entropy", zeroCount)
@@ -230,7 +230,7 @@ func TestSecureKeyCompatibility(t *testing.T) {
 
 		// Test that the key works with existing encryption functions
 		testData := []byte("test data for encryption compatibility")
-		
+
 		encrypted, err := Encrypt(testData, key)
 		if err != nil {
 			t.Fatalf("Encryption with secure key failed: %v", err)

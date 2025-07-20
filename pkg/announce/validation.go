@@ -83,7 +83,7 @@ func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 		return fmt.Errorf("announcement missing required 'version' field - please set to '%s'", DefaultVersion)
 	}
 	if ann.Version != DefaultVersion {
-		return fmt.Errorf("unsupported version '%s' - only version '%s' is currently supported", ann.Version, DefaultVersion)
+		return fmt.Errorf("unsupported version %q - only version %q is currently supported", ann.Version, DefaultVersion)
 	}
 	
 	// Validate descriptor
@@ -132,7 +132,7 @@ func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 		return fmt.Errorf("missing nonce - please provide a random string of %d-%d characters for replay protection", MinNonceLength, MaxNonceLength)
 	}
 	if len(ann.Nonce) < MinNonceLength || len(ann.Nonce) > MaxNonceLength {
-		return fmt.Errorf("invalid nonce length (%d characters) - must be %d-%d characters for security (current: '%s')", len(ann.Nonce), MinNonceLength, MaxNonceLength, ann.Nonce)
+		return fmt.Errorf("invalid nonce length (%d characters) - must be %d-%d characters for security (current: %q)", len(ann.Nonce), MinNonceLength, MaxNonceLength, ann.Nonce)
 	}
 	
 	// Validate peer ID if present
@@ -162,14 +162,14 @@ func (v *Validator) validateDescriptor(descriptor string) error {
 	
 	// Basic CID validation (should start with Qm or bafy)
 	if !strings.HasPrefix(descriptor, "Qm") && !strings.HasPrefix(descriptor, "bafy") {
-		return fmt.Errorf("invalid CID format '%s' - must start with 'Qm' (CIDv0) or 'bafy' (CIDv1)", descriptor)
+		return fmt.Errorf("invalid CID format %q - must start with 'Qm' (CIDv0) or 'bafy' (CIDv1)", descriptor)
 	}
 	
 	// Check for valid base58/base32 characters
 	if strings.HasPrefix(descriptor, "Qm") {
 		// Base58 validation
 		if !isValidBase58(descriptor) {
-			return fmt.Errorf("invalid base58 encoding in CID '%s' - contains invalid characters", descriptor)
+			return fmt.Errorf("invalid base58 encoding in CID %q - contains invalid characters", descriptor)
 		}
 	}
 	
@@ -189,7 +189,7 @@ func (v *Validator) validateTopicHash(topicHash string) error {
 	
 	// Validate hex encoding
 	if _, err := hex.DecodeString(topicHash); err != nil {
-		return fmt.Errorf("invalid topic hash '%s' - must contain only hexadecimal characters (0-9, a-f): %w", topicHash, err)
+		return fmt.Errorf("invalid topic hash %q - must contain only hexadecimal characters (0-9, a-f): %w", topicHash, err)
 	}
 	
 	return nil
@@ -255,7 +255,7 @@ func (v *Validator) validateCategory(category string) error {
 	
 	if !validCategories[category] {
 		validList := []string{"video", "audio", "document", "data", "software", "image", "archive", "other"}
-		return fmt.Errorf("invalid category '%s' - must be one of: %v (use 'other' if unsure)", category, validList)
+		return fmt.Errorf("invalid category %q - must be one of: %v (use 'other' if unsure)", category, validList)
 	}
 	
 	return nil
@@ -273,7 +273,7 @@ func (v *Validator) validateSizeClass(sizeClass string) error {
 	
 	if !validSizes[sizeClass] {
 		validList := []string{"tiny (<1MB)", "small (1-10MB)", "medium (10-100MB)", "large (100MB-1GB)", "huge (>1GB)"}
-		return fmt.Errorf("invalid size class '%s' - must be one of: %v", sizeClass, validList)
+		return fmt.Errorf("invalid size class %q - must be one of: %v", sizeClass, validList)
 	}
 	
 	return nil
@@ -293,7 +293,7 @@ func (v *Validator) validateBloomFilter(bloomStr string) error {
 	// Try to decode
 	_, err := DecodeBloom(bloomStr)
 	if err != nil {
-		return fmt.Errorf("invalid bloom filter encoding '%s' - must be valid base64 encoded bloom filter data: %w", bloomStr, err)
+		return fmt.Errorf("invalid bloom filter encoding %q - must be valid base64 encoded bloom filter data: %w", bloomStr, err)
 	}
 	
 	return nil
