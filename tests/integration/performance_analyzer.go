@@ -495,22 +495,28 @@ func (pa *PerformanceAnalyzer) calculateSystemMetrics(operations []OperationMetr
 	}
 
 	// Calculate cache efficiency (hit rate)
-	if len(pa.cacheMetrics) > 0 {
+	if len(cacheMetrics) > 0 {
 		totalHitRate := 0.0
-		for _, metric := range pa.cacheMetrics {
+		for _, metric := range cacheMetrics {
 			totalHitRate += metric.HitRate
 		}
-		pa.systemMetrics.CacheEfficiency = totalHitRate / float64(len(pa.cacheMetrics))
+		systemMetrics.CacheEfficiency = totalHitRate / float64(len(cacheMetrics))
 	}
 
 	// Calculate peer efficiency (average success rate)
-	if len(pa.peerMetrics) > 0 {
+	if len(peerMetrics) > 0 {
 		totalSuccessRate := 0.0
-		for _, metric := range pa.peerMetrics {
+		for _, metric := range peerMetrics {
 			totalSuccessRate += metric.SuccessRate
 		}
-		pa.systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(pa.peerMetrics))
+		systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(peerMetrics))
 	}
+
+	// Update the struct atomically
+	pa.mu.Lock()
+	systemMetrics.EndTime = pa.systemMetrics.EndTime
+	pa.systemMetrics = systemMetrics
+	pa.mu.Unlock()
 }
 
 // analyzeCachePerformance provides detailed cache analysis
