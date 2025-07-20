@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -358,10 +360,75 @@ func (s *Store) cleanup() {
 
 // Persistence methods
 
+// sanitizeForFilename removes dangerous characters and prevents path traversal
+func sanitizeForFilename(input string) string {
+	// Remove path separators and dangerous characters
+	safe := strings.ReplaceAll(input, "/", "_")
+	safe = strings.ReplaceAll(safe, "\\", "_")
+	safe = strings.ReplaceAll(safe, "..", "_")
+	safe = strings.ReplaceAll(safe, "\x00", "_")
+	
+	// Allow only alphanumeric, dash, underscore, and dot
+	reg := regexp.MustCompile(`[^a-zA-Z0-9._-]`)
+	safe = reg.ReplaceAllString(safe, "_")
+	
+	// Ensure it's not empty and not too long
+	if safe == "" {
+		safe = "unknown"
+	}
+	if len(safe) > 50 {
+		safe = safe[:50]
+	}
+	
+	return safe
+}
+
+// validateFilenameComponents validates descriptor and nonce for filename generation
+func validateFilenameComponents(descriptor, nonce string) error {
+	if descriptor == "" {
+		return fmt.Errorf("descriptor cannot be empty")
+	}
+	if nonce == "" {
+		return fmt.Errorf("nonce cannot be empty")
+	}
+	
+	// Check for path traversal attempts
+	if strings.Contains(descriptor, "..") || strings.Contains(nonce, "..") {
+		return fmt.Errorf("path traversal attempt detected in filename components")
+	}
+	
+	// Check for absolute paths
+	if strings.HasPrefix(descriptor, "/") || strings.HasPrefix(nonce, "/") ||
+		strings.HasPrefix(descriptor, "\\") || strings.HasPrefix(nonce, "\\") ||
+		(len(descriptor) > 1 && descriptor[1] == ':') || (len(nonce) > 1 && nonce[1] == ':') {
+		return fmt.Errorf("absolute path detected in filename components")
+	}
+	
+	// Check for null bytes
+	if strings.Contains(descriptor, "\x00") || strings.Contains(nonce, "\x00") {
+		return fmt.Errorf("null bytes detected in filename components")
+	}
+	
+	return nil
+}
+
 // saveToDisk saves an announcement to disk
 func (s *Store) saveToDisk(stored *StoredAnnouncement) error {
-	// Use descriptor + nonce as filename
-	filename := fmt.Sprintf("%s_%s.json", stored.Descriptor[:8], stored.Nonce)
+	// Validate components to prevent path traversal
+	if err := validateFilenameComponents(stored.Descriptor, stored.Nonce); err != nil {
+		return fmt.Errorf("invalid filename components: %w", err)
+	}
+	
+	// Safely generate filename with sanitization
+	descriptorPart := stored.Descriptor
+	if len(descriptorPart) > 8 {
+		descriptorPart = descriptorPart[:8]
+	}
+	
+	safeDescriptor := sanitizeForFilename(descriptorPart)
+	safeNonce := sanitizeForFilename(stored.Nonce)
+	
+	filename := fmt.Sprintf("%s_%s.json", safeDescriptor, safeNonce)
 	path := filepath.Join(s.dataDir, filename)
 	
 	data, err := json.MarshalIndent(stored, "", "  ")

@@ -399,44 +399,11 @@ func TestDatabaseBackupRestore(t *testing.T) {
 
 // Helper functions and types for testing
 
-// setupTestContainer creates a PostgreSQL testcontainer for testing
-func setupTestContainer(t *testing.T, ctx context.Context) (testcontainers.Container, string) {
-	t.Helper()
-
-	postgresContainer, err := postgres.RunContainer(ctx,
-		testcontainers.WithImage("postgres:15-alpine"),
-		postgres.WithDatabase("noisefs_compliance_test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(30*time.Second)),
-	)
-	require.NoError(t, err, "Should start PostgreSQL container")
-
-	connStr, err := postgresContainer.ConnectionString(ctx, "sslmode=disable")
-	require.NoError(t, err, "Should get connection string")
-
-	return postgresContainer, connStr
-}
+// setupTestContainer is defined in testutils.go
 
 // Types that need to be implemented - these will fail compilation initially
 
-// ComplianceDatabase represents the PostgreSQL-backed compliance system
-type ComplianceDatabase struct {
-	pool   *pgxpool.Pool
-	config *DatabaseConfig
-}
-
-// DatabaseConfig holds database connection configuration
-type DatabaseConfig struct {
-	ConnectionString string
-	MaxConnections   int
-	ConnectTimeout   time.Duration
-	IdleTimeout      time.Duration
-	MaxLifetime      time.Duration
-}
+// Database types are defined in database.go
 
 // HealthStatus represents database health information
 type HealthStatus struct {
@@ -468,9 +435,7 @@ type BackupMetadata struct {
 
 // These methods need to be implemented - they will fail compilation initially
 
-func NewComplianceDatabase(ctx context.Context, config *DatabaseConfig) (*ComplianceDatabase, error) {
-	panic("not implemented - TDD implementation needed")
-}
+// NewComplianceDatabase is implemented in database.go
 
 func (db *ComplianceDatabase) Close() error {
 	panic("not implemented - TDD implementation needed")

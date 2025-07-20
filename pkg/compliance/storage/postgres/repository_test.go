@@ -10,69 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TakedownRecord represents a DMCA takedown record for testing
-type TakedownRecord struct {
-	TakedownID       string    `db:"takedown_id"`
-	DescriptorCID    string    `db:"descriptor_cid"`
-	FilePath         string    `db:"file_path"`
-	RequestorName    string    `db:"requestor_name"`
-	RequestorEmail   string    `db:"requestor_email"`
-	CopyrightWork    string    `db:"copyright_work"`
-	TakedownDate     time.Time `db:"takedown_date"`
-	Status           string    `db:"status"`
-	DMCANoticeHash   string    `db:"dmca_notice_hash"`
-	UploaderID       string    `db:"uploader_id"`
-	OriginalNotice   string    `db:"original_notice"`
-	LegalBasis       string    `db:"legal_basis"`
-	ProcessingNotes  string    `db:"processing_notes"`
-	CreatedAt        time.Time `db:"created_at"`
-	UpdatedAt        time.Time `db:"updated_at"`
-}
+// Types are defined in types.go
 
-// ViolationRecord represents a user violation record for testing
-type ViolationRecord struct {
-	ViolationID      string    `db:"violation_id"`
-	UserID           string    `db:"user_id"`
-	DescriptorCID    string    `db:"descriptor_cid"`
-	TakedownID       string    `db:"takedown_id"`
-	ViolationType    string    `db:"violation_type"`
-	ViolationDate    time.Time `db:"violation_date"`
-	Severity         string    `db:"severity"`
-	ActionTaken      string    `db:"action_taken"`
-	ResolutionStatus string    `db:"resolution_status"`
-	CreatedAt        time.Time `db:"created_at"`
-	UpdatedAt        time.Time `db:"updated_at"`
-}
-
-// AuditEntry represents an audit log entry for testing
-type AuditEntry struct {
-	EntryID      string                 `db:"entry_id"`
-	Timestamp    time.Time              `db:"timestamp"`
-	EventType    string                 `db:"event_type"`
-	TargetID     string                 `db:"target_id"`
-	Action       string                 `db:"action"`
-	Details      map[string]interface{} `db:"details"`
-	PreviousHash string                 `db:"previous_hash"`
-	EntryHash    string                 `db:"entry_hash"`
-	UserID       string                 `db:"user_id"`
-	IPAddress    string                 `db:"ip_address"`
-	CreatedAt    time.Time              `db:"created_at"`
-}
-
-// NotificationRecord represents a notification record for testing
-type NotificationRecord struct {
-	NotificationID string                 `db:"notification_id"`
-	TargetUserID   string                 `db:"target_user_id"`
-	Type           string                 `db:"type"`
-	Subject        string                 `db:"subject"`
-	Content        string                 `db:"content"`
-	Metadata       map[string]interface{} `db:"metadata"`
-	Status         string                 `db:"status"`
-	SentAt         *time.Time             `db:"sent_at"`
-	ReadAt         *time.Time             `db:"read_at"`
-	CreatedAt      time.Time              `db:"created_at"`
-	UpdatedAt      time.Time              `db:"updated_at"`
-}
+// NotificationRecord type is defined in types.go
 
 // TestTakedownRecordCRUD tests CRUD operations for takedown records
 func TestTakedownRecordCRUD(t *testing.T) {
