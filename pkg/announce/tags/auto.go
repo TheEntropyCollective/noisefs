@@ -18,6 +18,43 @@ type AutoTagger struct {
 	fileCmd          string
 }
 
+// validateFilePath validates file path to prevent command injection and path traversal attacks
+func validateFilePath(filePath string) error {
+	if filePath == "" {
+		return fmt.Errorf("file path cannot be empty")
+	}
+	
+	// Check for null bytes which can terminate strings in C programs
+	if strings.Contains(filePath, "\x00") {
+		return fmt.Errorf("file path contains null bytes")
+	}
+	
+	// Check for dangerous characters that could be used for command injection
+	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\"", "'"}
+	for _, char := range dangerousChars {
+		if strings.Contains(filePath, char) {
+			return fmt.Errorf("file path contains dangerous character: %s", char)
+		}
+	}
+	
+	// Check for path traversal attempts
+	if strings.Contains(filePath, "..") {
+		return fmt.Errorf("file path contains path traversal sequence")
+	}
+	
+	// Ensure path is not too long (prevent buffer overflow attempts)
+	if len(filePath) > 4096 {
+		return fmt.Errorf("file path too long (max 4096 characters)")
+	}
+	
+	// Verify it's a valid file path
+	if !filepath.IsAbs(filePath) && !filepath.IsLocal(filePath) {
+		return fmt.Errorf("file path must be absolute or local")
+	}
+	
+	return nil
+}
+
 // NewAutoTagger creates a new auto tagger
 func NewAutoTagger() *AutoTagger {
 	at := &AutoTagger{}
@@ -166,12 +203,25 @@ func (at *AutoTagger) extractExtensionTags(ext string) []string {
 
 // extractMediaTags uses ffprobe to extract media metadata
 func (at *AutoTagger) extractMediaTags(filePath string) ([]string, error) {
+	// Validate and sanitize file path to prevent command injection
+	if err := validateFilePath(filePath); err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
+	}
+	
+	// Clean the file path to prevent path traversal and injection attacks
+	cleanPath := filepath.Clean(filePath)
+	
+	// Verify the file exists and is accessible
+	if _, err := os.Stat(cleanPath); err != nil {
+		return nil, fmt.Errorf("file not accessible: %w", err)
+	}
+	
 	cmd := exec.Command("ffprobe",
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_format",
 		"-show_streams",
-		filePath,
+		cleanPath,
 	)
 	
 	output, err := cmd.Output()

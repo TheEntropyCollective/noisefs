@@ -4,12 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 
-	"github.com/noisefs/noisefs/pkg/compliance/validation"
+	"github.com/TheEntropyCollective/noisefs/pkg/compliance/validation"
 )
 
 // TakedownProcessor handles DMCA takedown notices and compliance procedures
@@ -388,8 +386,8 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	if notice.RequestorEmail == "" {
 		result.Errors = append(result.Errors, "Requestor email is required")
 		score -= 0.2
-	} else if !validator.securityValidator.ValidateEmail(notice.RequestorEmail) {
-		result.Errors = append(result.Errors, "Invalid requestor email format")
+	} else if err := validator.securityValidator.ValidateEmail(notice.RequestorEmail); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("Invalid requestor email: %s", err.Error()))
 		score -= 0.1
 	}
 	
@@ -405,16 +403,18 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	
 	// Validate descriptor CIDs format using centralized validator
 	for _, cid := range notice.DescriptorCIDs {
-		if !validator.securityValidator.ValidateCID(cid) {
-			result.Errors = append(result.Errors, fmt.Sprintf("Invalid descriptor CID format: %s", cid))
+		if err := validator.securityValidator.ValidateCID(cid); err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("Invalid descriptor CID format for %s: %s", cid, err.Error()))
 			score -= 0.1
 		}
 	}
 	
 	// Validate phone number if provided
-	if notice.RequestorPhone != "" && !validator.securityValidator.ValidatePhoneNumber(notice.RequestorPhone) {
-		result.Warnings = append(result.Warnings, "Invalid phone number format")
-		score -= 0.05
+	if notice.RequestorPhone != "" {
+		if err := validator.securityValidator.ValidatePhoneNumber(notice.RequestorPhone); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Invalid phone number format: %s", err.Error()))
+			score -= 0.05
+		}
 	}
 	
 	// DMCA statutory requirements
@@ -460,6 +460,11 @@ func (validator *DMCANoticeValidator) ValidateNotice(notice *DMCANotice) (*Valid
 	}
 	
 	return result, nil
+}
+
+// GetValidator returns the DMCA notice validator for testing purposes
+func (processor *TakedownProcessor) GetValidator() *DMCANoticeValidator {
+	return processor.validator
 }
 
 // ProcessCounterNotice processes a DMCA counter-notification
