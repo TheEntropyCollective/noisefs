@@ -1,100 +1,147 @@
 # NoiseFS Development Todo
 
-## Current Milestone: DESCRIPTORS PACKAGE TEST COVERAGE IMPROVEMENT
+## Current Milestone: ENCRYPTEDSTORE PRIVACY FEATURE ACTIVATION
 
-**Status**: 🎯 **IN PROGRESS** - Improving Test Coverage from 39.1% to 70%+
+**Status**: 🚀 **READY TO START** - Comprehensive Activation Plan Developed
 
-**Objective**: Improve test coverage for the pkg/core/descriptors package from 39.1% to 70%+ to match the quality of other core packages (blocks: 67.9%, crypto: 73.7%). Focus on critical functionality including encryption workflows, storage operations, and file reconstruction metadata.
+**Objective**: Activate dormant EncryptedStore functionality to address critical privacy gap where file content is encrypted but descriptors (metadata) are stored in plain text, revealing filenames, sizes, timestamps, and block structure.
 
-**CURRENT ANALYSIS FINDINGS**:
-- ✅ **Critical Coverage Gaps Identified**: encrypted_store.go (0% coverage), store.go (0% coverage)
-- ✅ **Risk Assessment Complete**: Missing tests on encryption and storage operations increase risk of metadata corruption
-- ✅ **Strategic Plan Developed**: 4-sprint incremental approach targeting high-impact areas first
-- ✅ **Dependencies Mapped**: Mock storage.Manager and crypto test utilities required
+**CRITICAL DISCOVERY**:
+- ✅ **Privacy Gap Identified**: NoiseFS encrypts content but stores metadata in plain text
+- ✅ **EncryptedStore Analysis**: Well-designed but dormant - 0% test coverage, no CLI integration
+- ✅ **Architecture Validation**: Sound implementation with proper security practices
+- ✅ **Strategic Decision**: ACTIVATE dormant functionality, not removal
+- ✅ **Implementation Quality**: Uses crypto.GenerateKey/DeriveKey, secure memory clearing
 
-**PROJECTED IMPACT**: 39.1% → 75%+ coverage (exceeding 70% target)
+**PROJECTED IMPACT**: Users gain choice between public and encrypted metadata, closing privacy gap
 
-### Sprint Plan: Test Coverage Improvement
+**IMPLEMENTATION STRATEGY**: Five-Phase Activation Plan
 
-**SPRINT 1: Foundation Tests (Quick Wins)**
-**Objective**: Establish testing infrastructure and get initial coverage boost
-**Success Criteria**: Basic storage operations tested, Marshal() method covered
+```
+PHASE 1: Testing & Validation (CRITICAL - Crypto Security)
+PHASE 2: CLI Integration (HIGH - User Access) 
+PHASE 3: Client API Integration (MEDIUM - Programmatic Access)
+PHASE 4: Documentation & User Education (MEDIUM - Adoption)
+PHASE 5: Advanced Features (LOW - Future Enhancement)
+```
 
-**Tasks**:
-- [x] Task 1.1: Infrastructure Setup
-  - [x] Examine existing test patterns in descriptor_test.go and directory_test.go
-  - [x] Create mock storage.Manager implementation in test file
-  - [x] Set up test helper functions for creating test descriptors
-  - [x] Verify test environment setup
+### ENCRYPTEDSTORE ACTIVATION IMPLEMENTATION PLAN
 
-- [x] Task 1.2: Quick Win Implementation  
-  - [x] Add descriptor.Marshal() test to descriptor_test.go
-  - [x] Verify it properly aliases ToJSON() functionality
-  - [x] Run coverage to confirm improvement
+**PHASE 1: Testing & Validation (CRITICAL FOUNDATION)**
 
-- [x] Task 1.3: Basic Storage Tests
-  - [x] Create store_test.go file
-  - [x] Implement tests for NewStore(), NewStoreWithManager()
-  - [x] Implement tests for Save() and Load() with mock storage
-  - [x] Add error handling tests (nil inputs, storage failures)
-  - [x] Run coverage analysis to measure improvement
+**Sprint 1A: Core EncryptedStore Testing**
+- [ ] Task 1: Create comprehensive encrypted_store_test.go with 90%+ coverage
+- [ ] Task 2: Test encryption/decryption workflows with various passwords
+- [ ] Task 3: Test PasswordProvider patterns (static, callback, environment)
+- [ ] Task 4: Test error handling (wrong passwords, corrupted data, empty passwords)
+**Success Criteria**: 90%+ test coverage for EncryptedStore, all crypto operations validated
 
-**ACHIEVED Coverage Impact**: +8.6% (39.4% → 48.0%) - Exceeded expectation!
-- store.go: NewStore (100%), NewStoreWithManager (100%), Save (83.3%), Load (90.9%)
+**Sprint 1B: Integration & Compatibility Testing**
+- [ ] Task 5: Test EncryptedStore vs regular Store compatibility
+- [ ] Task 6: Test round-trip save/load cycles with encryption
+- [ ] Task 7: Test IsEncrypted() detection and SaveUnencrypted() workflows
+- [ ] Task 8: Validate secure memory clearing and password handling
+**Success Criteria**: Full compatibility verified, no data corruption or loss
 
-**SPRINT 2: Critical Encryption Tests (High Risk/High Impact)**
-**Objective**: Test critical encryption/decryption workflows
-**Success Criteria**: Encryption functionality thoroughly tested, password handling secure
+**PHASE 2: CLI Integration (USER ACCESS LAYER)**
 
-**Tasks**:
-- [ ] Task 2.1: Crypto Test Infrastructure
-  - [ ] Research crypto package test patterns
-  - [ ] Create test encryption keys and password providers
-  - [ ] Set up test data for encryption scenarios
+**Sprint 2A: Basic CLI Flags**
+- [ ] Task 9: Add --encrypt-descriptor flag to upload commands
+- [ ] Task 10: Add --descriptor-password flag for password input  
+- [ ] Task 11: Add environment variable support (NOISEFS_DESCRIPTOR_PASSWORD)
+- [ ] Task 12: Update help text explaining public vs encrypted descriptor choice
+**Success Criteria**: Users can encrypt descriptors via CLI, clear documentation
 
-- [ ] Task 2.2: Constructor & Basic Functionality
-  - [ ] Create encrypted_store_test.go file
-  - [ ] Test NewEncryptedStore(), NewEncryptedStoreWithPassword()
-  - [ ] Test basic Save() and Load() with encryption
-  - [ ] Test SaveUnencrypted() functionality
+**Sprint 2B: Enhanced CLI Experience**
+- [ ] Task 13: Add interactive password prompting with hidden input
+- [ ] Task 14: Auto-detect encrypted descriptors during download
+- [ ] Task 15: Add password retry prompts for wrong passwords
+- [ ] Task 16: Handle encrypted descriptors gracefully in existing commands
+**Success Criteria**: Seamless user experience for encrypted operations
 
-- [ ] Task 2.3: Advanced Encryption Scenarios
-  - [ ] Test password provider error scenarios
-  - [ ] Test IsEncrypted() functionality
-  - [ ] Test decryption with wrong passwords
-  - [ ] Test corrupted data handling
-  - [ ] Test memory safety (password clearing)
+**PHASE 3: CLIENT API INTEGRATION (PROGRAMMATIC ACCESS)**
 
-**Expected Coverage Impact**: +30-35% (encrypted_store.go has 15+ functions with 0% coverage)
+**Sprint 3A: Core API Extension**
+- [ ] Task 17: Add EncryptedUpload methods to client API
+- [ ] Task 18: Add EncryptedDownload methods with password handling
+- [ ] Task 19: Add PasswordProvider pattern support in client
+- [ ] Task 20: Maintain backward compatibility with existing unencrypted API
+**Success Criteria**: Full programmatic access to encryption features
 
-**SPRINT 3: Directory Enhancement Tests (Medium Impact)**
-**Objective**: Complete directory functionality testing
-**Success Criteria**: Snapshot functionality fully tested, directory validation improved
+**Sprint 3B: Configuration & Validation**
+- [ ] Task 21: Add configuration options for default encryption behavior
+- [ ] Task 22: Add password strength validation requirements
+- [ ] Task 23: Consider security-first defaults (prompt for encryption choice)
+- [ ] Task 24: Document security implications clearly
+**Success Criteria**: Secure defaults and clear configuration options
 
-**Tasks**:
-- [ ] Add snapshot tests to directory_test.go:
-  - [ ] NewSnapshotManifest() functionality
-  - [ ] IsSnapshot() method testing
-  - [ ] GetSnapshotInfo() method testing
-  - [ ] Snapshot validation edge cases
-- [ ] Improve directory validation coverage:
-  - [ ] Test additional edge cases in Validate()
-  - [ ] Test Marshal/Unmarshal error conditions
-  - [ ] Test EncryptManifest/DecryptManifest edge cases
+**PHASE 4: DOCUMENTATION & USER EDUCATION**
 
-**Expected Coverage Impact**: +10-15% (directory.go has several functions with partial coverage)
+**Sprint 4A: Comprehensive Documentation**
+- [ ] Task 25: Explain when to use encrypted vs unencrypted descriptors
+- [ ] Task 26: Document security implications and threat models
+- [ ] Task 27: Create troubleshooting guide for password issues
+- [ ] Task 28: Add best practices for password management
+**Success Criteria**: Clear documentation enables informed user decisions
 
-**SPRINT 4: Integration & Validation (Quality Assurance)**
-**Objective**: Ensure tests are robust and coverage target achieved
-**Success Criteria**: 70%+ coverage achieved, all tests pass consistently
+**Sprint 4B: Examples & Use Cases**
+- [ ] Task 29: Example CLI commands for encrypted operations
+- [ ] Task 30: Code examples for PasswordProvider patterns
+- [ ] Task 31: Security considerations and recommendations
+- [ ] Task 32: Migration guide for existing users
+**Success Criteria**: Practical examples accelerate adoption
 
-**Tasks**:
-- [ ] Run comprehensive coverage analysis
-- [ ] Identify any remaining gaps above 70% threshold
-- [ ] Add edge case tests for missed code paths
-- [ ] Performance testing of new test suite
-- [ ] Integration testing with existing codebase
-- [ ] Documentation of test patterns for future development
+**PHASE 5: ADVANCED FEATURES (FUTURE ENHANCEMENT)**
+
+**Sprint 5A: Key Management Improvements**
+- [ ] Task 33: Research integration with system keychains/credential stores
+- [ ] Task 34: Consider support for key files vs passwords
+- [ ] Task 35: Evaluate multi-user access patterns
+- [ ] Task 36: Plan for password rotation scenarios
+**Success Criteria**: Enhanced security and usability options identified
+
+**Sprint 5B: Performance & UX Optimization**
+- [ ] Task 37: Optimize encryption performance for large descriptors
+- [ ] Task 38: Add progress indicators for encryption operations
+- [ ] Task 39: Consider caching decrypted descriptors temporarily
+- [ ] Task 40: Add metadata-only operations without decryption
+**Success Criteria**: Production-ready performance and user experience
+
+### CRITICAL SUCCESS CRITERIA
+
+**Phase 1 Gates (Must Pass):**
+- ✅ 90%+ test coverage for all EncryptedStore functionality
+- ✅ All crypto operations validated with comprehensive test scenarios
+- ✅ Zero test failures, no security vulnerabilities found
+
+**Phase 2 Gates (Must Pass):**
+- ✅ CLI integration allows easy encrypted uploads/downloads
+- ✅ No breaking changes to existing unencrypted workflows
+- ✅ Clear user documentation of privacy choices
+
+**Final Completion Criteria:**
+- ✅ Users can choose between public and encrypted descriptors
+- ✅ CLI and API provide seamless access to encryption features
+- ✅ Comprehensive error handling and user experience
+- ✅ Performance acceptable for typical use cases
+- ✅ Privacy gap closed with user education
+
+### RISK MITIGATION STRATEGIES
+
+**Critical Risk (Crypto Security):**
+- Phase 1 testing is mandatory before any user-facing features
+- Comprehensive test coverage for all encryption workflows
+- Security review of password handling and memory clearing
+
+**High Risk (User Experience):**
+- Maintain backward compatibility throughout
+- Provide clear migration paths for existing users
+- Test CLI integration thoroughly before release
+
+**Medium Risk (Performance):**
+- Benchmark encryption overhead vs regular storage
+- Optimize for typical use cases during development
+- Monitor performance impact on large descriptors
 
 ### ✅ COMPLETED: PKG/COMPLIANCE REVIEW & CLEANUP
 
@@ -251,11 +298,42 @@
 
 The NoiseFS core client is now clean and optimized. Potential future enhancements:
 
-1. **Variable Block Sizing**: Research implementation with privacy preservation
-2. **Performance Optimization**: Further streaming and caching improvements
-3. **CLI Integration**: Enhanced command-line interface with progress reporting
-4. **Monitoring Integration**: Advanced metrics and health monitoring
-5. **Security Enhancements**: Additional anonymization and privacy features
+1. **Federated DMCA API Implementation**: Implement decentralized compliance API hosting across NoiseFS nodes
+2. **Variable Block Sizing**: Research implementation with privacy preservation
+3. **Performance Optimization**: Further streaming and caching improvements
+4. **CLI Integration**: Enhanced command-line interface with progress reporting
+5. **Monitoring Integration**: Advanced metrics and health monitoring
+6. **Security Enhancements**: Additional anonymization and privacy features
+
+## Future Milestone: Federated DMCA Compliance API
+
+**Objective**: Implement decentralized DMCA compliance API hosting across NoiseFS nodes, eliminating centralized compliance bottlenecks while maintaining legal compliance.
+
+**Key Features:**
+- **Per-Node APIs**: Optional compliance endpoints on participating NoiseFS nodes
+- **Distributed Validation**: Multiple nodes independently validate DMCA notices
+- **P2P Blacklist Propagation**: Cryptographically signed takedown decisions broadcast across network
+- **Trust Networks**: Configurable trust relationships between compliance validators
+- **Regional Compliance**: Support for different jurisdictional requirements (DMCA, EU Copyright Directive)
+- **Consensus Mechanism**: Multi-signature validation for disputed or controversial takedowns
+
+**Architecture:**
+```
+[Copyright Holders] → [Any Compliance Node] → [P2P Validation Network] → [Distributed Blacklist]
+```
+
+**Benefits:**
+- ✅ No single point of failure or control
+- ✅ Censorship resistance through distributed validation
+- ✅ Geographic compliance flexibility
+- ✅ Protection against frivolous takedowns through consensus
+- ✅ User choice in trusted compliance validators
+- ✅ Aligned with NoiseFS decentralization philosophy
+
+**Implementation Phases:**
+1. **Basic Federation**: Optional node-level compliance APIs with independent validation
+2. **Trust Networks**: Signature-based validation and reputation systems
+3. **Advanced Consensus**: Formal consensus protocols for disputed cases
 
 ## Ready for Enhanced Development
 
