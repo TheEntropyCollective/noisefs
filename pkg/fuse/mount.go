@@ -36,6 +36,9 @@ type MountOptions struct {
 	DirectoryKey       string // Encryption key for directory
 	Subdir             string // Subdirectory to mount
 	MultiDirs          []DirectoryMount // Multiple directories to mount
+	
+	// Configuration override
+	Config             *FuseConfig // Optional configuration override
 }
 
 // DirectoryMount represents a directory to mount
@@ -60,8 +63,18 @@ func Mount(client *noisefs.Client, storageManager *storage.Manager, opts MountOp
 
 // MountWithIndex mounts the NoiseFS FUSE filesystem with a custom index path
 func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opts MountOptions, indexPath string) error {
-	// Ensure mount point exists
-	if err := os.MkdirAll(opts.MountPath, 0755); err != nil {
+	// Load configuration
+	config := opts.Config
+	if config == nil {
+		var err error
+		config, err = LoadConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+	}
+	
+	// Ensure mount point exists using configured permissions
+	if err := os.MkdirAll(opts.MountPath, config.Security.MountDirMode); err != nil {
 		return fmt.Errorf("failed to create mount point: %w", err)
 	}
 
@@ -101,9 +114,8 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 		}
 	}
 
-	// Create directory cache
-	cacheConfig := DefaultDirectoryCacheConfig()
-	dirCache, err := NewDirectoryCache(cacheConfig, storageManager)
+	// Create directory cache using configuration
+	dirCache, err := NewDirectoryCacheFromFuseConfig(config, storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create directory cache: %w", err)
 	}
@@ -117,6 +129,7 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 		readOnly:       opts.ReadOnly,
 		index:          index,
 		dirCache:       dirCache,
+		config:         config,
 		encryptionKeys: make(map[string]*crypto.EncryptionKey),
 	}
 	
@@ -138,6 +151,20 @@ func MountWithIndex(client *noisefs.Client, storageManager *storage.Manager, opt
 	// Create path filesystem
 	pathFs := pathfs.NewPathNodeFs(nfs, nil)
 
+	// Apply configuration overrides to mount options
+	if opts.VolumeName == "" && config.Mount.DefaultVolumeName != "" {
+		opts.VolumeName = config.Mount.DefaultVolumeName
+	}
+	if !opts.AllowOther && config.Mount.AllowOther {
+		opts.AllowOther = config.Mount.AllowOther
+	}
+	if !opts.Debug && config.Mount.Debug {
+		opts.Debug = config.Mount.Debug
+	}
+	if !opts.ReadOnly && config.Mount.ReadOnly {
+		opts.ReadOnly = config.Mount.ReadOnly
+	}
+	
 	// Create FUSE mount options
 	fuseOpts := &fuse.MountOptions{
 		Name:       "noisefs",
@@ -212,6 +239,9 @@ type NoiseFS struct {
 	// Directory manifest cache
 	dirCache *DirectoryCache
 	
+	// Configuration
+	config *FuseConfig
+	
 	// Encryption keys for directories
 	encryptionKeys map[string]*crypto.EncryptionKey
 	keyMutex       sync.RWMutex
@@ -268,30 +298,35 @@ func (fs *NoiseFS) mountDirectory(name, descriptorCID, encryptionKey, subdir str
 
 // GetAttr implements pathfs.FileSystem
 func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse.Status) {
+	// Get configured file modes
+	dirMode := uint32(fs.config.Security.DefaultDirMode)
+	fileMode := uint32(fs.config.Security.DefaultFileMode)
+	
 	if name == "" {
 		// Root directory
 		return &fuse.Attr{
-			Mode: fuse.S_IFDIR | 0755,
+			Mode: fuse.S_IFDIR | dirMode,
 		}, fuse.OK
 	}
 
 	// Check if it's a directory
-	if name == "files" || strings.HasPrefix(name, "files/") {
+	filesSubdir := fs.config.Mount.FilesSubdirectory
+	if name == filesSubdir || strings.HasPrefix(name, filesSubdir+"/") {
 		// Check if it's the files directory itself
-		if name == "files" {
+		if name == filesSubdir {
 			return &fuse.Attr{
-				Mode: fuse.S_IFDIR | 0755,
+				Mode: fuse.S_IFDIR | dirMode,
 			}, fuse.OK
 		}
 		
 		// Get relative path
-		relativePath := strings.TrimPrefix(name, "files/")
+		relativePath := strings.TrimPrefix(name, filesSubdir+"/")
 		
 		// First check if it's a registered directory with descriptor
 		if dirEntry, exists := fs.index.GetDirectory(relativePath); exists {
 			// Return directory attributes with metadata
 			return &fuse.Attr{
-				Mode:  fuse.S_IFDIR | 0755,
+				Mode:  fuse.S_IFDIR | dirMode,
 				Mtime: uint64(dirEntry.ModifiedAt.Unix()),
 				Atime: uint64(dirEntry.ModifiedAt.Unix()),
 				Ctime: uint64(dirEntry.CreatedAt.Unix()),
@@ -304,7 +339,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 			// Handle based on entry type
 			if entry.Type == DirectoryEntryType {
 				return &fuse.Attr{
-					Mode:  fuse.S_IFDIR | 0755,
+					Mode:  fuse.S_IFDIR | dirMode,
 					Mtime: uint64(entry.ModifiedAt.Unix()),
 					Atime: uint64(entry.ModifiedAt.Unix()),
 					Ctime: uint64(entry.CreatedAt.Unix()),
@@ -313,7 +348,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 			
 			// Return file attributes from index
 			return &fuse.Attr{
-				Mode:  fuse.S_IFREG | 0644,
+				Mode:  fuse.S_IFREG | fileMode,
 				Size:  uint64(entry.FileSize),
 				Mtime: uint64(entry.ModifiedAt.Unix()),
 				Atime: uint64(entry.ModifiedAt.Unix()),
@@ -324,7 +359,7 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 		// Check if it's a directory by looking for files in subdirectories
 		if fs.index.IsDirectory(relativePath) {
 			return &fuse.Attr{
-				Mode: fuse.S_IFDIR | 0755,
+				Mode: fuse.S_IFDIR | dirMode,
 			}, fuse.OK
 		}
 	}
@@ -334,20 +369,22 @@ func (fs *NoiseFS) GetAttr(name string, context *fuse.Context) (*fuse.Attr, fuse
 
 // OpenDir implements pathfs.FileSystem
 func (fs *NoiseFS) OpenDir(name string, context *fuse.Context) ([]fuse.DirEntry, fuse.Status) {
+	filesSubdir := fs.config.Mount.FilesSubdirectory
+	
 	if name == "" {
 		// Root directory
 		return []fuse.DirEntry{
-			{Name: "files", Mode: fuse.S_IFDIR},
+			{Name: filesSubdir, Mode: fuse.S_IFDIR},
 		}, fuse.OK
 	}
 
-	if strings.HasPrefix(name, "files") {
+	if strings.HasPrefix(name, filesSubdir) {
 		// Get relative directory path
 		var dirPath string
-		if name == "files" {
+		if name == filesSubdir {
 			dirPath = ""
 		} else {
-			dirPath = strings.TrimPrefix(name, "files/")
+			dirPath = strings.TrimPrefix(name, filesSubdir+"/")
 		}
 		
 		// Get files in this directory

@@ -37,6 +37,7 @@ type DirectoryCache struct {
 }
 
 // DirectoryCacheConfig holds configuration for the directory cache
+// Deprecated: Use CacheConfig from FuseConfig instead
 type DirectoryCacheConfig struct {
 	MaxSize        int           // Maximum number of cached manifests
 	TTL            time.Duration // Time to live for cache entries
@@ -44,12 +45,32 @@ type DirectoryCacheConfig struct {
 }
 
 // DefaultDirectoryCacheConfig returns default cache configuration
+// Deprecated: Use DefaultFuseConfig().Cache instead
 func DefaultDirectoryCacheConfig() *DirectoryCacheConfig {
 	return &DirectoryCacheConfig{
 		MaxSize:       100,
 		TTL:           30 * time.Minute,
 		EnableMetrics: true,
 	}
+}
+
+// NewDirectoryCacheFromFuseConfig creates a new directory cache from FuseConfig
+func NewDirectoryCacheFromFuseConfig(config *FuseConfig, storageManager *storage.Manager) (*DirectoryCache, error) {
+	if config == nil {
+		config = DefaultFuseConfig()
+	}
+	
+	if storageManager == nil {
+		return nil, fmt.Errorf("storage manager cannot be nil")
+	}
+	
+	return &DirectoryCache{
+		maxSize:        config.Cache.DirectoryMaxSize,
+		ttl:            config.Cache.DirectoryTTL,
+		entries:        make(map[string]*list.Element),
+		lru:            list.New(),
+		storageManager: storageManager,
+	}, nil
 }
 
 // NewDirectoryCache creates a new directory cache
@@ -239,12 +260,23 @@ func (dc *DirectoryCache) removeOldest() {
 
 // estimateManifestSize estimates the memory size of a manifest
 func (dc *DirectoryCache) estimateManifestSize(manifest *descriptors.DirectoryManifest) int {
-	// Basic estimation: 100 bytes per entry plus overhead
-	return len(manifest.Entries)*100 + 1024
+	// Basic estimation: configurable bytes per entry plus overhead
+	// Default: 100 bytes per entry plus 1024 bytes overhead
+	entryOverhead := 100
+	baseOverhead := 1024
+	
+	// TODO: Make this configurable through DirectoryCache
+	// For now, use hardcoded defaults matching FuseConfig defaults
+	return len(manifest.Entries)*entryOverhead + baseOverhead
 }
 
 // WarmCache warms the cache with frequently accessed directories
 func (dc *DirectoryCache) WarmCache(ctx context.Context, index *FileIndex) error {
+	return dc.WarmCacheWithConfig(ctx, index, nil)
+}
+
+// WarmCacheWithConfig warms the cache with frequently accessed directories using specified config
+func (dc *DirectoryCache) WarmCacheWithConfig(ctx context.Context, index *FileIndex, config *FuseConfig) error {
 	// Get all directories from index
 	directories := make([]string, 0)
 	for path, entry := range index.ListFiles() {
@@ -255,7 +287,10 @@ func (dc *DirectoryCache) WarmCache(ctx context.Context, index *FileIndex) error
 	
 	// Sort by access frequency or other heuristics
 	// For now, just load the first few
-	maxWarm := 10
+	maxWarm := 10 // Default value
+	if config != nil {
+		maxWarm = config.Cache.WarmCacheMaxDirs
+	}
 	if len(directories) < maxWarm {
 		maxWarm = len(directories)
 	}

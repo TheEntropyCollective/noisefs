@@ -61,7 +61,7 @@ func GetDefaultIndexPath() (string, error) {
 	}
 	
 	noisefsDir := filepath.Join(homeDir, ".noisefs")
-	if err := os.MkdirAll(noisefsDir, 0700); err != nil {
+	if err := os.MkdirAll(noisefsDir, 0700); err != nil { // TODO: Use config.Security.IndexDirMode
 		return "", fmt.Errorf("failed to create .noisefs directory: %w", err)
 	}
 	
@@ -118,7 +118,7 @@ func (idx *FileIndex) SaveIndex() error {
 	
 	// Ensure directory exists
 	dir := filepath.Dir(idx.filePath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil { // TODO: Use config.Security.IndexDirMode
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 	
@@ -130,7 +130,7 @@ func (idx *FileIndex) SaveIndex() error {
 	
 	// Write to temporary file first
 	tmpPath := idx.filePath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0600); err != nil {
+	if err := os.WriteFile(tmpPath, data, 0600); err != nil { // TODO: Use config.Security.IndexFileMode
 		return fmt.Errorf("failed to write index file: %w", err)
 	}
 	

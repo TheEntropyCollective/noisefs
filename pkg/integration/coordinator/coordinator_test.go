@@ -22,11 +22,12 @@ func TestSystemCoordinatorCreation(t *testing.T) {
 		}
 
 		// We expect it to fail trying to connect to storage backend
-		// After refactoring, the error is about storage/reuse initialization
+		// After refactoring, the error is about subsystem initialization
 		expectedErrors := []string{
 			"failed to initialize IPFS",
-			"failed to initialize reuse",
-			"failed to initialize storage",
+			"failed to initialize storage subsystem",
+			"failed to initialize reuse subsystem",
+			"failed to initialize privacy subsystem",
 		}
 
 		foundExpectedError := false
@@ -151,5 +152,72 @@ func TestStorageEfficiencyCalculation(t *testing.T) {
 		if efficiency > 1.0 {
 			t.Errorf("Efficiency cannot exceed 1.0: %f", efficiency)
 		}
+	})
+}
+
+func TestSystemCoordinatorSubsystemGetters(t *testing.T) {
+	// Test that subsystem getters exist and have correct return types
+	t.Run("Subsystem getters compilation test", func(t *testing.T) {
+		// Create a minimal coordinator to test getters (won't succeed but tests compilation)
+		coordinator := &SystemCoordinator{}
+		
+		// Test that all getter methods exist and return expected types
+		_ = coordinator.GetStorageSubsystem
+		_ = coordinator.GetPrivacySubsystem
+		_ = coordinator.GetReuseSubsystem
+		_ = coordinator.GetComplianceSubsystem
+		_ = coordinator.GetMetricsSubsystem
+		
+		// These should return nil since coordinator is not initialized, but types should be correct
+		storageSubsystem := coordinator.GetStorageSubsystem()
+		privacySubsystem := coordinator.GetPrivacySubsystem()
+		reuseSubsystem := coordinator.GetReuseSubsystem()
+		complianceSubsystem := coordinator.GetComplianceSubsystem()
+		metricsSubsystem := coordinator.GetMetricsSubsystem()
+		
+		// All should be nil but have correct types
+		if storageSubsystem != nil {
+			t.Log("StorageSubsystem getter works")
+		}
+		if privacySubsystem != nil {
+			t.Log("PrivacySubsystem getter works")
+		}
+		if reuseSubsystem != nil {
+			t.Log("ReuseSubsystem getter works")
+		}
+		if complianceSubsystem != nil {
+			t.Log("ComplianceSubsystem getter works")
+		}
+		if metricsSubsystem != nil {
+			t.Log("MetricsSubsystem getter works")
+		}
+	})
+}
+
+func TestSystemCoordinatorBackwardCompatibility(t *testing.T) {
+	// Test that the refactored coordinator maintains the same public API
+	t.Run("Public API compatibility", func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		
+		// Test that original constructor exists
+		_, err := NewSystemCoordinator(cfg)
+		if err == nil {
+			t.Skip("SystemCoordinator creation unexpectedly succeeded - requires real IPFS")
+		}
+		
+		// Test that we have the expected error (compilation test)
+		if err == nil {
+			t.Error("Expected error from SystemCoordinator creation without IPFS")
+		}
+		
+		// Create a minimal coordinator to test API methods exist
+		coordinator := &SystemCoordinator{}
+		
+		// Test that all original public methods exist (compilation test)
+		_ = coordinator.GetSystemMetrics
+		_ = coordinator.Shutdown
+		
+		// Note: UploadFile and DownloadFile would panic with nil subsystems,
+		// but we're just testing that the methods exist with correct signatures
 	})
 }

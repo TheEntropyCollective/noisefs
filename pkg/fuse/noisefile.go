@@ -174,7 +174,7 @@ func (f *NoiseFile) uploadFile() error {
 	randomizer2CIDs := make([]string, len(fileBlocks))
 	
 	for i := range fileBlocks {
-		randBlock1, cid1, randBlock2, cid2, err := f.client.SelectRandomizers(fileBlocks[i].Size())
+		randBlock1, cid1, randBlock2, cid2, _, err := f.client.SelectRandomizers(fileBlocks[i].Size())
 		if err != nil {
 			return fmt.Errorf("failed to select randomizer blocks: %w", err)
 		}
@@ -291,7 +291,7 @@ func (f *NoiseFile) GetAttr(out *fuse.Attr) fuse.Status {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	
-	out.Mode = fuse.S_IFREG | 0644
+	out.Mode = fuse.S_IFREG | 0644 // TODO: Use config.Security.DefaultFileMode
 	
 	// Use write buffer size if dirty, otherwise use descriptor size
 	if f.dirty && f.writeBuffer != nil {

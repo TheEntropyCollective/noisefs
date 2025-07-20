@@ -1,6 +1,7 @@
 package reuse
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/backends"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
@@ -395,18 +397,222 @@ func TestPublicDomainMixer(t *testing.T) {
 
 // Test Reuse-Aware Client
 func TestReuseAwareClient(t *testing.T) {
+	setupReuseClient := func(t *testing.T) *ReuseAwareClient {
+		t.Helper()
+		
+		// Create mock storage manager
+		config := storage.DefaultConfig()
+		config.DefaultBackend = "mock"
+		config.Backends = map[string]*storage.BackendConfig{
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 100,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "mock://test",
+				},
+			},
+		}
+		
+		storageManager, err := storage.NewManager(config)
+		if err != nil {
+			t.Fatalf("Failed to create storage manager: %v", err)
+		}
+		
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to start storage manager: %v", err)
+		}
+		
+		// Create test cache
+		testCache := cache.NewMemoryCache(1024 * 1024) // 1MB cache
+		
+		// Create reuse-aware client
+		client, err := NewReuseAwareClient(storageManager, testCache)
+		if err != nil {
+			t.Fatalf("Failed to create reuse-aware client: %v", err)
+		}
+		
+		return client
+	}
+
 	t.Run("Client Creation", func(t *testing.T) {
-		// Note: ReuseAwareClient requires a real ipfs.Client, not a mock
-		// For unit testing, we'll skip this test as it requires real IPFS integration
-		t.Skip("ReuseAwareClient requires *ipfs.Client type, not compatible with mocks")
+		client := setupReuseClient(t)
+		
+		if client == nil {
+			t.Fatal("Client should not be nil")
+		}
+		
+		if !client.IsReuseEnabled() {
+			t.Error("Reuse should be enabled by default")
+		}
+		
+		if client.baseClient == nil {
+			t.Error("Base client should be initialized")
+		}
+		
+		if client.pool == nil {
+			t.Error("Universal block pool should be initialized")
+		}
+		
+		if client.enforcer == nil {
+			t.Error("Reuse enforcer should be initialized")
+		}
+		
+		if client.mixer == nil {
+			t.Error("Public domain mixer should be initialized")
+		}
 	})
 
 	t.Run("Upload with Reuse Enforcement", func(t *testing.T) {
-		t.Skip("ReuseAwareClient requires *ipfs.Client type, not compatible with mocks")
+		client := setupReuseClient(t)
+		
+		// Create test file data
+		testData := make([]byte, 64*1024) // 64KB test file
+		for i := range testData {
+			testData[i] = byte(i % 256)
+		}
+		
+		// Test upload
+		reader := bytes.NewReader(testData)
+		result, err := client.UploadFile(reader, "test.dat", 128*1024)
+		if err != nil {
+			t.Fatalf("Failed to upload file: %v", err)
+		}
+		
+		if result == nil {
+			t.Fatal("Upload result should not be nil")
+		}
+		
+		if result.DescriptorCID == "" {
+			t.Error("Should have descriptor CID")
+		}
+		
+		if result.ValidationResult == nil {
+			t.Error("Should have validation result")
+		}
+		
+		if result.MixingPlan == nil {
+			t.Error("Should have mixing plan")
+		}
+		
+		if result.ReuseProof == nil {
+			t.Error("Should have reuse proof")
+		}
+		
+		// For this test, we'll skip the download roundtrip test since it requires
+		// a more complex setup with proper descriptor handling that matches the
+		// actual implementation. The important thing is that upload succeeds
+		// and all the reuse components are working.
+		t.Logf("Upload successful with descriptor CID: %s", result.DescriptorCID)
+		t.Logf("Validation result: %+v", result.ValidationResult)
 	})
 
 	t.Run("Statistics and Documentation", func(t *testing.T) {
-		t.Skip("ReuseAwareClient requires *ipfs.Client type, not compatible with mocks")
+		client := setupReuseClient(t)
+		
+		// Test statistics
+		stats := client.GetReuseStatistics()
+		if stats == nil {
+			t.Fatal("Statistics should not be nil")
+		}
+		
+		if stats["system"] == nil {
+			t.Error("Should have system statistics")
+		}
+		
+		if stats["pool"] == nil {
+			t.Error("Should have pool statistics")
+		}
+		
+		// Upload a file to generate some statistics
+		testData := make([]byte, 32*1024)
+		reader := bytes.NewReader(testData)
+		result, err := client.UploadFile(reader, "test.dat", 128*1024)
+		if err != nil {
+			t.Fatalf("Failed to upload test file: %v", err)
+		}
+		
+		// Test legal documentation generation
+		legalDoc, err := client.GetLegalDocumentation(result.DescriptorCID)
+		if err != nil {
+			t.Fatalf("Failed to get legal documentation: %v", err)
+		}
+		
+		if legalDoc == nil {
+			t.Fatal("Legal documentation should not be nil")
+		}
+		
+		if legalDoc.ComplianceCertificate == "" {
+			t.Error("Should have compliance certificate")
+		}
+		
+		if legalDoc.DMCADefenseKit == nil {
+			t.Error("Should have DMCA defense kit")
+		}
+		
+		if legalDoc.ExpertWitnessReport == "" {
+			t.Error("Should have expert witness report")
+		}
+	})
+
+	t.Run("Descriptor Validation", func(t *testing.T) {
+		client := setupReuseClient(t)
+		
+		// Upload a file first
+		testData := make([]byte, 16*1024)
+		reader := bytes.NewReader(testData)
+		result, err := client.UploadFile(reader, "test.dat", 128*1024)
+		if err != nil {
+			t.Fatalf("Failed to upload test file: %v", err)
+		}
+		
+		// Validate the descriptor
+		validation, err := client.ValidateDescriptor(result.DescriptorCID)
+		if err != nil {
+			t.Fatalf("Failed to validate descriptor: %v", err)
+		}
+		
+		if validation == nil {
+			t.Fatal("Validation result should not be nil")
+		}
+		
+		// The result should be valid since we just uploaded it through the same system
+		if !validation.Valid {
+			t.Errorf("Descriptor should be valid, violations: %v", validation.Violations)
+		}
+	})
+
+	t.Run("Error Conditions", func(t *testing.T) {
+		client := setupReuseClient(t)
+		
+		// Test with disabled reuse
+		client.DisableReuse()
+		
+		testData := make([]byte, 1024)
+		reader := bytes.NewReader(testData)
+		_, err := client.UploadFile(reader, "test.dat", 128*1024)
+		if err == nil {
+			t.Error("Should fail when reuse is disabled")
+		}
+		
+		client.EnableReuse()
+		
+		// Test with invalid descriptor CID
+		_, err = client.ValidateDescriptor("invalid-cid")
+		if err == nil {
+			t.Error("Should fail with invalid descriptor CID")
+		}
+		
+		_, err = client.DownloadFile("invalid-cid")
+		if err == nil {
+			t.Error("Should fail with invalid descriptor CID")
+		}
+		
+		_, err = client.GetLegalDocumentation("invalid-cid")
+		if err == nil {
+			t.Error("Should fail with invalid descriptor CID")
+		}
 	})
 }
 
@@ -578,7 +784,99 @@ func TestLegalProofSystem(t *testing.T) {
 // Integration tests
 func TestReuseSystemIntegration(t *testing.T) {
 	t.Run("End-to-End Reuse Workflow", func(t *testing.T) {
-		t.Skip("ReuseAwareClient requires *ipfs.Client type, not compatible with mocks")
+		// Create storage manager
+		config := storage.DefaultConfig()
+		config.DefaultBackend = "mock"
+		config.Backends = map[string]*storage.BackendConfig{
+			"mock": {
+				Type:     "mock",
+				Enabled:  true,
+				Priority: 100,
+				Connection: &storage.ConnectionConfig{
+					Endpoint: "mock://test",
+				},
+			},
+		}
+		
+		storageManager, err := storage.NewManager(config)
+		if err != nil {
+			t.Fatalf("Failed to create storage manager: %v", err)
+		}
+		
+		err = storageManager.Start(context.Background())
+		if err != nil {
+			t.Fatalf("Failed to start storage manager: %v", err)
+		}
+		
+		// Create test cache
+		testCache := cache.NewMemoryCache(1024 * 1024)
+		
+		// Create reuse-aware client
+		client, err := NewReuseAwareClient(storageManager, testCache)
+		if err != nil {
+			t.Fatalf("Failed to create reuse-aware client: %v", err)
+		}
+		
+		// Upload multiple files to test reuse
+		files := []struct {
+			name string
+			data []byte
+		}{
+			{"file1.txt", make([]byte, 64*1024)},
+			{"file2.txt", make([]byte, 128*1024)},
+			{"file3.txt", make([]byte, 32*1024)},
+		}
+		
+		// Initialize file data
+		for i, file := range files {
+			for j := range file.data {
+				files[i].data[j] = byte((i*256 + j) % 256)
+			}
+		}
+		
+		// Upload all files
+		results := make([]*UploadResult, len(files))
+		for i, file := range files {
+			reader := bytes.NewReader(file.data)
+			result, err := client.UploadFile(reader, file.name, 128*1024)
+			if err != nil {
+				t.Fatalf("Failed to upload %s: %v", file.name, err)
+			}
+			results[i] = result
+		}
+		
+		// Verify all uploads succeeded
+		for i, result := range results {
+			if result.DescriptorCID == "" {
+				t.Errorf("File %s should have descriptor CID", files[i].name)
+			}
+			if result.ValidationResult == nil || !result.ValidationResult.Valid {
+				t.Errorf("File %s should pass validation", files[i].name)
+			}
+		}
+		
+		// Test download roundtrip for all files
+		for i, result := range results {
+			downloadedData, err := client.DownloadFile(result.DescriptorCID)
+			if err != nil {
+				t.Fatalf("Failed to download %s: %v", files[i].name, err)
+			}
+			
+			if !bytes.Equal(files[i].data, downloadedData) {
+				t.Errorf("Downloaded data for %s doesn't match original", files[i].name)
+			}
+		}
+		
+		// Check that reuse statistics show improvement
+		stats := client.GetReuseStatistics()
+		if stats["enforcement"] == nil {
+			t.Error("Should have enforcement statistics")
+		}
+		
+		poolStats := stats["pool"].(map[string]interface{})
+		if poolStats["total_blocks"].(int) == 0 {
+			t.Error("Should have blocks in pool")
+		}
 	})
 
 	t.Run("Pool Statistics Integration", func(t *testing.T) {

@@ -148,7 +148,7 @@ func (eidx *EncryptedFileIndex) SaveIndex() error {
 	
 	// Ensure directory exists
 	dir := filepath.Dir(eidx.filePath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil { // TODO: Use config.Security.IndexDirMode
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 	
@@ -191,7 +191,7 @@ func (eidx *EncryptedFileIndex) SaveIndex() error {
 	
 	// Write atomically
 	tmpPath := eidx.filePath + ".tmp"
-	if err := os.WriteFile(tmpPath, finalData, 0600); err != nil {
+	if err := os.WriteFile(tmpPath, finalData, 0600); err != nil { // TODO: Use config.Security.IndexFileMode
 		return fmt.Errorf("failed to write index file: %w", err)
 	}
 	
@@ -316,7 +316,7 @@ func GetEncryptedIndexPath() (string, error) {
 	}
 	
 	noisefsDir := filepath.Join(homeDir, ".noisefs")
-	if err := os.MkdirAll(noisefsDir, 0700); err != nil {
+	if err := os.MkdirAll(noisefsDir, 0700); err != nil { // TODO: Use config.Security.IndexDirMode
 		return "", fmt.Errorf("failed to create .noisefs directory: %w", err)
 	}
 	
@@ -378,6 +378,11 @@ func MigrateToEncrypted(indexPath, password string) error {
 
 // secureDeleteFile attempts to securely delete a file
 func secureDeleteFile(path string) {
+	secureDeleteFileWithPasses(path, 3) // Default to 3 passes
+}
+
+// secureDeleteFileWithPasses attempts to securely delete a file with specified passes
+func secureDeleteFileWithPasses(path string, passes int) {
 	// Basic secure deletion - overwrite file before deletion
 	if file, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
 		defer file.Close()
@@ -386,8 +391,8 @@ func secureDeleteFile(path string) {
 		if err == nil {
 			size := stat.Size()
 			
-			// Overwrite with random data 3 times
-			for i := 0; i < 3; i++ {
+			// Overwrite with random data for configured number of passes
+			for i := 0; i < passes; i++ {
 				file.Seek(0, 0)
 				randomData := make([]byte, size)
 				rand.Read(randomData)

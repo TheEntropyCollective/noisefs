@@ -29,9 +29,21 @@ func createTestManifest(name string, entryCount int) *descriptors.DirectoryManif
 func TestDirectoryCacheBasicOperations(t *testing.T) {
 	// Create mock storage manager
 	storageConfig := storage.DefaultConfig()
+	storageConfig.DefaultBackend = "mock"
+	storageConfig.Backends = map[string]*storage.BackendConfig{
+		"mock": {
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+			Connection: &storage.ConnectionConfig{
+				Endpoint: "mock://test",
+			},
+		},
+	}
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Skip("Storage manager not available for test")
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	
 	config := &DirectoryCacheConfig{
@@ -79,9 +91,21 @@ func TestDirectoryCacheBasicOperations(t *testing.T) {
 
 func TestDirectoryCacheLRUEviction(t *testing.T) {
 	storageConfig := storage.DefaultConfig()
+	storageConfig.DefaultBackend = "mock"
+	storageConfig.Backends = map[string]*storage.BackendConfig{
+		"mock": {
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+			Connection: &storage.ConnectionConfig{
+				Endpoint: "mock://test",
+			},
+		},
+	}
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Skip("Storage manager not available for test")
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	
 	config := &DirectoryCacheConfig{
@@ -123,9 +147,21 @@ func TestDirectoryCacheLRUEviction(t *testing.T) {
 
 func TestDirectoryCacheTTL(t *testing.T) {
 	storageConfig := storage.DefaultConfig()
+	storageConfig.DefaultBackend = "mock"
+	storageConfig.Backends = map[string]*storage.BackendConfig{
+		"mock": {
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+			Connection: &storage.ConnectionConfig{
+				Endpoint: "mock://test",
+			},
+		},
+	}
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Skip("Storage manager not available for test")
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	
 	config := &DirectoryCacheConfig{
@@ -159,9 +195,21 @@ func TestDirectoryCacheTTL(t *testing.T) {
 
 func TestDirectoryCacheConcurrency(t *testing.T) {
 	storageConfig := storage.DefaultConfig()
+	storageConfig.DefaultBackend = "mock"
+	storageConfig.Backends = map[string]*storage.BackendConfig{
+		"mock": {
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+			Connection: &storage.ConnectionConfig{
+				Endpoint: "mock://test",
+			},
+		},
+	}
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Skip("Storage manager not available for test")
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	
 	config := &DirectoryCacheConfig{
@@ -212,9 +260,21 @@ func TestDirectoryCacheConcurrency(t *testing.T) {
 
 func TestDirectoryCacheClear(t *testing.T) {
 	storageConfig := storage.DefaultConfig()
+	storageConfig.DefaultBackend = "mock"
+	storageConfig.Backends = map[string]*storage.BackendConfig{
+		"mock": {
+			Type:     "mock",
+			Enabled:  true,
+			Priority: 100,
+			Connection: &storage.ConnectionConfig{
+				Endpoint: "mock://test",
+			},
+		},
+	}
+	
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
-		t.Skip("Storage manager not available for test")
+		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	
 	config := DefaultDirectoryCacheConfig()

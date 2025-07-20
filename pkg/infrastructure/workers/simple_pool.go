@@ -3,27 +3,22 @@ package workers
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sync"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
 
-// SimpleWorkerPool provides a simplified worker pool for block operations
-// This focuses on the core functionality needed for Sprint 1
+// SimpleWorkerPool provides lightweight parallel execution for block operations.
+// Uses pure goroutines, trusting Go's excellent scheduler for optimal performance.
 type SimpleWorkerPool struct {
-	workerCount int
+	// No internal state needed - pure goroutines handle everything
 }
 
-// NewSimpleWorkerPool creates a simple worker pool
+// NewSimpleWorkerPool creates a simple worker pool.
+// The workerCount parameter is ignored - Go's scheduler handles concurrency optimally.
 func NewSimpleWorkerPool(workerCount int) *SimpleWorkerPool {
-	if workerCount <= 0 {
-		workerCount = runtime.NumCPU()
-	}
-	return &SimpleWorkerPool{
-		workerCount: workerCount,
-	}
+	return &SimpleWorkerPool{}
 }
 
 // ParallelXOR performs XOR operations on blocks in parallel
@@ -35,8 +30,6 @@ func (p *SimpleWorkerPool) ParallelXOR(ctx context.Context, dataBlocks, randomiz
 	results := make([]*blocks.Block, len(dataBlocks))
 	errors := make([]error, len(dataBlocks))
 	
-	// Use a semaphore to limit concurrency
-	semaphore := make(chan struct{}, p.workerCount)
 	var wg sync.WaitGroup
 	
 	for i := range dataBlocks {
@@ -44,13 +37,12 @@ func (p *SimpleWorkerPool) ParallelXOR(ctx context.Context, dataBlocks, randomiz
 		go func(index int) {
 			defer wg.Done()
 			
-			// Acquire semaphore
+			// Check for cancellation
 			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errors[index] = ctx.Err()
 				return
+			default:
 			}
 			
 			// Perform XOR operation
@@ -82,8 +74,6 @@ func (p *SimpleWorkerPool) ParallelStorage(ctx context.Context, blockList []*blo
 	results := make([]string, len(blockList))
 	errors := make([]error, len(blockList))
 	
-	// Use a semaphore to limit concurrency
-	semaphore := make(chan struct{}, p.workerCount)
 	var wg sync.WaitGroup
 	
 	for i, block := range blockList {
@@ -91,13 +81,12 @@ func (p *SimpleWorkerPool) ParallelStorage(ctx context.Context, blockList []*blo
 		go func(index int, b *blocks.Block) {
 			defer wg.Done()
 			
-			// Acquire semaphore
+			// Check for cancellation
 			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errors[index] = ctx.Err()
 				return
+			default:
 			}
 			
 			// Store block
@@ -129,8 +118,6 @@ func (p *SimpleWorkerPool) ParallelRetrieval(ctx context.Context, addresses []*s
 	results := make([]*blocks.Block, len(addresses))
 	errors := make([]error, len(addresses))
 	
-	// Use a semaphore to limit concurrency
-	semaphore := make(chan struct{}, p.workerCount)
 	var wg sync.WaitGroup
 	
 	for i, address := range addresses {
@@ -138,13 +125,12 @@ func (p *SimpleWorkerPool) ParallelRetrieval(ctx context.Context, addresses []*s
 		go func(index int, addr *storage.BlockAddress) {
 			defer wg.Done()
 			
-			// Acquire semaphore
+			// Check for cancellation
 			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errors[index] = ctx.Err()
 				return
+			default:
 			}
 			
 			// Retrieve block
@@ -174,8 +160,6 @@ func (p *SimpleWorkerPool) ParallelRandomizerGeneration(ctx context.Context, cou
 	results := make([]*blocks.Block, count)
 	errors := make([]error, count)
 	
-	// Use a semaphore to limit concurrency
-	semaphore := make(chan struct{}, p.workerCount)
 	var wg sync.WaitGroup
 	
 	for i := 0; i < count; i++ {
@@ -183,13 +167,12 @@ func (p *SimpleWorkerPool) ParallelRandomizerGeneration(ctx context.Context, cou
 		go func(index int) {
 			defer wg.Done()
 			
-			// Acquire semaphore
+			// Check for cancellation
 			select {
-			case semaphore <- struct{}{}:
-				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errors[index] = ctx.Err()
 				return
+			default:
 			}
 			
 			// Generate randomizer block
