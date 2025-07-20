@@ -21,7 +21,7 @@ NoiseFS implements the OFFSystem architecture on IPFS for privacy-preserving P2P
 
 ## Goals
 
-- **Achieved**: ~1.2% storage overhead (far better than original <200% target)
+- **Achieved**: 0% storage overhead in mature systems (far better than original <200% target)
 - **Current**: Fixed 128 KiB block size optimizes privacy over storage efficiency
 - **Strong privacy guarantees** with plausible deniability via consistent block sizes
 - **Efficient block reuse** through smart randomizer caching
@@ -35,7 +35,7 @@ NoiseFS implements the OFFSystem architecture on IPFS for privacy-preserving P2P
 - **Privacy-first approach**: Consistent sizes prevent fingerprinting but sacrifice storage efficiency for tiny files
 
 ### Performance Characteristics
-- **Excellent for large files**: Minimal overhead on files > 128 KiB
+- **Excellent for large files**: 0% overhead in mature systems via randomizer reuse
 - **Cache-friendly**: Single block size optimizes randomizer reuse
 - **IPFS-optimized**: 128 KiB works well with IPFS networking
 

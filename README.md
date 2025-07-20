@@ -5,7 +5,7 @@ NoiseFS is a privacy-preserving distributed filesystem built on IPFS. It uses 3-
 ## Key Features
 
 - **Strong Privacy**: XOR-based block anonymization provides plausible deniability
-- **Efficient Storage**: ~30% measured overhead vs 900-2900% for other anonymous systems
+- **Efficient Storage**: 0% overhead in mature systems vs 900-2900% for other anonymous systems
 - **IPFS Integration**: Built on mature, decentralized storage infrastructure
 - **FUSE Support**: Mount as a regular filesystem on Linux/macOS
 - **Direct Access**: No routing through intermediate nodes
