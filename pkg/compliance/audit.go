@@ -1,9 +1,13 @@
 package compliance
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"sort"
 	"strings"
 	"sync"
@@ -28,6 +32,9 @@ type AuditConfig struct {
 	ExportFormats            []string      `json:"export_formats"` // "json", "csv", "xml"
 	AutoBackupInterval       time.Duration `json:"auto_backup_interval"`
 	LegalHoldEnabled         bool          `json:"legal_hold_enabled"`
+	SigningKey               *ecdsa.PrivateKey `json:"-"` // Private key for cryptographic signatures (not serialized)
+	SystemVersion            string        `json:"system_version"`
+	Jurisdiction             string        `json:"jurisdiction"`
 }
 
 // AlertThresholds define when to generate compliance alerts
@@ -194,6 +201,13 @@ func NewComplianceAuditSystem(config *AuditConfig) *ComplianceAuditSystem {
 
 // DefaultAuditConfig returns default audit configuration
 func DefaultAuditConfig() *AuditConfig {
+	// Generate a new ECDSA signing key for cryptographic signatures
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		// Fallback to nil key if generation fails - signatures will be disabled
+		signingKey = nil
+	}
+	
 	return &AuditConfig{
 		EnableRealTimeLogging:     true,
 		LogRetentionPeriod:        7 * 365 * 24 * time.Hour, // 7 years
@@ -208,6 +222,9 @@ func DefaultAuditConfig() *AuditConfig {
 		ExportFormats:      []string{"json", "csv"},
 		AutoBackupInterval: 24 * time.Hour,
 		LegalHoldEnabled:   true,
+		SigningKey:         signingKey,
+		SystemVersion:      "noisefs-1.0",
+		Jurisdiction:       "US",
 	}
 }
 
@@ -230,13 +247,13 @@ func (system *ComplianceAuditSystem) LogComplianceEvent(eventType, userID, targe
 		ActionDetails:  details,
 		Result:         "success", // Default, can be updated
 		ComplianceNotes: system.generateComplianceNotes(eventType, action),
-		SystemVersion:  "noisefs-1.0", // Should be dynamic
+		SystemVersion:  system.config.SystemVersion,
 		Tags:           system.generateTags(eventType, action),
 	}
 	
 	// Add legal context
 	entry.LegalContext = &LegalContext{
-		Jurisdiction:     "US", // Should be configurable
+		Jurisdiction:     system.config.Jurisdiction,
 		ApplicableLaws:   []string{"DMCA 17 USC 512", "CFAA", "Privacy Act"},
 		LegalBasis:       system.determineLegalBasis(eventType),
 		ComplianceReason: "DMCA safe harbor compliance",
@@ -321,7 +338,7 @@ func (system *ComplianceAuditSystem) GenerateComplianceReport(startDate, endDate
 		StartDate:     startDate,
 		EndDate:       endDate,
 		GeneratedAt:   time.Now(),
-		SystemVersion: "noisefs-1.0",
+		SystemVersion: system.config.SystemVersion,
 	}
 	
 	// Filter entries by date range
@@ -659,18 +676,171 @@ func (system *ComplianceAuditSystem) calculateComplianceScore(entries []*Detaile
 }
 
 func (system *ComplianceAuditSystem) calculateDMCAComplianceScore(entries []*DetailedAuditEntry) float64 {
-	// Implementation would analyze DMCA-specific compliance
-	return 0.95 // Placeholder
+	if len(entries) == 0 {
+		return 1.0 // Perfect score with no events
+	}
+	
+	dmcaEvents := 0
+	successfulEvents := 0
+	failedEvents := 0
+	
+	for _, entry := range entries {
+		// Count DMCA-related events
+		if strings.Contains(entry.EventType, "dmca") {
+			dmcaEvents++
+			
+			// Evaluate success/failure based on result
+			switch entry.Result {
+			case "success", "processed", "blacklisted", "reinstated":
+				successfulEvents++
+			case "failed", "rejected", "error":
+				failedEvents++
+			}
+		}
+	}
+	
+	if dmcaEvents == 0 {
+		return 1.0 // No DMCA events to evaluate
+	}
+	
+	// Calculate base score from success rate
+	successRate := float64(successfulEvents) / float64(dmcaEvents)
+	
+	// Apply penalties for failed events
+	failurePenalty := float64(failedEvents) * 0.1 // 10% penalty per failure
+	
+	// Calculate final score (min 0.0, max 1.0)
+	score := successRate - failurePenalty
+	if score < 0 {
+		score = 0
+	}
+	if score > 1 {
+		score = 1
+	}
+	
+	return score
 }
 
 func (system *ComplianceAuditSystem) calculateProcessingComplianceScore(entries []*DetailedAuditEntry) float64 {
-	// Implementation would analyze processing time compliance
-	return 0.92 // Placeholder
+	if len(entries) == 0 {
+		return 1.0 // Perfect score with no events
+	}
+	
+	processableEvents := 0
+	timelyEvents := 0
+	delayedEvents := 0
+	
+	// Define processing time thresholds
+	maxProcessingTime := system.config.AlertThresholds.ProcessingTimeThreshold
+	if maxProcessingTime == 0 {
+		maxProcessingTime = 24 * time.Hour // Default 24 hours
+	}
+	
+	for _, entry := range entries {
+		// Only evaluate events that have processing time data
+		if entry.ProcessingTime > 0 {
+			processableEvents++
+			
+			if entry.ProcessingTime <= maxProcessingTime {
+				timelyEvents++
+			} else {
+				delayedEvents++
+			}
+		}
+	}
+	
+	if processableEvents == 0 {
+		return 1.0 // No processing events to evaluate
+	}
+	
+	// Calculate base score from timely processing rate
+	timelyRate := float64(timelyEvents) / float64(processableEvents)
+	
+	// Apply additional penalties for severely delayed events
+	severeDelayPenalty := 0.0
+	for _, entry := range entries {
+		if entry.ProcessingTime > maxProcessingTime*2 { // More than 2x threshold
+			severeDelayPenalty += 0.05 // 5% penalty per severe delay
+		}
+	}
+	
+	// Calculate final score (min 0.0, max 1.0)
+	score := timelyRate - severeDelayPenalty
+	if score < 0 {
+		score = 0
+	}
+	if score > 1 {
+		score = 1
+	}
+	
+	return score
 }
 
 func (system *ComplianceAuditSystem) calculateAuditComplianceScore(entries []*DetailedAuditEntry) float64 {
-	// Implementation would analyze audit completeness
-	return 0.98 // Placeholder
+	if len(entries) == 0 {
+		return 1.0 // Perfect score with no audit issues
+	}
+	
+	totalEntries := len(entries)
+	completeEntries := 0
+	integrityIssues := 0
+	missingFieldIssues := 0
+	
+	for _, entry := range entries {
+		// Check for complete audit entry
+		isComplete := true
+		
+		// Verify required fields are present
+		if entry.EntryID == "" || entry.Timestamp.IsZero() || entry.EventType == "" || entry.Action == "" {
+			missingFieldIssues++
+			isComplete = false
+		}
+		
+		// Verify cryptographic integrity if enabled
+		if system.config.RequireCryptographicProof {
+			if entry.EntryHash == "" || entry.Signature == "" {
+				integrityIssues++
+				isComplete = false
+			}
+			
+			// Verify hash matches expected value
+			expectedHash := system.calculateEntryHash(entry)
+			if entry.EntryHash != "" && entry.EntryHash != expectedHash {
+				integrityIssues++
+				isComplete = false
+			}
+		}
+		
+		// Verify legal context is present for compliance events
+		if strings.Contains(entry.EventType, "dmca") || strings.Contains(entry.EventType, "legal") {
+			if entry.LegalContext == nil || entry.LegalContext.LegalBasis == "" {
+				missingFieldIssues++
+				isComplete = false
+			}
+		}
+		
+		if isComplete {
+			completeEntries++
+		}
+	}
+	
+	// Calculate base score from completeness rate
+	completenessRate := float64(completeEntries) / float64(totalEntries)
+	
+	// Apply penalties for integrity and field issues
+	integrityPenalty := float64(integrityIssues) * 0.15  // 15% penalty per integrity issue
+	fieldPenalty := float64(missingFieldIssues) * 0.05   // 5% penalty per missing field
+	
+	// Calculate final score (min 0.0, max 1.0)
+	score := completenessRate - integrityPenalty - fieldPenalty
+	if score < 0 {
+		score = 0
+	}
+	if score > 1 {
+		score = 1
+	}
+	
+	return score
 }
 
 func (system *ComplianceAuditSystem) assessLegalRisk(analysis *DMCAAnalysis) string {
@@ -766,10 +936,85 @@ func (system *ComplianceAuditSystem) calculateEntryHash(entry *DetailedAuditEntr
 }
 
 func (system *ComplianceAuditSystem) generateSignature(entry *DetailedAuditEntry) string {
-	// Simple signature for now - in production would use proper cryptographic signing
+	// Prepare data to sign (entry hash + timestamp for uniqueness)
 	data := fmt.Sprintf("%s-%s", entry.EntryHash, entry.Timestamp.Format(time.RFC3339))
-	hash := sha256.Sum256([]byte(data))
-	return fmt.Sprintf("SIG-%s", hex.EncodeToString(hash[:16]))
+	dataHash := sha256.Sum256([]byte(data))
+	
+	// Use ECDSA signing if key is available
+	if system.config.SigningKey != nil {
+		// Sign the hash using ECDSA
+		r, s, err := ecdsa.Sign(rand.Reader, system.config.SigningKey, dataHash[:])
+		if err == nil {
+			// Encode the signature components as hex
+			signature := fmt.Sprintf("ECDSA-%s-%s", r.Text(16), s.Text(16))
+			return signature
+		}
+		// If signing fails, fall back to simple hash method
+	}
+	
+	// Fallback to hash-based signature if no key or signing fails
+	return fmt.Sprintf("HASH-%s", hex.EncodeToString(dataHash[:16]))
+}
+
+// verifySignature verifies the cryptographic signature of an audit entry
+func (system *ComplianceAuditSystem) verifySignature(entry *DetailedAuditEntry) bool {
+	if entry.Signature == "" {
+		return false
+	}
+	
+	// Prepare the same data that was signed
+	data := fmt.Sprintf("%s-%s", entry.EntryHash, entry.Timestamp.Format(time.RFC3339))
+	dataHash := sha256.Sum256([]byte(data))
+	
+	// Check signature type and verify accordingly
+	if strings.HasPrefix(entry.Signature, "ECDSA-") {
+		return system.verifyECDSASignature(entry.Signature, dataHash[:])
+	} else if strings.HasPrefix(entry.Signature, "HASH-") {
+		return system.verifyHashSignature(entry.Signature, dataHash[:])
+	}
+	
+	return false
+}
+
+// verifyECDSASignature verifies an ECDSA signature
+func (system *ComplianceAuditSystem) verifyECDSASignature(signature string, hash []byte) bool {
+	if system.config.SigningKey == nil {
+		return false
+	}
+	
+	// Parse ECDSA signature components
+	parts := strings.Split(signature, "-")
+	if len(parts) != 3 || parts[0] != "ECDSA" {
+		return false
+	}
+	
+	// Parse r and s components from hex
+	r := new(big.Int)
+	s := new(big.Int)
+	
+	if _, ok := r.SetString(parts[1], 16); !ok {
+		return false
+	}
+	if _, ok := s.SetString(parts[2], 16); !ok {
+		return false
+	}
+	
+	// Verify signature using public key
+	return ecdsa.Verify(&system.config.SigningKey.PublicKey, hash, r, s)
+}
+
+// verifyHashSignature verifies a hash-based signature (fallback method)
+func (system *ComplianceAuditSystem) verifyHashSignature(signature string, hash []byte) bool {
+	// Extract expected hash from signature
+	parts := strings.Split(signature, "-")
+	if len(parts) != 2 || parts[0] != "HASH" {
+		return false
+	}
+	
+	expectedHash := parts[1]
+	actualHash := hex.EncodeToString(hash[:16])
+	
+	return expectedHash == actualHash
 }
 
 // updateMetrics updates real-time compliance metrics
