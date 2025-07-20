@@ -116,6 +116,7 @@ type CacheConfig struct {
 	EnableAltruistic      bool `json:"enable_altruistic"`
 	MinPersonalCacheMB    int  `json:"min_personal_cache_mb"`
 	AltruisticBandwidthMB int  `json:"altruistic_bandwidth_mb,omitempty"`
+	EnableAdaptiveCache   bool `json:"enable_adaptive_cache"`
 }
 
 // FUSEConfig holds FUSE filesystem configuration
@@ -258,10 +259,11 @@ func DefaultConfig() *Config {
 		// Cache configuration balancing performance and resource usage
 		// Altruistic caching enhances network contribution and anonymity
 		Cache: CacheConfig{
-			BlockCacheSize:     1000, // Good balance of memory usage and cache hits
-			MemoryLimit:        512,  // 512MB - reasonable for most systems
-			EnableAltruistic:   true, // Help network and improve anonymity
-			MinPersonalCacheMB: 256,  // Reserve half for user's own files
+			BlockCacheSize:      1000, // Good balance of memory usage and cache hits
+			MemoryLimit:         512,  // 512MB - reasonable for most systems
+			EnableAltruistic:    true, // Help network and improve anonymity
+			MinPersonalCacheMB:  256,  // Reserve half for user's own files
+			EnableAdaptiveCache: true, // Enable adaptive cache by default
 		},
 		FUSE: FUSEConfig{
 			MountPath:  "",
@@ -363,10 +365,11 @@ func QuickStartConfig() *Config {
 			Timeout:     30,
 		},
 		Cache: CacheConfig{
-			BlockCacheSize:     500,  // Smaller cache for quick start
-			MemoryLimit:        256,  // Conservative memory usage
-			EnableAltruistic:   false, // Disabled for simplicity
-			MinPersonalCacheMB: 128,
+			BlockCacheSize:      500,   // Smaller cache for quick start
+			MemoryLimit:         256,   // Conservative memory usage
+			EnableAltruistic:    false, // Disabled for simplicity
+			MinPersonalCacheMB:  128,
+			EnableAdaptiveCache: false, // Use simple cache for quick start
 		},
 		FUSE: FUSEConfig{
 			MountPath:  "",
@@ -472,10 +475,11 @@ func SecurityPresetConfig() *Config {
 			Timeout:     60, // Longer timeout for Tor operations
 		},
 		Cache: CacheConfig{
-			BlockCacheSize:     2000, // Larger cache for better anonymity
-			MemoryLimit:        1024, // More memory for security operations
-			EnableAltruistic:   true,  // Enhanced network participation
-			MinPersonalCacheMB: 512,
+			BlockCacheSize:      2000, // Larger cache for better anonymity
+			MemoryLimit:         1024, // More memory for security operations
+			EnableAltruistic:    true, // Enhanced network participation
+			MinPersonalCacheMB:  512,
+			EnableAdaptiveCache: true, // Enable adaptive cache for security
 		},
 		FUSE: FUSEConfig{
 			MountPath:  "",
@@ -578,10 +582,11 @@ func PerformancePresetConfig() *Config {
 			Timeout:     15, // Shorter timeout for speed
 		},
 		Cache: CacheConfig{
-			BlockCacheSize:     5000, // Large cache for performance
-			MemoryLimit:        2048, // High memory allocation
-			EnableAltruistic:   true,
-			MinPersonalCacheMB: 1024, // Large personal cache
+			BlockCacheSize:      5000, // Large cache for performance
+			MemoryLimit:         2048, // High memory allocation
+			EnableAltruistic:    true,
+			MinPersonalCacheMB:  1024, // Large personal cache
+			EnableAdaptiveCache: true, // Enable adaptive cache for performance
 		},
 		FUSE: FUSEConfig{
 			MountPath:  "",
@@ -848,6 +853,9 @@ func (c *Config) applyEnvironmentOverrides() {
 		if limit, err := strconv.Atoi(val); err == nil {
 			c.Cache.MemoryLimit = limit
 		}
+	}
+	if val := os.Getenv("NOISEFS_ENABLE_ADAPTIVE_CACHE"); val != "" {
+		c.Cache.EnableAdaptiveCache = strings.ToLower(val) == "true"
 	}
 
 	// FUSE overrides

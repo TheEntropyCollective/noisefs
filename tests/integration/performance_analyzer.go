@@ -8,29 +8,31 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // PerformanceAnalyzer provides comprehensive performance analysis for NoiseFS
 type PerformanceAnalyzer struct {
+	mu           sync.RWMutex
 	clients      []*noisefs.Client
 	peerManagers []*p2p.PeerManager
 	startTime    time.Time
-	
-	// Metrics
-	operations   []OperationMetric
-	cacheMetrics []CacheMetric
-	peerMetrics  []PeerMetric
+
+	// Metrics (protected by mutex)
+	operations    []OperationMetric
+	cacheMetrics  []CacheMetric
+	peerMetrics   []PeerMetric
 	systemMetrics SystemMetric
 }
 
 // OperationMetric tracks individual operation performance
 type OperationMetric struct {
-	Type      string        `json:"type"`      // "store", "retrieve", "randomizer_select"
+	Type      string        `json:"type"` // "store", "retrieve", "randomizer_select"
 	Duration  time.Duration `json:"duration"`
 	BlockSize int           `json:"block_size"`
 	Success   bool          `json:"success"`
@@ -63,17 +65,17 @@ type PeerMetric struct {
 
 // SystemMetric tracks overall system performance
 type SystemMetric struct {
-	TotalOperations     int64         `json:"total_operations"`
-	SuccessfulOps       int64         `json:"successful_ops"`
-	TotalBlocksStored   int64         `json:"total_blocks_stored"`
-	TotalBlocksRetrieved int64        `json:"total_blocks_retrieved"`
-	AverageLatency      time.Duration `json:"average_latency"`
-	ThroughputMBps      float64       `json:"throughput_mbps"`
-	StorageOverhead     float64       `json:"storage_overhead"`
-	CacheEfficiency     float64       `json:"cache_efficiency"`
-	PeerEfficiency      float64       `json:"peer_efficiency"`
-	StartTime           time.Time     `json:"start_time"`
-	EndTime             time.Time     `json:"end_time"`
+	TotalOperations      int64         `json:"total_operations"`
+	SuccessfulOps        int64         `json:"successful_ops"`
+	TotalBlocksStored    int64         `json:"total_blocks_stored"`
+	TotalBlocksRetrieved int64         `json:"total_blocks_retrieved"`
+	AverageLatency       time.Duration `json:"average_latency"`
+	ThroughputMBps       float64       `json:"throughput_mbps"`
+	StorageOverhead      float64       `json:"storage_overhead"`
+	CacheEfficiency      float64       `json:"cache_efficiency"`
+	PeerEfficiency       float64       `json:"peer_efficiency"`
+	StartTime            time.Time     `json:"start_time"`
+	EndTime              time.Time     `json:"end_time"`
 }
 
 // AnalysisResult contains the complete performance analysis
@@ -87,41 +89,41 @@ type AnalysisResult struct {
 
 // CacheAnalysis provides detailed cache performance analysis
 type CacheAnalysis struct {
-	OverallHitRate       float64                        `json:"overall_hit_rate"`
-	HitRateByBlockSize   map[int]float64               `json:"hit_rate_by_block_size"`
-	TierDistribution     map[string]float64            `json:"tier_distribution"`
-	EvictionEfficiency   float64                       `json:"eviction_efficiency"`
-	PredictionAccuracy   float64                       `json:"prediction_accuracy"`
-	TierTransitions      map[string]int                `json:"tier_transitions"`
-	PopularBlocks        []string                      `json:"popular_blocks"`
+	OverallHitRate     float64            `json:"overall_hit_rate"`
+	HitRateByBlockSize map[int]float64    `json:"hit_rate_by_block_size"`
+	TierDistribution   map[string]float64 `json:"tier_distribution"`
+	EvictionEfficiency float64            `json:"eviction_efficiency"`
+	PredictionAccuracy float64            `json:"prediction_accuracy"`
+	TierTransitions    map[string]int     `json:"tier_transitions"`
+	PopularBlocks      []string           `json:"popular_blocks"`
 }
 
 // PeerAnalysis provides detailed peer selection analysis
 type PeerAnalysis struct {
-	PeerPerformance      map[peer.ID]PeerPerformanceStats `json:"peer_performance"`
+	PeerPerformance       map[peer.ID]PeerPerformanceStats `json:"peer_performance"`
 	StrategyEffectiveness map[string]float64               `json:"strategy_effectiveness"`
-	LoadDistribution     map[peer.ID]int                  `json:"load_distribution"`
-	NetworkEfficiency    float64                          `json:"network_efficiency"`
-	OptimalPeerSet       []peer.ID                        `json:"optimal_peer_set"`
+	LoadDistribution      map[peer.ID]int                  `json:"load_distribution"`
+	NetworkEfficiency     float64                          `json:"network_efficiency"`
+	OptimalPeerSet        []peer.ID                        `json:"optimal_peer_set"`
 }
 
 // PeerPerformanceStats contains detailed stats for individual peers
 type PeerPerformanceStats struct {
-	AverageLatency    time.Duration `json:"average_latency"`
-	TotalRequests     int64         `json:"total_requests"`
-	SuccessRate       float64       `json:"success_rate"`
-	Bandwidth         float64       `json:"bandwidth"`
-	ReliabilityScore  float64       `json:"reliability_score"`
-	LastSeen          time.Time     `json:"last_seen"`
+	AverageLatency   time.Duration `json:"average_latency"`
+	TotalRequests    int64         `json:"total_requests"`
+	SuccessRate      float64       `json:"success_rate"`
+	Bandwidth        float64       `json:"bandwidth"`
+	ReliabilityScore float64       `json:"reliability_score"`
+	LastSeen         time.Time     `json:"last_seen"`
 }
 
 // NewPerformanceAnalyzer creates a new performance analyzer
 func NewPerformanceAnalyzer() *PerformanceAnalyzer {
 	return &PerformanceAnalyzer{
-		startTime: time.Now(),
-		operations: make([]OperationMetric, 0),
+		startTime:    time.Now(),
+		operations:   make([]OperationMetric, 0),
 		cacheMetrics: make([]CacheMetric, 0),
-		peerMetrics: make([]PeerMetric, 0),
+		peerMetrics:  make([]PeerMetric, 0),
 	}
 }
 
@@ -146,16 +148,27 @@ func (pa *PerformanceAnalyzer) RecordOperation(opType string, duration time.Dura
 		CacheHit:  cacheHit,
 		Timestamp: time.Now(),
 	}
+	pa.mu.Lock()
 	pa.operations = append(pa.operations, metric)
+	pa.mu.Unlock()
 }
 
 // CollectMetrics collects current metrics from all clients and peer managers
 func (pa *PerformanceAnalyzer) CollectMetrics() {
 	timestamp := time.Now()
-	
+
+	// Collect metrics locally to minimize lock time
+	var newCacheMetrics []CacheMetric
+	var newPeerMetrics []PeerMetric
+
 	// Collect cache metrics
 	for _, client := range pa.clients {
+		if client == nil {
+			continue // Skip nil clients
+		}
+
 		if stats := client.GetAdaptiveCacheStats(); stats != nil {
+			// Add defensive programming for stats field access
 			metric := CacheMetric{
 				Timestamp:   timestamp,
 				HitRate:     stats.HitRate,
@@ -165,41 +178,64 @@ func (pa *PerformanceAnalyzer) CollectMetrics() {
 				ColdTier:    int(stats.ColdTierHits),
 				Evictions:   stats.Evictions,
 			}
-			pa.cacheMetrics = append(pa.cacheMetrics, metric)
+			newCacheMetrics = append(newCacheMetrics, metric)
 		}
-		
+
 		// Collect peer metrics (TODO: implement when storage manager provides peer stats)
 		if peerStats := client.GetPeerStats(); peerStats != nil {
 			for peerID, statsInterface := range peerStats {
+				// Skip empty peer IDs
+				if peerID == "" {
+					continue
+				}
+
+				// Skip nil stats interface
+				if statsInterface == nil {
+					continue
+				}
+
 				// Type assert to a stats struct (when implemented)
-				if statsMap, ok := statsInterface.(map[string]interface{}); ok {
-					// Extract metrics with safe type assertions
+				if statsMap, ok := statsInterface.(map[string]interface{}); ok && statsMap != nil {
+					// Extract metrics with safe type assertions and validation
 					latency := time.Duration(0)
 					bandwidth := float64(0)
 					successfulReqs := int64(0)
 					totalReqs := int64(1) // Avoid division by zero
-					
-					if l, ok := statsMap["average_latency"]; ok {
-						if dur, ok := l.(time.Duration); ok {
+
+					// Safely extract latency with additional validation
+					if l, exists := statsMap["average_latency"]; exists && l != nil {
+						if dur, ok := l.(time.Duration); ok && dur >= 0 {
 							latency = dur
 						}
 					}
-					if b, ok := statsMap["bandwidth"]; ok {
-						if bw, ok := b.(float64); ok {
+
+					// Safely extract bandwidth with validation
+					if b, exists := statsMap["bandwidth"]; exists && b != nil {
+						if bw, ok := b.(float64); ok && bw >= 0 {
 							bandwidth = bw
 						}
 					}
-					if s, ok := statsMap["successful_requests"]; ok {
-						if sr, ok := s.(int64); ok {
+
+					// Safely extract successful requests with validation
+					if s, exists := statsMap["successful_requests"]; exists && s != nil {
+						if sr, ok := s.(int64); ok && sr >= 0 {
 							successfulReqs = sr
 						}
 					}
-					if t, ok := statsMap["total_requests"]; ok {
+
+					// Safely extract total requests with validation
+					if t, exists := statsMap["total_requests"]; exists && t != nil {
 						if tr, ok := t.(int64); ok && tr > 0 {
 							totalReqs = tr
 						}
 					}
-					
+
+					// Validate that successfulReqs doesn't exceed totalReqs
+					if successfulReqs > totalReqs {
+						successfulReqs = totalReqs
+					}
+
+					// Create metric with validated data
 					metric := PeerMetric{
 						PeerID:         peerID,
 						Timestamp:      timestamp,
@@ -209,18 +245,24 @@ func (pa *PerformanceAnalyzer) CollectMetrics() {
 						SelectionCount: int(totalReqs),
 						Strategy:       "mixed", // Would need to track per strategy
 					}
-					pa.peerMetrics = append(pa.peerMetrics, metric)
+					newPeerMetrics = append(newPeerMetrics, metric)
 				}
 			}
 		}
 	}
+
+	// Update metrics under lock
+	pa.mu.Lock()
+	pa.cacheMetrics = append(pa.cacheMetrics, newCacheMetrics...)
+	pa.peerMetrics = append(pa.peerMetrics, newPeerMetrics...)
+	pa.mu.Unlock()
 }
 
 // StartContinuousCollection starts continuous metric collection
 func (pa *PerformanceAnalyzer) StartContinuousCollection(ctx context.Context, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -233,23 +275,37 @@ func (pa *PerformanceAnalyzer) StartContinuousCollection(ctx context.Context, in
 
 // Analyze performs comprehensive performance analysis
 func (pa *PerformanceAnalyzer) Analyze() *AnalysisResult {
+	pa.mu.Lock()
 	pa.systemMetrics.EndTime = time.Now()
-	
+
+	// Create copies of metrics to avoid holding lock during analysis
+	operationsCopy := make([]OperationMetric, len(pa.operations))
+	copy(operationsCopy, pa.operations)
+	cacheMetricsCopy := make([]CacheMetric, len(pa.cacheMetrics))
+	copy(cacheMetricsCopy, pa.cacheMetrics)
+	peerMetricsCopy := make([]PeerMetric, len(pa.peerMetrics))
+	copy(peerMetricsCopy, pa.peerMetrics)
+	pa.mu.Unlock()
+
 	// Calculate system metrics
-	pa.calculateSystemMetrics()
-	
+	pa.calculateSystemMetrics(operationsCopy, cacheMetricsCopy, peerMetricsCopy)
+
 	// Analyze cache performance
-	cacheAnalysis := pa.analyzeCachePerformance()
-	
+	cacheAnalysis := pa.analyzeCachePerformance(operationsCopy, cacheMetricsCopy)
+
 	// Analyze peer performance
-	peerAnalysis := pa.analyzePeerPerformance()
-	
+	peerAnalysis := pa.analyzePeerPerformance(operationsCopy, peerMetricsCopy)
+
 	// Generate recommendations
 	recommendations := pa.generateRecommendations(cacheAnalysis, peerAnalysis)
-	
+
+	pa.mu.RLock()
+	systemMetrics := pa.systemMetrics
+	pa.mu.RUnlock()
+
 	return &AnalysisResult{
-		SystemMetrics:    pa.systemMetrics,
-		OperationMetrics: pa.operations,
+		SystemMetrics:    systemMetrics,
+		OperationMetrics: operationsCopy,
 		CacheAnalysis:    cacheAnalysis,
 		PeerAnalysis:     peerAnalysis,
 		Recommendations:  recommendations,
@@ -257,23 +313,25 @@ func (pa *PerformanceAnalyzer) Analyze() *AnalysisResult {
 }
 
 // calculateSystemMetrics calculates overall system performance metrics
-func (pa *PerformanceAnalyzer) calculateSystemMetrics() {
+func (pa *PerformanceAnalyzer) calculateSystemMetrics(operations []OperationMetric, cacheMetrics []CacheMetric, peerMetrics []PeerMetric) {
+	pa.mu.Lock()
 	pa.systemMetrics.StartTime = pa.startTime
-	pa.systemMetrics.TotalOperations = int64(len(pa.operations))
-	
+	pa.systemMetrics.TotalOperations = int64(len(operations))
+	pa.mu.Unlock()
+
 	var totalLatency time.Duration
 	var totalBytes int64
 	var successOps int64
 	var storeOps, retrieveOps int64
-	
-	for _, op := range pa.operations {
+
+	for _, op := range operations {
 		totalLatency += op.Duration
 		totalBytes += int64(op.BlockSize)
-		
+
 		if op.Success {
 			successOps++
 		}
-		
+
 		switch op.Type {
 		case "store":
 			storeOps++
@@ -281,36 +339,42 @@ func (pa *PerformanceAnalyzer) calculateSystemMetrics() {
 			retrieveOps++
 		}
 	}
-	
+
+	pa.mu.Lock()
 	pa.systemMetrics.SuccessfulOps = successOps
 	pa.systemMetrics.TotalBlocksStored = storeOps
 	pa.systemMetrics.TotalBlocksRetrieved = retrieveOps
-	
-	if len(pa.operations) > 0 {
-		pa.systemMetrics.AverageLatency = totalLatency / time.Duration(len(pa.operations))
-		
+
+	if len(operations) > 0 {
+		pa.systemMetrics.AverageLatency = totalLatency / time.Duration(len(operations))
+
 		duration := pa.systemMetrics.EndTime.Sub(pa.systemMetrics.StartTime)
 		if duration > 0 {
 			pa.systemMetrics.ThroughputMBps = float64(totalBytes) / (1024 * 1024) / duration.Seconds()
 		}
 	}
-	
+	pa.mu.Unlock()
+
 	// Calculate cache efficiency (hit rate)
-	if len(pa.cacheMetrics) > 0 {
+	if len(cacheMetrics) > 0 {
 		totalHitRate := 0.0
-		for _, metric := range pa.cacheMetrics {
+		for _, metric := range cacheMetrics {
 			totalHitRate += metric.HitRate
 		}
-		pa.systemMetrics.CacheEfficiency = totalHitRate / float64(len(pa.cacheMetrics))
+		pa.mu.Lock()
+		pa.systemMetrics.CacheEfficiency = totalHitRate / float64(len(cacheMetrics))
+		pa.mu.Unlock()
 	}
-	
+
 	// Calculate peer efficiency (average success rate)
-	if len(pa.peerMetrics) > 0 {
+	if len(peerMetrics) > 0 {
 		totalSuccessRate := 0.0
-		for _, metric := range pa.peerMetrics {
+		for _, metric := range peerMetrics {
 			totalSuccessRate += metric.SuccessRate
 		}
-		pa.systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(pa.peerMetrics))
+		pa.mu.Lock()
+		pa.systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(peerMetrics))
+		pa.mu.Unlock()
 	}
 }
 
@@ -322,11 +386,11 @@ func (pa *PerformanceAnalyzer) analyzeCachePerformance() CacheAnalysis {
 		TierTransitions:    make(map[string]int),
 		PopularBlocks:      make([]string, 0),
 	}
-	
+
 	// Calculate overall hit rate
 	cacheHits := 0
 	totalOps := 0
-	
+
 	for _, op := range pa.operations {
 		if op.Type == "retrieve" {
 			totalOps++
@@ -335,15 +399,15 @@ func (pa *PerformanceAnalyzer) analyzeCachePerformance() CacheAnalysis {
 			}
 		}
 	}
-	
+
 	if totalOps > 0 {
 		analysis.OverallHitRate = float64(cacheHits) / float64(totalOps)
 	}
-	
+
 	// Analyze hit rate by block size
 	blockSizeHits := make(map[int]int)
 	blockSizeTotal := make(map[int]int)
-	
+
 	for _, op := range pa.operations {
 		if op.Type == "retrieve" {
 			blockSizeTotal[op.BlockSize]++
@@ -352,13 +416,13 @@ func (pa *PerformanceAnalyzer) analyzeCachePerformance() CacheAnalysis {
 			}
 		}
 	}
-	
+
 	for size, total := range blockSizeTotal {
 		if total > 0 {
 			analysis.HitRateByBlockSize[size] = float64(blockSizeHits[size]) / float64(total)
 		}
 	}
-	
+
 	// Analyze tier distribution
 	if len(pa.cacheMetrics) > 0 {
 		lastMetric := pa.cacheMetrics[len(pa.cacheMetrics)-1]
@@ -369,10 +433,10 @@ func (pa *PerformanceAnalyzer) analyzeCachePerformance() CacheAnalysis {
 			analysis.TierDistribution["cold"] = float64(lastMetric.ColdTier) / float64(total)
 		}
 	}
-	
+
 	// Calculate prediction accuracy (simplified)
 	analysis.PredictionAccuracy = analysis.OverallHitRate * 100
-	
+
 	return analysis
 }
 
@@ -384,38 +448,38 @@ func (pa *PerformanceAnalyzer) analyzePeerPerformance() PeerAnalysis {
 		LoadDistribution:      make(map[peer.ID]int),
 		OptimalPeerSet:        make([]peer.ID, 0),
 	}
-	
+
 	// Aggregate peer performance
 	peerData := make(map[peer.ID][]PeerMetric)
 	for _, metric := range pa.peerMetrics {
 		peerData[metric.PeerID] = append(peerData[metric.PeerID], metric)
 	}
-	
+
 	var totalNetworkLatency time.Duration
 	var totalNetworkSuccess float64
 	peerCount := 0
-	
+
 	for peerID, metrics := range peerData {
 		if len(metrics) == 0 {
 			continue
 		}
-		
+
 		var avgLatency time.Duration
 		var totalSuccess float64
 		var totalBandwidth float64
 		var totalRequests int64
-		
+
 		for _, metric := range metrics {
 			avgLatency += metric.Latency
 			totalSuccess += metric.SuccessRate
 			totalBandwidth += metric.Bandwidth
 			totalRequests += int64(metric.SelectionCount)
 		}
-		
+
 		avgLatency /= time.Duration(len(metrics))
 		avgSuccess := totalSuccess / float64(len(metrics))
 		avgBandwidth := totalBandwidth / float64(len(metrics))
-		
+
 		analysis.PeerPerformance[peerID] = PeerPerformanceStats{
 			AverageLatency:   avgLatency,
 			TotalRequests:    totalRequests,
@@ -424,26 +488,26 @@ func (pa *PerformanceAnalyzer) analyzePeerPerformance() PeerAnalysis {
 			ReliabilityScore: avgSuccess * (1.0 / (1.0 + avgLatency.Seconds())),
 			LastSeen:         metrics[len(metrics)-1].Timestamp,
 		}
-		
+
 		analysis.LoadDistribution[peerID] = int(totalRequests)
-		
+
 		totalNetworkLatency += avgLatency
 		totalNetworkSuccess += avgSuccess
 		peerCount++
-		
+
 		// Add to optimal peer set if performance is good
 		if avgSuccess > 0.8 && avgLatency < time.Millisecond*100 {
 			analysis.OptimalPeerSet = append(analysis.OptimalPeerSet, peerID)
 		}
 	}
-	
+
 	// Calculate network efficiency
 	if peerCount > 0 {
 		avgNetworkLatency := totalNetworkLatency / time.Duration(peerCount)
 		avgNetworkSuccess := totalNetworkSuccess / float64(peerCount)
 		analysis.NetworkEfficiency = avgNetworkSuccess * (1.0 / (1.0 + avgNetworkLatency.Seconds()))
 	}
-	
+
 	// Analyze strategy effectiveness
 	strategyMetrics := make(map[string][]float64)
 	for _, op := range pa.operations {
@@ -453,7 +517,7 @@ func (pa *PerformanceAnalyzer) analyzePeerPerformance() PeerAnalysis {
 			strategyMetrics[op.Strategy] = append(strategyMetrics[op.Strategy], 0.0)
 		}
 	}
-	
+
 	for strategy, results := range strategyMetrics {
 		if len(results) > 0 {
 			sum := 0.0
@@ -463,36 +527,36 @@ func (pa *PerformanceAnalyzer) analyzePeerPerformance() PeerAnalysis {
 			analysis.StrategyEffectiveness[strategy] = sum / float64(len(results))
 		}
 	}
-	
+
 	return analysis
 }
 
 // generateRecommendations generates optimization recommendations
 func (pa *PerformanceAnalyzer) generateRecommendations(cache CacheAnalysis, peer PeerAnalysis) []string {
 	recommendations := make([]string, 0)
-	
+
 	// Cache recommendations
 	if cache.OverallHitRate < 0.7 {
 		recommendations = append(recommendations, "Consider increasing cache size - hit rate is below 70%")
 	}
-	
+
 	if cache.TierDistribution["hot"] > 0.5 {
 		recommendations = append(recommendations, "Hot tier usage is high - consider adjusting tier ratios")
 	}
-	
+
 	if cache.PredictionAccuracy < 60 {
 		recommendations = append(recommendations, "ML prediction accuracy is low - more training data needed")
 	}
-	
+
 	// Peer recommendations
 	if peer.NetworkEfficiency < 0.8 {
 		recommendations = append(recommendations, "Network efficiency is low - consider optimizing peer selection")
 	}
-	
+
 	if len(peer.OptimalPeerSet) < 3 {
 		recommendations = append(recommendations, "Limited optimal peers available - consider expanding peer network")
 	}
-	
+
 	// Strategy recommendations
 	bestStrategy := ""
 	bestRate := 0.0
@@ -502,41 +566,41 @@ func (pa *PerformanceAnalyzer) generateRecommendations(cache CacheAnalysis, peer
 			bestStrategy = strategy
 		}
 	}
-	
+
 	if bestStrategy != "" && bestRate > 0.9 {
-		recommendations = append(recommendations, 
-			fmt.Sprintf("Consider using '%s' strategy more frequently (%.1f%% success rate)", 
+		recommendations = append(recommendations,
+			fmt.Sprintf("Consider using '%s' strategy more frequently (%.1f%% success rate)",
 				bestStrategy, bestRate*100))
 	}
-	
+
 	// Performance recommendations
 	if pa.systemMetrics.ThroughputMBps < 10 {
 		recommendations = append(recommendations, "Throughput is low - consider parallel operations or larger block sizes")
 	}
-	
+
 	if pa.systemMetrics.StorageOverhead > 200 {
 		recommendations = append(recommendations, "Storage overhead is high - optimize randomizer reuse")
 	}
-	
+
 	return recommendations
 }
 
 // SaveReport saves the analysis report to a file
 func (pa *PerformanceAnalyzer) SaveReport(filename string) error {
 	result := pa.Analyze()
-	
+
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal report: %w", err)
 	}
-	
+
 	return os.WriteFile(filename, data, 0644)
 }
 
 // PrintSummary prints a summary of the performance analysis
 func (pa *PerformanceAnalyzer) PrintSummary() {
 	result := pa.Analyze()
-	
+
 	fmt.Println("=== NoiseFS Performance Analysis Summary ===")
 	fmt.Printf("Duration: %v\n", result.SystemMetrics.EndTime.Sub(result.SystemMetrics.StartTime))
 	fmt.Printf("Total Operations: %d\n", result.SystemMetrics.TotalOperations)
@@ -545,34 +609,34 @@ func (pa *PerformanceAnalyzer) PrintSummary() {
 	fmt.Printf("Throughput: %.2f MB/s\n", result.SystemMetrics.ThroughputMBps)
 	fmt.Printf("Cache Hit Rate: %.1f%%\n", result.CacheAnalysis.OverallHitRate*100)
 	fmt.Printf("Network Efficiency: %.1f%%\n", result.PeerAnalysis.NetworkEfficiency*100)
-	
+
 	fmt.Println("\n=== Recommendations ===")
 	for i, rec := range result.Recommendations {
 		fmt.Printf("%d. %s\n", i+1, rec)
 	}
-	
+
 	fmt.Println("\n=== Top Performing Peers ===")
 	// Sort peers by reliability score
 	type peerScore struct {
 		id    peer.ID
 		score float64
 	}
-	
+
 	var peerScores []peerScore
 	for peerID, stats := range result.PeerAnalysis.PeerPerformance {
 		peerScores = append(peerScores, peerScore{id: peerID, score: stats.ReliabilityScore})
 	}
-	
+
 	sort.Slice(peerScores, func(i, j int) bool {
 		return peerScores[i].score > peerScores[j].score
 	})
-	
+
 	for i, ps := range peerScores {
 		if i >= 5 { // Top 5 peers
 			break
 		}
 		stats := result.PeerAnalysis.PeerPerformance[ps.id]
-		fmt.Printf("%d. %s: %.1f%% success, %v latency\n", 
+		fmt.Printf("%d. %s: %.1f%% success, %v latency\n",
 			i+1, ps.id, stats.SuccessRate*100, stats.AverageLatency)
 	}
 }
@@ -581,7 +645,7 @@ func (pa *PerformanceAnalyzer) PrintSummary() {
 func (pa *PerformanceAnalyzer) RunLiveAnalysis(ctx context.Context, updateInterval time.Duration) {
 	ticker := time.NewTicker(updateInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:

@@ -47,12 +47,22 @@ type DirectoryCacheConfig struct {
 }
 
 // DefaultDirectoryCacheConfig returns default cache configuration
+// NOTE: This function will be deprecated in favor of the centralized FUSE configuration.
+// Use GetGlobalConfig().GetDirectoryCacheConfig() for new code.
 func DefaultDirectoryCacheConfig() *DirectoryCacheConfig {
 	return &DirectoryCacheConfig{
 		MaxSize:       100,
 		TTL:           30 * time.Minute,
 		EnableMetrics: true,
 	}
+}
+
+// NewDirectoryCacheFromGlobalConfig creates a new directory cache using the global FUSE configuration.
+// This is the recommended way to create directory caches as it uses centralized configuration
+// with environment variable overrides and validation.
+func NewDirectoryCacheFromGlobalConfig(storageManager *storage.Manager) (*DirectoryCache, error) {
+	config := GetGlobalConfig().GetDirectoryCacheConfig()
+	return NewDirectoryCache(config, storageManager)
 }
 
 // NewDirectoryCache creates a new directory cache

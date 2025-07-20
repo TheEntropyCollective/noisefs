@@ -139,9 +139,8 @@ func (sc *SystemCoordinator) initializeStorage() error {
 
 // initializeCache sets up the caching layer
 func (sc *SystemCoordinator) initializeCache() error {
-	// Create adaptive cache if enabled
-	// Enable adaptive cache by default
-	if true {
+	// Create adaptive cache if enabled in configuration
+	if sc.config.Cache.EnableAdaptiveCache {
 		adaptiveCfg := &cache.AdaptiveCacheConfig{
 			MaxSize:            int64(sc.config.Cache.MemoryLimit) * 1024 * 1024, // Convert MB to bytes
 			MaxItems:           sc.config.Cache.BlockCacheSize,
@@ -199,10 +198,10 @@ func (sc *SystemCoordinator) initializeP2P() error {
 	
 	sc.peerManager = p2p.NewPeerManager(host, maxPeers)
 	
-	logging.GetGlobalLogger().Info("P2P host initialized", 
-		"peer_id", host.ID().String(),
-		"addresses", host.Addrs(),
-	)
+	logging.GetGlobalLogger().Info("P2P host initialized", map[string]interface{}{
+		"peer_id":   host.ID().String(),
+		"addresses": host.Addrs(),
+	})
 	
 	return nil
 }
@@ -375,49 +374,49 @@ func (sc *SystemCoordinator) wireComponents() error {
 
 // logPrivacyStatus provides clear information about privacy features
 func (sc *SystemCoordinator) logPrivacyStatus() {
-	logger := logging.GetGlobalLogger()
+	logger := logging.GetGlobalLogger().WithComponent("coordinator")
 	
 	// Check P2P components
 	if sc.libp2pHost != nil && sc.peerManager != nil {
 		peerStats := sc.peerManager.GetStats()
-		logger.Info("P2P privacy layer active",
-			"peer_id", sc.libp2pHost.ID().String(),
-			"connected_peers", peerStats["connected_peers"],
-			"healthy_peers", peerStats["healthy_peers"],
-		)
+		logger.Info("P2P privacy layer active", map[string]interface{}{
+			"peer_id":         sc.libp2pHost.ID().String(),
+			"connected_peers": peerStats["connected_peers"],
+			"healthy_peers":   peerStats["healthy_peers"],
+		})
 	} else {
-		logger.Warn("P2P privacy layer inactive - reduced anonymity")
+		logger.Warn("P2P privacy layer inactive - reduced anonymity", map[string]interface{}{})
 	}
 	
 	// Check relay components
 	if sc.relayPool != nil && sc.requestMixer != nil {
-		logger.Info("Relay privacy layer active",
-			"relay_pool_initialized", true,
-			"request_mixer_initialized", true,
-		)
+		logger.Info("Relay privacy layer active", map[string]interface{}{
+			"relay_pool_initialized":    true,
+			"request_mixer_initialized": true,
+		})
 	} else {
-		logger.Warn("Relay privacy layer inactive - no request mixing")
+		logger.Warn("Relay privacy layer inactive - no request mixing", map[string]interface{}{})
 	}
 	
 	// Check cover traffic
 	if sc.coverTraffic != nil {
 		coverStats := sc.coverTraffic.GetMetrics()
-		logger.Info("Cover traffic active",
-			"total_cover_requests", coverStats.TotalCoverRequests,
-			"noise_ratio", coverStats.NoiseRatioAchieved,
-		)
+		logger.Info("Cover traffic active", map[string]interface{}{
+			"total_cover_requests": coverStats.TotalCoverRequests,
+			"noise_ratio":          coverStats.NoiseRatioAchieved,
+		})
 	} else {
-		logger.Warn("Cover traffic inactive - traffic analysis possible")
+		logger.Warn("Cover traffic inactive - traffic analysis possible", map[string]interface{}{})
 	}
 	
 	// Check reuse components
 	if sc.universalPool != nil && sc.reuseEnforcer != nil {
-		logger.Info("Block reuse privacy active",
-			"universal_pool_initialized", true,
-			"reuse_enforcer_initialized", true,
-		)
+		logger.Info("Block reuse privacy active", map[string]interface{}{
+			"universal_pool_initialized":  true,
+			"reuse_enforcer_initialized": true,
+		})
 	} else {
-		logger.Warn("Block reuse privacy inactive - reduced plausible deniability")
+		logger.Warn("Block reuse privacy inactive - reduced plausible deniability", map[string]interface{}{})
 	}
 }
 
@@ -573,37 +572,129 @@ func (sc *SystemCoordinator) GetSystemMetrics() *SystemMetrics {
 
 // Shutdown gracefully shuts down all components
 func (sc *SystemCoordinator) Shutdown() error {
+	logger := sc.logger.WithComponent("shutdown")
+	var shutdownErrors []error
+	
+	logger.Info("Starting system shutdown", map[string]interface{}{})
+	
 	// Stop P2P components first
 	if sc.peerManager != nil {
 		if err := sc.peerManager.Close(); err != nil {
-			logging.GetGlobalLogger().Error("failed to close peer manager", "error", err)
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to close peer manager: %w", err))
+			logger.Error("failed to close peer manager", map[string]interface{}{
+				"error": err,
+			})
+		} else {
+			logger.Info("peer manager closed successfully", map[string]interface{}{})
 		}
 	}
 	
 	if sc.libp2pHost != nil {
 		if err := sc.libp2pHost.Close(); err != nil {
-			logging.GetGlobalLogger().Error("failed to close libp2p host", "error", err)
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to close libp2p host: %w", err))
+			logger.Error("failed to close libp2p host", map[string]interface{}{
+				"error": err,
+			})
+		} else {
+			logger.Info("libp2p host closed successfully", map[string]interface{}{})
 		}
 	}
 	
 	// Stop privacy components
 	if sc.relayPool != nil {
 		sc.relayPool.Stop()
+		logger.Info("relay pool stopped", map[string]interface{}{})
 	}
 	
 	if sc.coverTraffic != nil {
 		sc.coverTraffic.Stop()
+		logger.Info("cover traffic stopped", map[string]interface{}{})
 	}
 	
 	if sc.requestMixer != nil {
 		sc.requestMixer.Stop()
+		logger.Info("request mixer stopped", map[string]interface{}{})
+	}
+	
+	// Stop cache components
+	if sc.adaptiveCache != nil {
+		// AdaptiveCache doesn't have a cleanup method, but clear it for safety
+		sc.adaptiveCache.Clear()
+		logger.Info("adaptive cache cleared", map[string]interface{}{})
+	}
+	
+	if sc.blockCache != nil {
+		// Clear the cache to free memory
+		sc.blockCache.Clear()
+		logger.Info("block cache cleared", map[string]interface{}{})
 	}
 	
 	// Stop reuse components
-	if sc.universalPool != nil {
-		sc.universalPool.Stop()
+	// Note: UniversalBlockPool doesn't have a Stop() method yet
+	// The reuse components are mostly stateless and don't require explicit cleanup
+	logger.Info("reuse components cleanup completed", map[string]interface{}{})
+	
+	// Stop storage manager with timeout
+	if sc.storageManager != nil {
+		// Create context with timeout for storage manager shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		
+		if err := sc.storageManager.Stop(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("failed to stop storage manager: %w", err))
+			logger.Error("failed to stop storage manager", map[string]interface{}{
+				"error": err,
+				"timeout": "30s",
+			})
+		} else {
+			logger.Info("storage manager stopped successfully", map[string]interface{}{
+				"timeout": "30s",
+			})
+		}
 	}
 	
+	// Stop compliance audit system
+	if sc.complianceAudit != nil {
+		// ComplianceAuditSystem doesn't have a cleanup method in the current implementation
+		// but we log that it's being shut down for tracking
+		logger.Info("compliance audit system shutdown", map[string]interface{}{})
+	}
+	
+	// Final cleanup and state reset
+	sc.mu.Lock()
+	sc.storageManager = nil
+	sc.blockCache = nil
+	sc.adaptiveCache = nil
+	sc.noisefsClient = nil
+	sc.descriptorStore = nil
+	sc.libp2pHost = nil
+	sc.peerManager = nil
+	sc.relayPool = nil
+	sc.coverTraffic = nil
+	sc.requestMixer = nil
+	sc.reuseClient = nil
+	sc.universalPool = nil
+	sc.reuseEnforcer = nil
+	sc.publicMixer = nil
+	sc.complianceAudit = nil
+	sc.mu.Unlock()
+	
+	if len(shutdownErrors) > 0 {
+		logger.Error("shutdown completed with errors", map[string]interface{}{
+			"error_count": len(shutdownErrors),
+		})
+		
+		// Return the first error but log all
+		for i, err := range shutdownErrors {
+			logger.Error("shutdown error", map[string]interface{}{
+				"error_index": i,
+				"error": err.Error(),
+			})
+		}
+		return shutdownErrors[0]
+	}
+	
+	logger.Info("system shutdown completed successfully", map[string]interface{}{})
 	return nil
 }
 

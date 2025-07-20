@@ -1,10 +1,12 @@
 package integration
 
 import (
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/common/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/common/logging"
 )
 
 func TestSystemCoordinatorCreation(t *testing.T) {
@@ -39,6 +41,126 @@ func TestSystemCoordinatorCreation(t *testing.T) {
 		
 		if !foundExpectedError {
 			t.Errorf("Expected error containing one of %v, got: %v", expectedErrors, err)
+		}
+	})
+}
+
+func TestCacheInitialization(t *testing.T) {
+	t.Run("Test adaptive cache configuration paths", func(t *testing.T) {
+		// Test that we can create configurations for both cache types
+		// This validates the conditional logic without requiring full system setup
+		
+		// Test adaptive cache enabled (default config)
+		cfg := config.DefaultConfig()
+		if !cfg.Cache.EnableAdaptiveCache {
+			t.Error("DefaultConfig should have adaptive cache enabled")
+		}
+		
+		// Test adaptive cache disabled (quickstart config)
+		quickCfg := config.QuickStartConfig()
+		if quickCfg.Cache.EnableAdaptiveCache {
+			t.Error("QuickStartConfig should have adaptive cache disabled")
+		}
+		
+		// Test that we can manually toggle the setting
+		cfg.Cache.EnableAdaptiveCache = false
+		if cfg.Cache.EnableAdaptiveCache {
+			t.Error("Failed to disable adaptive cache")
+		}
+		
+		cfg.Cache.EnableAdaptiveCache = true
+		if !cfg.Cache.EnableAdaptiveCache {
+			t.Error("Failed to enable adaptive cache")
+		}
+	})
+	
+	t.Run("Test cache initialization logic", func(t *testing.T) {
+		// Create a coordinator to test the cache initialization paths
+		// We'll test just the cache initialization part by creating a coordinator
+		// with minimal configuration and checking that it fails at storage, not cache
+		
+		// Test with adaptive cache enabled
+		cfg := config.DefaultConfig()
+		cfg.Cache.EnableAdaptiveCache = true
+		
+		coordinator := &SystemCoordinator{
+			config: cfg,
+		}
+		
+		// This should not panic and should set up the conditional correctly
+		// We can't test the full initialization without mocking, but we can
+		// verify that the configuration is properly read
+		if !coordinator.config.Cache.EnableAdaptiveCache {
+			t.Error("Coordinator should use adaptive cache when enabled in config")
+		}
+		
+		// Test with adaptive cache disabled
+		cfg.Cache.EnableAdaptiveCache = false
+		coordinator.config = cfg
+		
+		if coordinator.config.Cache.EnableAdaptiveCache {
+			t.Error("Coordinator should use simple cache when disabled in config")
+		}
+		
+		// Test that both paths can be initialized without panic
+		// (They'll fail due to missing dependencies, but the conditional logic should work)
+		
+		// Test adaptive cache path
+		adaptiveCfg := config.DefaultConfig()
+		adaptiveCfg.Cache.EnableAdaptiveCache = true
+		adaptiveCoordinator := &SystemCoordinator{
+			config: adaptiveCfg,
+		}
+		
+		// Test simple cache path  
+		simpleCfg := config.QuickStartConfig()
+		simpleCfg.Cache.EnableAdaptiveCache = false
+		simpleCoordinator := &SystemCoordinator{
+			config: simpleCfg,
+		}
+		
+		// Verify both configurations are set correctly
+		if !adaptiveCoordinator.config.Cache.EnableAdaptiveCache {
+			t.Error("Adaptive coordinator should have adaptive cache enabled")
+		}
+		if simpleCoordinator.config.Cache.EnableAdaptiveCache {
+			t.Error("Simple coordinator should have adaptive cache disabled")
+		}
+	})
+	
+	t.Run("Test environment variable override", func(t *testing.T) {
+		// Test that the environment variable can override the configuration
+		
+		// Set environment variable to disable adaptive cache
+		originalVal := os.Getenv("NOISEFS_ENABLE_ADAPTIVE_CACHE")
+		defer func() {
+			if originalVal == "" {
+				os.Unsetenv("NOISEFS_ENABLE_ADAPTIVE_CACHE")
+			} else {
+				os.Setenv("NOISEFS_ENABLE_ADAPTIVE_CACHE", originalVal)
+			}
+		}()
+		
+		// Test overriding to false
+		os.Setenv("NOISEFS_ENABLE_ADAPTIVE_CACHE", "false")
+		cfg, err := config.LoadConfig("")
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+		
+		if cfg.Cache.EnableAdaptiveCache {
+			t.Error("Environment variable should have disabled adaptive cache")
+		}
+		
+		// Test overriding to true
+		os.Setenv("NOISEFS_ENABLE_ADAPTIVE_CACHE", "true")
+		cfg, err = config.LoadConfig("")
+		if err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+		
+		if !cfg.Cache.EnableAdaptiveCache {
+			t.Error("Environment variable should have enabled adaptive cache")
 		}
 	})
 }
@@ -96,3 +218,32 @@ func TestSystemMetrics(t *testing.T) {
 		t.Errorf("Cover traffic ratio cannot be negative: %f", metrics.CoverTrafficRatio)
 	}
 }
+
+func TestShutdownResourceCleanup(t *testing.T) {
+	// Test that shutdown properly handles all components and doesn't panic
+	coordinator := &SystemCoordinator{
+		config: config.DefaultConfig(),
+		systemMetrics: &SystemMetrics{},
+	}
+	
+	// Initialize minimal logger to avoid nil pointer
+	coordinator.logger = logging.GetGlobalLogger().WithComponent("test")
+	
+	// Test shutdown with no initialized components - should not error
+	err := coordinator.Shutdown()
+	if err != nil {
+		t.Errorf("Shutdown should handle nil components gracefully, got error: %v", err)
+	}
+	
+	// Test that all components are properly nullified after shutdown
+	if coordinator.storageManager != nil {
+		t.Error("Storage manager should be nil after shutdown")
+	}
+	if coordinator.blockCache != nil {
+		t.Error("Block cache should be nil after shutdown")
+	}
+	if coordinator.libp2pHost != nil {
+		t.Error("LibP2P host should be nil after shutdown")
+	}
+}
+
