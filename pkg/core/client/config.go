@@ -1,3 +1,6 @@
+// Package noisefs provides client configuration and initialization functionality.
+// This file handles client construction, configuration management, and dependency injection
+// for the NoiseFS anonymous file storage system.
 package noisefs
 
 import (

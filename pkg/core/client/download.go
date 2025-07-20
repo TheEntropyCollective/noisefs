@@ -1,3 +1,6 @@
+// Package noisefs provides file download functionality.
+// This file handles file retrieval, de-anonymization through XOR operations,
+// and both streaming and non-streaming download modes with proper file size trimming.
 package noisefs
 
 import (

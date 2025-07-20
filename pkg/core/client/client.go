@@ -1,3 +1,6 @@
+// Package noisefs provides the core NoiseFS client structure and interface.
+// This file defines the main Client struct that coordinates all NoiseFS operations
+// including storage management, caching, metrics, and peer selection.
 package noisefs
 
 import (

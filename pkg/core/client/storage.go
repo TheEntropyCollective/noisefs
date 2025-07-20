@@ -1,3 +1,6 @@
+// Package noisefs provides storage management and caching functionality.
+// This file handles block storage operations, cache integration, and peer-aware
+// storage strategies for the NoiseFS distributed storage system.
 package noisefs
 
 import (

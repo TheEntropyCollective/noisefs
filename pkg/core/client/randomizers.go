@@ -1,3 +1,6 @@
+// Package noisefs provides randomizer selection and management functionality.
+// This file handles the selection of randomizer blocks for XOR operations,
+// implementing diversity controls, weighted selection, and cache-aware strategies.
 package noisefs
 
 import (

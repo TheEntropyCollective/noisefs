@@ -1,3 +1,6 @@
+// Package noisefs provides performance metrics and monitoring functionality.
+// This file handles tracking of upload/download statistics, cache efficiency,
+// availability integration, and system performance metrics.
 package noisefs
 
 import (

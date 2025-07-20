@@ -1,3 +1,6 @@
+// Package noisefs provides file upload functionality.
+// This file handles file splitting, 3-tuple XOR anonymization with randomizer selection,
+// and both streaming and non-streaming upload modes with progress reporting.
 package noisefs
 
 import (

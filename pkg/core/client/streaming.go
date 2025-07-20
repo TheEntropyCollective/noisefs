@@ -1,3 +1,6 @@
+// Package noisefs provides streaming upload and download functionality.
+// This file implements memory-efficient streaming operations with constant memory usage
+// regardless of file size, real-time XOR processing, and progress reporting.
 package noisefs
 
 import (
