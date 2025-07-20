@@ -3,6 +3,7 @@ package fuse
 import (
 	"fmt"
 	"os"
+	"testing"
 )
 
 // TestExampleLoadFUSEConfig demonstrates basic FUSE configuration usage
@@ -29,8 +30,8 @@ func TestExampleLoadFUSEConfig(t *testing.T) {
 	// Streaming chunk size: 65536
 }
 
-// ExampleEnvironmentOverrides demonstrates environment variable configuration
-func ExampleEnvironmentOverrides() {
+// TestExampleEnvironmentOverrides demonstrates environment variable configuration
+func TestExampleEnvironmentOverrides(t *testing.T) {
 	// Set environment variables to override defaults
 	os.Setenv("NOISEFS_FUSE_CACHE_SIZE", "500")
 	os.Setenv("NOISEFS_FUSE_CACHE_TTL", "1h")
@@ -56,8 +57,8 @@ func ExampleEnvironmentOverrides() {
 	// Memory lock enabled: false
 }
 
-// ExampleDirectoryCacheIntegration demonstrates directory cache configuration integration
-func ExampleDirectoryCacheIntegration() {
+// TestExampleDirectoryCacheIntegration demonstrates directory cache configuration integration
+func TestExampleDirectoryCacheIntegration(t *testing.T) {
 	// Set FUSE cache configuration via environment
 	os.Setenv("NOISEFS_FUSE_CACHE_SIZE", "250")
 	os.Setenv("NOISEFS_FUSE_CACHE_TTL", "45m")
@@ -83,8 +84,8 @@ func ExampleDirectoryCacheIntegration() {
 	// Metrics enabled: true
 }
 
-// ExampleGlobalConfiguration demonstrates global configuration usage
-func ExampleGlobalConfiguration() {
+// TestExampleGlobalConfiguration demonstrates global configuration usage
+func TestExampleGlobalConfiguration(t *testing.T) {
 	// Set custom global configuration
 	customConfig := DefaultFUSEConfig()
 	customConfig.Cache.Size = 999
@@ -102,8 +103,8 @@ func ExampleGlobalConfiguration() {
 	// Global secure delete passes: 7
 }
 
-// ExampleMountOptionsFromConfig demonstrates creating mount options from configuration
-func ExampleMountOptionsFromConfig() {
+// TestExampleMountOptionsFromConfig demonstrates creating mount options from configuration
+func TestExampleMountOptionsFromConfig(t *testing.T) {
 	// Load and validate configuration
 	config := LoadFUSEConfig()
 	if err := config.Validate(); err != nil {
@@ -136,8 +137,8 @@ func ExampleMountOptionsFromConfig() {
 	// Debug: false
 }
 
-// ExampleConfigurationValidation demonstrates comprehensive validation
-func ExampleConfigurationValidation() {
+// TestExampleConfigurationValidation demonstrates comprehensive validation
+func TestExampleConfigurationValidation(t *testing.T) {
 	// Create configuration with some invalid values
 	config := DefaultFUSEConfig()
 	config.Cache.Size = 0                    // Invalid: must be positive
@@ -154,8 +155,8 @@ func ExampleConfigurationValidation() {
 	// Validation failed: cache size must be positive (current: 0). Recommended values: 50 for low-memory systems, 100 for normal use, 500+ for high-activity directories
 }
 
-// ExamplePerformanceConfiguration demonstrates performance-related settings
-func ExamplePerformanceConfiguration() {
+// TestExamplePerformanceConfiguration demonstrates performance-related settings
+func TestExamplePerformanceConfiguration(t *testing.T) {
 	config := DefaultFUSEConfig()
 	
 	fmt.Printf("Streaming configuration:\n")
@@ -174,8 +175,8 @@ func ExamplePerformanceConfiguration() {
 	//   Async I/O enabled: true
 }
 
-// ExampleSecurityConfiguration demonstrates security-related settings
-func ExampleSecurityConfiguration() {
+// TestExampleSecurityConfiguration demonstrates security-related settings
+func TestExampleSecurityConfiguration(t *testing.T) {
 	config := DefaultFUSEConfig()
 	
 	fmt.Printf("Security configuration:\n")

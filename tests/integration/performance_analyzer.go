@@ -16,18 +16,45 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+// MetricsConfig configures metrics collection bounds
+type MetricsConfig struct {
+	MaxOperations   int           `json:"max_operations"`   // Maximum operation metrics to retain
+	MaxCacheMetrics int           `json:"max_cache_metrics"` // Maximum cache metrics to retain
+	MaxPeerMetrics  int           `json:"max_peer_metrics"`  // Maximum peer metrics to retain
+	RetentionPeriod time.Duration `json:"retention_period"` // How long to retain metrics
+}
+
+// DefaultMetricsConfig returns sensible defaults for metrics collection
+func DefaultMetricsConfig() MetricsConfig {
+	return MetricsConfig{
+		MaxOperations:   10000, // ~10k operations (reasonable for most workloads)
+		MaxCacheMetrics: 1000,  // ~1k cache snapshots (at 1 per minute = ~16 hours)
+		MaxPeerMetrics:  5000,  // ~5k peer metrics (varies by peer count)
+		RetentionPeriod: 24 * time.Hour, // 24 hours of data
+	}
+}
+
 // PerformanceAnalyzer provides comprehensive performance analysis for NoiseFS
 type PerformanceAnalyzer struct {
 	mu           sync.RWMutex
 	clients      []*noisefs.Client
 	peerManagers []*p2p.PeerManager
 	startTime    time.Time
+	config       MetricsConfig
 
-	// Metrics (protected by mutex)
+	// Bounded circular buffers for metrics
 	operations    []OperationMetric
 	cacheMetrics  []CacheMetric
 	peerMetrics   []PeerMetric
 	systemMetrics SystemMetric
+
+	// Circular buffer tracking
+	operationIdx   int
+	cacheIdx       int
+	peerIdx        int
+	operationFull  bool
+	cacheFull      bool
+	peerFull       bool
 }
 
 // OperationMetric tracks individual operation performance
@@ -117,13 +144,19 @@ type PeerPerformanceStats struct {
 	LastSeen         time.Time     `json:"last_seen"`
 }
 
-// NewPerformanceAnalyzer creates a new performance analyzer
+// NewPerformanceAnalyzer creates a new performance analyzer with default configuration
 func NewPerformanceAnalyzer() *PerformanceAnalyzer {
+	return NewPerformanceAnalyzerWithConfig(DefaultMetricsConfig())
+}
+
+// NewPerformanceAnalyzerWithConfig creates a new performance analyzer with custom configuration
+func NewPerformanceAnalyzerWithConfig(config MetricsConfig) *PerformanceAnalyzer {
 	return &PerformanceAnalyzer{
 		startTime:    time.Now(),
-		operations:   make([]OperationMetric, 0),
-		cacheMetrics: make([]CacheMetric, 0),
-		peerMetrics:  make([]PeerMetric, 0),
+		config:       config,
+		operations:   make([]OperationMetric, 0, config.MaxOperations),
+		cacheMetrics: make([]CacheMetric, 0, config.MaxCacheMetrics),
+		peerMetrics:  make([]PeerMetric, 0, config.MaxPeerMetrics),
 	}
 }
 
@@ -137,8 +170,11 @@ func (pa *PerformanceAnalyzer) AddPeerManager(pm *p2p.PeerManager) {
 	pa.peerManagers = append(pa.peerManagers, pm)
 }
 
-// RecordOperation records an operation metric
+// RecordOperation records an operation metric using bounded circular buffer
 func (pa *PerformanceAnalyzer) RecordOperation(opType string, duration time.Duration, blockSize int, success bool, strategy string, cacheHit bool) {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+
 	metric := OperationMetric{
 		Type:      opType,
 		Duration:  duration,
@@ -148,18 +184,58 @@ func (pa *PerformanceAnalyzer) RecordOperation(opType string, duration time.Dura
 		CacheHit:  cacheHit,
 		Timestamp: time.Now(),
 	}
-	pa.mu.Lock()
-	pa.operations = append(pa.operations, metric)
-	pa.mu.Unlock()
+
+	pa.addOperationMetric(metric)
+}
+
+// addOperationMetric adds a metric to the circular buffer
+func (pa *PerformanceAnalyzer) addOperationMetric(metric OperationMetric) {
+	if len(pa.operations) < pa.config.MaxOperations {
+		// Still growing the slice
+		pa.operations = append(pa.operations, metric)
+	} else {
+		// Use circular buffer
+		pa.operations[pa.operationIdx] = metric
+		pa.operationIdx = (pa.operationIdx + 1) % pa.config.MaxOperations
+		pa.operationFull = true
+	}
+}
+
+// addCacheMetric adds a cache metric to the circular buffer
+func (pa *PerformanceAnalyzer) addCacheMetric(metric CacheMetric) {
+	if len(pa.cacheMetrics) < pa.config.MaxCacheMetrics {
+		// Still growing the slice
+		pa.cacheMetrics = append(pa.cacheMetrics, metric)
+	} else {
+		// Use circular buffer
+		pa.cacheMetrics[pa.cacheIdx] = metric
+		pa.cacheIdx = (pa.cacheIdx + 1) % pa.config.MaxCacheMetrics
+		pa.cacheFull = true
+	}
+}
+
+// addPeerMetric adds a peer metric to the circular buffer
+func (pa *PerformanceAnalyzer) addPeerMetric(metric PeerMetric) {
+	if len(pa.peerMetrics) < pa.config.MaxPeerMetrics {
+		// Still growing the slice
+		pa.peerMetrics = append(pa.peerMetrics, metric)
+	} else {
+		// Use circular buffer
+		pa.peerMetrics[pa.peerIdx] = metric
+		pa.peerIdx = (pa.peerIdx + 1) % pa.config.MaxPeerMetrics
+		pa.peerFull = true
+	}
 }
 
 // CollectMetrics collects current metrics from all clients and peer managers
 func (pa *PerformanceAnalyzer) CollectMetrics() {
+	pa.mu.Lock()
+	defer pa.mu.Unlock()
+
 	timestamp := time.Now()
 
-	// Collect metrics locally to minimize lock time
-	var newCacheMetrics []CacheMetric
-	var newPeerMetrics []PeerMetric
+	// Clean up old metrics if retention period is configured
+	pa.cleanupOldMetrics(timestamp)
 
 	// Collect cache metrics
 	for _, client := range pa.clients {
@@ -178,7 +254,7 @@ func (pa *PerformanceAnalyzer) CollectMetrics() {
 				ColdTier:    int(stats.ColdTierHits),
 				Evictions:   stats.Evictions,
 			}
-			newCacheMetrics = append(newCacheMetrics, metric)
+			pa.addCacheMetric(metric)
 		}
 
 		// Collect peer metrics (TODO: implement when storage manager provides peer stats)
@@ -245,17 +321,84 @@ func (pa *PerformanceAnalyzer) CollectMetrics() {
 						SelectionCount: int(totalReqs),
 						Strategy:       "mixed", // Would need to track per strategy
 					}
-					newPeerMetrics = append(newPeerMetrics, metric)
+					pa.addPeerMetric(metric)
 				}
 			}
 		}
 	}
+}
 
-	// Update metrics under lock
+// cleanupOldMetrics removes metrics older than the retention period
+func (pa *PerformanceAnalyzer) cleanupOldMetrics(currentTime time.Time) {
+	if pa.config.RetentionPeriod == 0 {
+		return // No retention limit
+	}
+
+	cutoffTime := currentTime.Add(-pa.config.RetentionPeriod)
+
+	// Clean up operation metrics
+	pa.operations = pa.filterMetricsByTime(pa.operations, cutoffTime)
+
+	// Clean up cache metrics
+	pa.cacheMetrics = pa.filterCacheMetricsByTime(pa.cacheMetrics, cutoffTime)
+
+	// Clean up peer metrics
+	pa.peerMetrics = pa.filterPeerMetricsByTime(pa.peerMetrics, cutoffTime)
+}
+
+// filterMetricsByTime filters operation metrics by timestamp
+func (pa *PerformanceAnalyzer) filterMetricsByTime(metrics []OperationMetric, cutoffTime time.Time) []OperationMetric {
+	filtered := make([]OperationMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		if metric.Timestamp.After(cutoffTime) {
+			filtered = append(filtered, metric)
+		}
+	}
+	return filtered
+}
+
+// filterCacheMetricsByTime filters cache metrics by timestamp
+func (pa *PerformanceAnalyzer) filterCacheMetricsByTime(metrics []CacheMetric, cutoffTime time.Time) []CacheMetric {
+	filtered := make([]CacheMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		if metric.Timestamp.After(cutoffTime) {
+			filtered = append(filtered, metric)
+		}
+	}
+	return filtered
+}
+
+// filterPeerMetricsByTime filters peer metrics by timestamp
+func (pa *PerformanceAnalyzer) filterPeerMetricsByTime(metrics []PeerMetric, cutoffTime time.Time) []PeerMetric {
+	filtered := make([]PeerMetric, 0, len(metrics))
+	for _, metric := range metrics {
+		if metric.Timestamp.After(cutoffTime) {
+			filtered = append(filtered, metric)
+		}
+	}
+	return filtered
+}
+
+// GetCurrentMetrics returns current metrics counts for monitoring
+func (pa *PerformanceAnalyzer) GetCurrentMetrics() (operationCount, cacheCount, peerCount int) {
+	pa.mu.RLock()
+	defer pa.mu.RUnlock()
+	return len(pa.operations), len(pa.cacheMetrics), len(pa.peerMetrics)
+}
+
+// GetMetricsConfig returns the current metrics configuration
+func (pa *PerformanceAnalyzer) GetMetricsConfig() MetricsConfig {
+	pa.mu.RLock()
+	defer pa.mu.RUnlock()
+	return pa.config
+}
+
+// UpdateMetricsConfig updates the metrics configuration
+// Note: This will not resize existing slices, only affects new metrics
+func (pa *PerformanceAnalyzer) UpdateMetricsConfig(config MetricsConfig) {
 	pa.mu.Lock()
-	pa.cacheMetrics = append(pa.cacheMetrics, newCacheMetrics...)
-	pa.peerMetrics = append(pa.peerMetrics, newPeerMetrics...)
-	pa.mu.Unlock()
+	defer pa.mu.Unlock()
+	pa.config = config
 }
 
 // StartContinuousCollection starts continuous metric collection
@@ -275,36 +418,29 @@ func (pa *PerformanceAnalyzer) StartContinuousCollection(ctx context.Context, in
 
 // Analyze performs comprehensive performance analysis
 func (pa *PerformanceAnalyzer) Analyze() *AnalysisResult {
-	pa.mu.Lock()
+	pa.mu.RLock()
+	defer pa.mu.RUnlock()
+
 	pa.systemMetrics.EndTime = time.Now()
 
-	// Create copies of metrics to avoid holding lock during analysis
-	operationsCopy := make([]OperationMetric, len(pa.operations))
-	copy(operationsCopy, pa.operations)
-	cacheMetricsCopy := make([]CacheMetric, len(pa.cacheMetrics))
-	copy(cacheMetricsCopy, pa.cacheMetrics)
-	peerMetricsCopy := make([]PeerMetric, len(pa.peerMetrics))
-	copy(peerMetricsCopy, pa.peerMetrics)
-	pa.mu.Unlock()
-
 	// Calculate system metrics
-	pa.calculateSystemMetrics(operationsCopy, cacheMetricsCopy, peerMetricsCopy)
+	pa.calculateSystemMetrics()
 
 	// Analyze cache performance
-	cacheAnalysis := pa.analyzeCachePerformance(operationsCopy, cacheMetricsCopy)
+	cacheAnalysis := pa.analyzeCachePerformance()
 
 	// Analyze peer performance
-	peerAnalysis := pa.analyzePeerPerformance(operationsCopy, peerMetricsCopy)
+	peerAnalysis := pa.analyzePeerPerformance()
 
 	// Generate recommendations
 	recommendations := pa.generateRecommendations(cacheAnalysis, peerAnalysis)
 
-	pa.mu.RLock()
-	systemMetrics := pa.systemMetrics
-	pa.mu.RUnlock()
+	// Create a copy of operations for the result to avoid data races
+	operationsCopy := make([]OperationMetric, len(pa.operations))
+	copy(operationsCopy, pa.operations)
 
 	return &AnalysisResult{
-		SystemMetrics:    systemMetrics,
+		SystemMetrics:    pa.systemMetrics,
 		OperationMetrics: operationsCopy,
 		CacheAnalysis:    cacheAnalysis,
 		PeerAnalysis:     peerAnalysis,
@@ -314,10 +450,10 @@ func (pa *PerformanceAnalyzer) Analyze() *AnalysisResult {
 
 // calculateSystemMetrics calculates overall system performance metrics
 func (pa *PerformanceAnalyzer) calculateSystemMetrics(operations []OperationMetric, cacheMetrics []CacheMetric, peerMetrics []PeerMetric) {
-	pa.mu.Lock()
-	pa.systemMetrics.StartTime = pa.startTime
-	pa.systemMetrics.TotalOperations = int64(len(operations))
-	pa.mu.Unlock()
+	// Calculate metrics locally first to minimize lock time
+	var systemMetrics SystemMetric
+	systemMetrics.StartTime = pa.startTime
+	systemMetrics.TotalOperations = int64(len(operations))
 
 	var totalLatency time.Duration
 	var totalBytes int64
@@ -340,41 +476,40 @@ func (pa *PerformanceAnalyzer) calculateSystemMetrics(operations []OperationMetr
 		}
 	}
 
-	pa.mu.Lock()
-	pa.systemMetrics.SuccessfulOps = successOps
-	pa.systemMetrics.TotalBlocksStored = storeOps
-	pa.systemMetrics.TotalBlocksRetrieved = retrieveOps
+	systemMetrics.SuccessfulOps = successOps
+	systemMetrics.TotalBlocksStored = storeOps
+	systemMetrics.TotalBlocksRetrieved = retrieveOps
 
 	if len(operations) > 0 {
-		pa.systemMetrics.AverageLatency = totalLatency / time.Duration(len(operations))
+		systemMetrics.AverageLatency = totalLatency / time.Duration(len(operations))
 
-		duration := pa.systemMetrics.EndTime.Sub(pa.systemMetrics.StartTime)
+		// Get EndTime safely
+		pa.mu.RLock()
+		endTime := pa.systemMetrics.EndTime
+		pa.mu.RUnlock()
+
+		duration := endTime.Sub(systemMetrics.StartTime)
 		if duration > 0 {
-			pa.systemMetrics.ThroughputMBps = float64(totalBytes) / (1024 * 1024) / duration.Seconds()
+			systemMetrics.ThroughputMBps = float64(totalBytes) / (1024 * 1024) / duration.Seconds()
 		}
 	}
-	pa.mu.Unlock()
 
 	// Calculate cache efficiency (hit rate)
-	if len(cacheMetrics) > 0 {
+	if len(pa.cacheMetrics) > 0 {
 		totalHitRate := 0.0
-		for _, metric := range cacheMetrics {
+		for _, metric := range pa.cacheMetrics {
 			totalHitRate += metric.HitRate
 		}
-		pa.mu.Lock()
-		pa.systemMetrics.CacheEfficiency = totalHitRate / float64(len(cacheMetrics))
-		pa.mu.Unlock()
+		pa.systemMetrics.CacheEfficiency = totalHitRate / float64(len(pa.cacheMetrics))
 	}
 
 	// Calculate peer efficiency (average success rate)
-	if len(peerMetrics) > 0 {
+	if len(pa.peerMetrics) > 0 {
 		totalSuccessRate := 0.0
-		for _, metric := range peerMetrics {
+		for _, metric := range pa.peerMetrics {
 			totalSuccessRate += metric.SuccessRate
 		}
-		pa.mu.Lock()
-		pa.systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(peerMetrics))
-		pa.mu.Unlock()
+		pa.systemMetrics.PeerEfficiency = totalSuccessRate / float64(len(pa.peerMetrics))
 	}
 }
 
@@ -601,6 +736,10 @@ func (pa *PerformanceAnalyzer) SaveReport(filename string) error {
 func (pa *PerformanceAnalyzer) PrintSummary() {
 	result := pa.Analyze()
 
+	// Also print metrics buffer status
+	operationCount, cacheCount, peerCount := pa.GetCurrentMetrics()
+	config := pa.GetMetricsConfig()
+
 	fmt.Println("=== NoiseFS Performance Analysis Summary ===")
 	fmt.Printf("Duration: %v\n", result.SystemMetrics.EndTime.Sub(result.SystemMetrics.StartTime))
 	fmt.Printf("Total Operations: %d\n", result.SystemMetrics.TotalOperations)
@@ -609,6 +748,10 @@ func (pa *PerformanceAnalyzer) PrintSummary() {
 	fmt.Printf("Throughput: %.2f MB/s\n", result.SystemMetrics.ThroughputMBps)
 	fmt.Printf("Cache Hit Rate: %.1f%%\n", result.CacheAnalysis.OverallHitRate*100)
 	fmt.Printf("Network Efficiency: %.1f%%\n", result.PeerAnalysis.NetworkEfficiency*100)
+	fmt.Printf("Metrics Buffer Status: Operations %d/%d, Cache %d/%d, Peers %d/%d\n",
+		operationCount, config.MaxOperations,
+		cacheCount, config.MaxCacheMetrics,
+		peerCount, config.MaxPeerMetrics)
 
 	fmt.Println("\n=== Recommendations ===")
 	for i, rec := range result.Recommendations {
