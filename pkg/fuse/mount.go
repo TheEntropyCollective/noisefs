@@ -572,6 +572,8 @@ func (fs *NoiseFS) Rename(oldName string, newName string, context *fuse.Context)
 }
 
 // GetXAttr implements pathfs.FileSystem for extended attributes
+// PRIVACY IMPLEMENTATION: This function has been modified to preserve NoiseFS anonymity guarantees
+// by removing access to sensitive metadata that could compromise user privacy.
 func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context) ([]byte, fuse.Status) {
 	// Only handle files under files/
 	if !strings.HasPrefix(name, "files/") {
@@ -579,24 +581,28 @@ func (fs *NoiseFS) GetXAttr(name string, attribute string, context *fuse.Context
 	}
 	
 	relativePath := strings.TrimPrefix(name, "files/")
-	entry, exists := fs.index.GetFile(relativePath)
+	_, exists := fs.index.GetFile(relativePath)
 	if !exists {
 		return nil, fuse.ENOENT
 	}
 	
-	// Handle standard attributes
+	// Handle privacy-preserving attributes only
 	switch attribute {
-	case "user.noisefs.descriptor_cid":
-		return []byte(entry.DescriptorCID), fuse.OK
-	case "user.noisefs.created_at":
-		return []byte(entry.CreatedAt.Format("2006-01-02T15:04:05Z07:00")), fuse.OK
-	case "user.noisefs.modified_at":
-		return []byte(entry.ModifiedAt.Format("2006-01-02T15:04:05Z07:00")), fuse.OK
-	case "user.noisefs.file_size":
-		return []byte(fmt.Sprintf("%d", entry.FileSize)), fuse.OK
-	case "user.noisefs.directory":
-		return []byte(entry.Directory), fuse.OK
+	case "user.noisefs.type":
+		// Safe: Just indicates this is a NoiseFS file
+		return []byte("noisefs-file"), fuse.OK
+	case "user.noisefs.version":
+		// Safe: NoiseFS version info
+		return []byte("1.0"), fuse.OK
+	case "user.noisefs.encrypted":
+		// Safe: Indicates file is encrypted (expected in NoiseFS)
+		return []byte("true"), fuse.OK
 	default:
+		// PRIVACY: All sensitive attributes removed
+		// - descriptor_cid: Exposes content identifiers (breaks anonymity)
+		// - created_at/modified_at: Enable timing correlation attacks  
+		// - file_size: May aid in fingerprinting attacks
+		// - directory: Exposes path information (breaks privacy)
 		return nil, fuse.ENODATA
 	}
 }
@@ -614,13 +620,11 @@ func (fs *NoiseFS) ListXAttr(name string, context *fuse.Context) ([]string, fuse
 		return nil, fuse.ENOENT
 	}
 	
-	// Return list of available extended attributes
+	// Return only privacy-safe extended attributes
 	attrs := []string{
-		"user.noisefs.descriptor_cid",
-		"user.noisefs.created_at",
-		"user.noisefs.modified_at",
-		"user.noisefs.file_size",
-		"user.noisefs.directory",
+		"user.noisefs.type",
+		"user.noisefs.version", 
+		"user.noisefs.encrypted",
 	}
 	
 	return attrs, fuse.OK
@@ -632,13 +636,13 @@ func (fs *NoiseFS) SetXAttr(name string, attribute string, data []byte, flags in
 		return fuse.EROFS
 	}
 	
-	// Extended attributes are read-only for NoiseFS metadata
-	// Only allow setting user-defined attributes that don't conflict with system ones
+	// NoiseFS system attributes are read-only for privacy protection
 	if strings.HasPrefix(attribute, "user.noisefs.") {
 		return fuse.EPERM
 	}
 	
 	// For now, don't support arbitrary extended attributes
+	// This maintains privacy by preventing metadata leakage through custom attributes
 	return fuse.ENOTSUP
 }
 
@@ -648,12 +652,13 @@ func (fs *NoiseFS) RemoveXAttr(name string, attribute string, context *fuse.Cont
 		return fuse.EROFS
 	}
 	
-	// System attributes cannot be removed
+	// NoiseFS system attributes cannot be removed for privacy protection
 	if strings.HasPrefix(attribute, "user.noisefs.") {
 		return fuse.EPERM
 	}
 	
 	// For now, don't support arbitrary extended attributes
+	// This maintains privacy by preventing metadata leakage through custom attributes
 	return fuse.ENOTSUP
 }
 
