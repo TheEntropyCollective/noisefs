@@ -29,6 +29,7 @@ type AuditConfig struct {
 	LogRetentionPeriod       time.Duration `json:"log_retention_period"`
 	RequireCryptographicProof bool         `json:"require_cryptographic_proof"`
 	AlertThresholds          *AlertThresholds `json:"alert_thresholds"`
+	ScoringParameters        *ScoringParameters `json:"scoring_parameters"`
 	ExportFormats            []string      `json:"export_formats"` // "json", "csv", "xml"
 	AutoBackupInterval       time.Duration `json:"auto_backup_interval"`
 	LegalHoldEnabled         bool          `json:"legal_hold_enabled"`
@@ -44,6 +45,29 @@ type AlertThresholds struct {
 	CounterNoticeRatio       float64 `json:"counter_notice_ratio"` // Ratio that might indicate abuse
 	RepeatInfringerThreshold int     `json:"repeat_infringer_threshold"`
 	ProcessingTimeThreshold  time.Duration `json:"processing_time_threshold"`
+}
+
+// ScoringParameters define configurable parameters for compliance scoring
+type ScoringParameters struct {
+	// DMCA scoring penalties
+	DMCAFailurePenalty       float64 `json:"dmca_failure_penalty"`      // Penalty per DMCA failure (default 0.1)
+	
+	// Processing time scoring
+	DefaultProcessingThreshold time.Duration `json:"default_processing_threshold"` // Default processing time limit (default 24h)
+	SevereDelayPenalty       float64       `json:"severe_delay_penalty"`         // Penalty per severe delay (default 0.05)
+	
+	// Audit completeness scoring
+	IntegrityIssuePenalty    float64 `json:"integrity_issue_penalty"`     // Penalty per integrity issue (default 0.15)
+	MissingFieldPenalty      float64 `json:"missing_field_penalty"`       // Penalty per missing field (default 0.05)
+	
+	// Risk assessment thresholds
+	LowRiskThreshold         float64 `json:"low_risk_threshold"`          // Threshold for low risk classification (default 0.9)
+	MediumRiskThreshold      float64 `json:"medium_risk_threshold"`       // Threshold for medium risk classification (default 0.7)
+	HighTakedownVolume       int64   `json:"high_takedown_volume"`        // Volume considered high for risk assessment (default 1000)
+	HighCounterNoticeRatio   float64 `json:"high_counter_notice_ratio"`   // Counter-notice ratio indicating risk (default 0.5)
+	
+	// Compliance strength thresholds
+	ComplianceStrengthThreshold float64 `json:"compliance_strength_threshold"` // Threshold for marking areas as strengths (default 0.9)
 }
 
 // AdvancedAuditLogger provides detailed audit logging with cryptographic integrity
@@ -199,6 +223,27 @@ func NewComplianceAuditSystem(config *AuditConfig) *ComplianceAuditSystem {
 	return system
 }
 
+// getScoringParameters safely retrieves scoring parameters with fallback to defaults
+func (system *ComplianceAuditSystem) getScoringParameters() *ScoringParameters {
+	if system.config != nil && system.config.ScoringParameters != nil {
+		return system.config.ScoringParameters
+	}
+	
+	// Return default scoring parameters if not configured
+	return &ScoringParameters{
+		DMCAFailurePenalty:         0.1,
+		DefaultProcessingThreshold: 24 * time.Hour,
+		SevereDelayPenalty:         0.05,
+		IntegrityIssuePenalty:      0.15,
+		MissingFieldPenalty:        0.05,
+		LowRiskThreshold:           0.9,
+		MediumRiskThreshold:        0.7,
+		HighTakedownVolume:         1000,
+		HighCounterNoticeRatio:     0.5,
+		ComplianceStrengthThreshold: 0.9,
+	}
+}
+
 // DefaultAuditConfig returns default audit configuration
 func DefaultAuditConfig() *AuditConfig {
 	// Generate a new ECDSA signing key for cryptographic signatures
@@ -218,6 +263,27 @@ func DefaultAuditConfig() *AuditConfig {
 			CounterNoticeRatio:       0.3, // 30% counter-notice rate might indicate issues
 			RepeatInfringerThreshold: 3,
 			ProcessingTimeThreshold:  24 * time.Hour,
+		},
+		ScoringParameters: &ScoringParameters{
+			// DMCA scoring penalties
+			DMCAFailurePenalty:       0.1, // 10% penalty per failure
+			
+			// Processing time scoring
+			DefaultProcessingThreshold: 24 * time.Hour, // 24 hours
+			SevereDelayPenalty:       0.05, // 5% penalty per severe delay
+			
+			// Audit completeness scoring
+			IntegrityIssuePenalty:    0.15, // 15% penalty per integrity issue
+			MissingFieldPenalty:      0.05, // 5% penalty per missing field
+			
+			// Risk assessment thresholds
+			LowRiskThreshold:         0.9, // 90% for low risk
+			MediumRiskThreshold:      0.7, // 70% for medium risk
+			HighTakedownVolume:       1000, // 1000 takedowns is high volume
+			HighCounterNoticeRatio:   0.5, // 50% counter-notice ratio is concerning
+			
+			// Compliance strength thresholds
+			ComplianceStrengthThreshold: 0.9, // 90% for marking as strength
 		},
 		ExportFormats:      []string{"json", "csv"},
 		AutoBackupInterval: 24 * time.Hour,
@@ -580,9 +646,9 @@ func (system *ComplianceAuditSystem) calculateAllComplianceScores(assessment *Co
 
 // determineRiskLevel determines compliance risk level based on overall score
 func (system *ComplianceAuditSystem) determineRiskLevel(overallScore float64) string {
-	if overallScore >= 0.9 {
+	if overallScore >= system.getScoringParameters().LowRiskThreshold {
 		return "low"
-	} else if overallScore >= 0.7 {
+	} else if overallScore >= system.getScoringParameters().MediumRiskThreshold {
 		return "medium"
 	} else {
 		return "high"
@@ -592,14 +658,14 @@ func (system *ComplianceAuditSystem) determineRiskLevel(overallScore float64) st
 // identifyComplianceStrengthsAndAreas identifies compliance strengths and improvement areas
 func (system *ComplianceAuditSystem) identifyComplianceStrengthsAndAreas(assessment *ComplianceAssessment) {
 	// DMCA compliance assessment
-	if assessment.DMCACompliance >= 0.9 {
+	if assessment.DMCACompliance >= system.getScoringParameters().ComplianceStrengthThreshold {
 		assessment.Strengths = append(assessment.Strengths, "Strong DMCA compliance procedures")
 	} else {
 		assessment.Areas = append(assessment.Areas, "Improve DMCA processing efficiency")
 	}
 	
 	// Audit compliance assessment
-	if assessment.AuditCompliance >= 0.9 {
+	if assessment.AuditCompliance >= system.getScoringParameters().ComplianceStrengthThreshold {
 		assessment.Strengths = append(assessment.Strengths, "Excellent audit trail maintenance")
 	} else {
 		assessment.Areas = append(assessment.Areas, "Enhance audit logging completeness")
@@ -752,8 +818,8 @@ func (system *ComplianceAuditSystem) calculateDMCAComplianceScore(entries []*Det
 	// Calculate base score from success rate
 	successRate := float64(successfulEvents) / float64(dmcaEvents)
 	
-	// Apply penalties for failed events
-	failurePenalty := float64(failedEvents) * 0.1 // 10% penalty per failure
+	// Apply penalties for failed events using configurable parameter
+	failurePenalty := float64(failedEvents) * system.getScoringParameters().DMCAFailurePenalty
 	
 	// Calculate final score (min 0.0, max 1.0)
 	score := successRate - failurePenalty
@@ -776,10 +842,10 @@ func (system *ComplianceAuditSystem) calculateProcessingComplianceScore(entries 
 	timelyEvents := 0
 	delayedEvents := 0
 	
-	// Define processing time thresholds
+	// Define processing time thresholds using configurable parameters
 	maxProcessingTime := system.config.AlertThresholds.ProcessingTimeThreshold
 	if maxProcessingTime == 0 {
-		maxProcessingTime = 24 * time.Hour // Default 24 hours
+		maxProcessingTime = system.getScoringParameters().DefaultProcessingThreshold
 	}
 	
 	for _, entry := range entries {
@@ -806,7 +872,7 @@ func (system *ComplianceAuditSystem) calculateProcessingComplianceScore(entries 
 	severeDelayPenalty := 0.0
 	for _, entry := range entries {
 		if entry.ProcessingTime > maxProcessingTime*2 { // More than 2x threshold
-			severeDelayPenalty += 0.05 // 5% penalty per severe delay
+			severeDelayPenalty += system.getScoringParameters().SevereDelayPenalty
 		}
 	}
 	
@@ -873,9 +939,9 @@ func (system *ComplianceAuditSystem) calculateAuditComplianceScore(entries []*De
 	// Calculate base score from completeness rate
 	completenessRate := float64(completeEntries) / float64(totalEntries)
 	
-	// Apply penalties for integrity and field issues
-	integrityPenalty := float64(integrityIssues) * 0.15  // 15% penalty per integrity issue
-	fieldPenalty := float64(missingFieldIssues) * 0.05   // 5% penalty per missing field
+	// Apply penalties for integrity and field issues using configurable parameters
+	integrityPenalty := float64(integrityIssues) * system.getScoringParameters().IntegrityIssuePenalty
+	fieldPenalty := float64(missingFieldIssues) * system.getScoringParameters().MissingFieldPenalty
 	
 	// Calculate final score (min 0.0, max 1.0)
 	score := completenessRate - integrityPenalty - fieldPenalty
@@ -890,10 +956,10 @@ func (system *ComplianceAuditSystem) calculateAuditComplianceScore(entries []*De
 }
 
 func (system *ComplianceAuditSystem) assessLegalRisk(analysis *DMCAAnalysis) string {
-	if analysis.CounterNoticeRatio > 0.5 {
+	if analysis.CounterNoticeRatio > system.getScoringParameters().HighCounterNoticeRatio {
 		return "Medium risk - high counter-notice ratio may indicate over-broad takedowns"
 	}
-	if analysis.TotalTakedowns > 1000 {
+	if analysis.TotalTakedowns > system.getScoringParameters().HighTakedownVolume {
 		return "Medium risk - high volume requires careful monitoring"
 	}
 	return "Low risk - normal compliance patterns observed"
