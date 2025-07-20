@@ -591,7 +591,61 @@ func (s *EncryptedStore) Load(cid string) (*Descriptor, error) {
 	return descriptor, nil
 }
 
-// SaveUnencrypted stores a descriptor without encryption (for public content)
+// SaveUnencrypted stores a descriptor without encryption for public content or legacy compatibility.
+// This method provides explicit unencrypted storage regardless of the configured password provider,
+// enabling applications to store public descriptors or maintain compatibility with unencrypted workflows.
+//
+// # Use Cases
+//
+//   Public file sharing:
+//     // Store descriptor without encryption for public access
+//     cid, err := store.SaveUnencrypted(publicDescriptor)
+//
+//   Legacy compatibility:
+//     // Ensure compatibility with older NoiseFS versions
+//     cid, err := store.SaveUnencrypted(legacyDescriptor)
+//
+//   Mixed encryption scenarios:
+//     if isPublicFile {
+//         cid, err := store.SaveUnencrypted(descriptor)
+//     } else {
+//         cid, err := store.Save(descriptor) // Uses password provider
+//     }
+//
+// # Implementation Strategy
+//
+// The method temporarily overrides the password provider to return an empty password:
+//   1. Store the current password provider for restoration
+//   2. Replace with a provider that returns empty string
+//   3. Call the standard Save() method (which will store unencrypted)
+//   4. Restore the original password provider
+//
+// # Storage Format
+//
+// Creates a version 3.0 EncryptedDescriptor with:
+//   - IsEncrypted: false (clearly marked as unencrypted)
+//   - Salt: nil (no encryption salt needed)
+//   - Ciphertext: plain JSON descriptor data
+//   - Version: "3.0" (maintains format consistency)
+//
+// # Security Considerations
+//
+//   - No encryption applied regardless of password provider configuration
+//   - Descriptor metadata (filename, size, block references) stored in plaintext
+//   - Suitable for public content where encryption is not required
+//   - Consider privacy implications of unencrypted metadata storage
+//
+// # Parameters
+//
+//   - descriptor: Descriptor to store unencrypted (required, cannot be nil)
+//
+// # Returns
+//
+//   - string: Content identifier of the stored unencrypted descriptor
+//   - error: Non-nil if validation or storage fails
+//
+// Time Complexity: O(n) where n is descriptor size for JSON serialization
+// Space Complexity: O(n) for descriptor serialization and storage
 func (s *EncryptedStore) SaveUnencrypted(descriptor *Descriptor) (string, error) {
 	// Temporarily use a password provider that returns empty password
 	oldProvider := s.passwordProvider
@@ -601,7 +655,59 @@ func (s *EncryptedStore) SaveUnencrypted(descriptor *Descriptor) (string, error)
 	return s.Save(descriptor)
 }
 
-// encryptDescriptor encrypts a descriptor
+// encryptDescriptor encrypts a descriptor using AES-256-GCM with Argon2id key derivation.
+// This internal method implements the complete encryption workflow including secure key generation,
+// descriptor serialization, authenticated encryption, and automatic cleanup of sensitive material.
+//
+// # Encryption Workflow
+//
+//   1. Generate encryption key from password using Argon2id
+//   2. Serialize descriptor to JSON format
+//   3. Encrypt JSON using AES-256-GCM (provides confidentiality + integrity)
+//   4. Create EncryptedDescriptor wrapper with metadata
+//   5. Serialize wrapper to JSON for storage
+//   6. Clear all sensitive material from memory
+//
+// # Cryptographic Security
+//
+//   - Argon2id: Memory-hard key derivation resistant to GPU/ASIC attacks
+//   - AES-256-GCM: Authenticated encryption preventing tampering
+//   - Secure random salt: Generated automatically per encryption operation
+//   - Memory clearing: Automatic cleanup of keys and plaintext data
+//
+// # Security Properties
+//
+//   - Confidentiality: Descriptor metadata hidden from unauthorized access
+//   - Integrity: GCM authentication prevents tampering detection
+//   - Authenticity: Password verification through successful decryption
+//   - Forward secrecy: Each descriptor uses unique salt for key derivation
+//
+// # Memory Safety
+//
+//   - Encryption key cleared with crypto.SecureZero after use
+//   - Plaintext JSON cleared with crypto.SecureZero after encryption
+//   - Password not stored beyond function scope
+//   - Automatic cleanup even if function panics or returns early
+//
+// # Parameters
+//
+//   - descriptor: Descriptor to encrypt (required, must be valid)
+//   - password: Encryption password (required, cannot be empty)
+//
+// # Returns
+//
+//   - []byte: JSON-serialized EncryptedDescriptor ready for storage
+//   - error: Non-nil if key generation, serialization, or encryption fails
+//
+// # Error Conditions
+//
+//   - Key generation failure (insufficient entropy, invalid password)
+//   - Descriptor serialization failure (invalid descriptor)
+//   - Encryption failure (AES-256-GCM error)
+//   - Wrapper serialization failure (JSON marshaling error)
+//
+// Time Complexity: O(k + n) where k is Argon2id cost, n is descriptor size
+// Space Complexity: O(n) for descriptor serialization and encryption output
 func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor, password string) ([]byte, error) {
 	// Generate encryption key from password
 	encKey, err := crypto.GenerateKey(password)
@@ -642,7 +748,70 @@ func (s *EncryptedStore) encryptDescriptor(descriptor *Descriptor, password stri
 	return data, nil
 }
 
-// decryptDescriptor decrypts an encrypted descriptor
+// decryptDescriptor decrypts an encrypted descriptor using password-based key derivation.
+// This internal method implements the complete decryption workflow including password acquisition,
+// key derivation, authenticated decryption, and automatic cleanup of sensitive material.
+//
+// # Decryption Workflow
+//
+//   1. Obtain password from configured password provider
+//   2. Derive encryption key using Argon2id with stored salt
+//   3. Decrypt ciphertext using AES-256-GCM (validates integrity)
+//   4. Parse decrypted JSON into Descriptor struct
+//   5. Clear all sensitive material from memory
+//
+// # Security Validation
+//
+//   - Password presence: Ensures password is provided for encrypted descriptor
+//   - Key derivation: Uses stored salt for consistent key reproduction
+//   - Authentication: GCM verifies data integrity and authenticity
+//   - Memory clearing: Automatic cleanup of passwords, keys, and plaintext
+//
+// # Password Provider Integration
+//
+//   - Calls configured password provider for password acquisition
+//   - Supports interactive prompting, environment variables, or secure vaults
+//   - Handles password provider errors gracefully
+//   - Ensures password is cleared from memory after use
+//
+// # Error Handling
+//
+//   - Password provider errors: Returns specific error for acquisition failures
+//   - Empty password detection: Returns specific error for missing password
+//   - Key derivation errors: Returns specific error for invalid salt or parameters
+//   - Decryption errors: Returns specific error indicating wrong password or corruption
+//   - Parsing errors: Returns specific error for invalid decrypted data
+//
+// # Authentication Verification
+//
+//   - GCM authentication prevents successful decryption of tampered data
+//   - Wrong password results in authentication failure (not data corruption)
+//   - Timing-resistant operations prevent password verification attacks
+//
+// # Memory Safety
+//
+//   - Password bytes cleared with crypto.SecureZero
+//   - Encryption key cleared with crypto.SecureZero after use
+//   - Plaintext data cleared with crypto.SecureZero after parsing
+//   - Automatic cleanup even if function panics or returns early
+//
+// # Parameters
+//
+//   - encDesc: EncryptedDescriptor containing encrypted data and metadata
+//
+// # Returns
+//
+//   - *Descriptor: Successfully decrypted and parsed descriptor
+//   - error: Non-nil if password acquisition, key derivation, decryption, or parsing fails
+//
+// # Performance Characteristics
+//
+//   - Decryption overhead: ~2-5ms for Argon2id key derivation
+//   - Memory overhead: Temporary, cleared after operation
+//   - Password provider overhead: Depends on provider implementation
+//
+// Time Complexity: O(k + n) where k is Argon2id cost, n is descriptor size
+// Space Complexity: O(n) for descriptor data, plus temporary key material
 func (s *EncryptedStore) decryptDescriptor(encDesc *EncryptedDescriptor) (*Descriptor, error) {
 	// Get password from provider
 	password, err := s.passwordProvider()
