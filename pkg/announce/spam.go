@@ -54,18 +54,38 @@ type SpamDetector struct {
 	wg          sync.WaitGroup
 }
 
-// hashRecord tracks announcement hashes
+// hashRecord tracks the occurrence frequency and timing of content hashes for duplicate detection.
+//
+// This structure maintains statistics about how often a specific content hash
+// has been seen within the detection window, enabling accurate duplicate spam
+// detection while tracking temporal patterns for abuse identification.
 type hashRecord struct {
+	// count tracks how many times this content hash has been seen
 	count     int
+	
+	// firstSeen records when this content hash was first observed
 	firstSeen time.Time
+	
+	// lastSeen records the most recent occurrence of this content hash
 	lastSeen  time.Time
 }
 
-// descriptorRecord tracks descriptor usage
+// descriptorRecord tracks usage patterns of content descriptors across topics for abuse detection.
+//
+// This structure monitors how content descriptors are used across different
+// topics to detect spam tactics like topic flooding, where spammers announce
+// the same content across many unrelated topics to maximize visibility.
 type descriptorRecord struct {
+	// topics maps topic hashes to announcement counts for this descriptor
 	topics    map[string]int
+	
+	// count tracks total announcements for this descriptor
 	count     int
+	
+	// firstSeen records when this descriptor was first observed
 	firstSeen time.Time
+	
+	// lastSeen records the most recent announcement for this descriptor
 	lastSeen  time.Time
 }
 

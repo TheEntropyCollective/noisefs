@@ -272,7 +272,38 @@ type RateLimitStatus struct {
 	DayReset        time.Time
 }
 
-// RateLimitKey generates a rate limit key from various sources
+// RateLimitKey generates a standardized rate limit key from source and identifier components.
+//
+// This utility function creates consistent rate limit keys by combining a source
+// type with a specific identifier. The standardized key format enables consistent
+// rate limiting across different parts of the system while maintaining clear
+// separation between different rate limit contexts.
+//
+// Parameters:
+//   - source: Rate limit source type ("user", "ip", "peer", "topic", etc.)
+//   - identifier: Specific identifier within the source type
+//
+// Returns:
+//   - Formatted rate limit key for consistent tracking
+//
+// Time Complexity: O(n) where n is the total length of source and identifier
+// Space Complexity: O(n) for the resulting key string
+//
+// Key Format:
+//   - Uses "source:identifier" format for clear separation
+//   - Enables hierarchical rate limiting by source type
+//   - Supports debugging and monitoring through readable keys
+//
+// Examples:
+//   - RateLimitKey("user", "alice") -> "user:alice"
+//   - RateLimitKey("ip", "192.168.1.1") -> "ip:192.168.1.1"
+//   - RateLimitKey("peer", "12D3KooW...") -> "peer:12D3KooW..."
+//
+// Use Cases:
+//   - User-based rate limiting for announcement publishing
+//   - IP-based rate limiting for network protection
+//   - Peer-based rate limiting for P2P network management
+//   - Topic-based rate limiting for content organization
 func RateLimitKey(source string, identifier string) string {
 	return fmt.Sprintf("%s:%s", source, identifier)
 }

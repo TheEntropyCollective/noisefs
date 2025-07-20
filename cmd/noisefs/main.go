@@ -122,6 +122,9 @@ type CommandConfig struct {
 	MemoryLimitMB        int
 	StreamBufferSize     int
 	EnableMemMonitoring  bool
+	// Encryption flags
+	Encrypt              bool
+	Password             string
 }
 
 // parseFlags parses command line flags and returns a configuration
@@ -152,6 +155,12 @@ func parseFlags() *CommandConfig {
 	flag.IntVar(&config.MemoryLimitMB, "memory-limit", 0, "Memory limit for streaming operations in MB (overrides config)")
 	flag.IntVar(&config.StreamBufferSize, "stream-buffer", 0, "Buffer size for streaming pipeline (overrides config)")
 	flag.BoolVar(&config.EnableMemMonitoring, "monitor-memory", false, "Enable memory monitoring during streaming operations")
+	
+	// Encryption flags
+	flag.BoolVar(&config.Encrypt, "e", false, "Encrypt descriptor metadata for privacy")
+	flag.BoolVar(&config.Encrypt, "encrypt", false, "Encrypt descriptor metadata for privacy")
+	flag.StringVar(&config.Password, "p", "", "Password for descriptor encryption")
+	flag.StringVar(&config.Password, "password", "", "Password for descriptor encryption")
 
 	return config
 }
@@ -216,6 +225,12 @@ func executeOperation(cmdConfig *CommandConfig, cfg *config.Config, storageManag
 func handleUpload(cmdConfig *CommandConfig, cfg *config.Config, storageManager *storage.Manager, client *noisefs.Client, logger *logging.Logger) error {
 	uploadPath := cmdConfig.Upload
 
+	// Handle password from environment variable if not provided via flag
+	password := cmdConfig.Password
+	if password == "" && cmdConfig.Encrypt {
+		password = os.Getenv("NOISEFS_PASSWORD")
+	}
+
 	// Check if path exists
 	info, err := os.Stat(uploadPath)
 	if err != nil {
@@ -225,14 +240,14 @@ func handleUpload(cmdConfig *CommandConfig, cfg *config.Config, storageManager *
 	// Handle directory upload
 	if info.IsDir() {
 		if cmdConfig.Streaming {
-			return streamingUploadDirectory(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Exclude, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger)
+			return streamingUploadDirectory(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Exclude, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger, cmdConfig.Encrypt, password)
 		} else {
-			return uploadDirectory(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Exclude, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger)
+			return uploadDirectory(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Exclude, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger, cmdConfig.Encrypt, password)
 		}
 	}
 
 	// Handle file upload
-	return uploadFile(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger)
+	return uploadFile(storageManager, client, uploadPath, cmdConfig.BlockSize, cmdConfig.Quiet, cmdConfig.JSONOutput, cfg, logger, cmdConfig.Encrypt, password)
 }
 
 // handleDownload handles file or directory download operations
@@ -296,6 +311,8 @@ func showUsage() {
 	fmt.Println("  -streaming            Enable streaming mode")
 	fmt.Println("  -memory-limit <mb>    Memory limit for streaming")
 	fmt.Println("  -monitor-memory       Enable memory monitoring")
+	fmt.Println("  -e, --encrypt         Encrypt descriptor metadata for privacy")
+	fmt.Println("  -p, --password <pwd>  Password for descriptor encryption")
 	fmt.Println()
 	fmt.Println("EXAMPLES:")
 	fmt.Println("  noisefs -upload myfile.txt")
@@ -304,6 +321,15 @@ func showUsage() {
 	fmt.Println("  noisefs -stats -json")
 	fmt.Println("  noisefs ls QmYyYyYy...")
 	fmt.Println("  noisefs -upload -streaming -memory-limit 512 largedir/")
+	fmt.Println()
+	fmt.Println("ENCRYPTION EXAMPLES:")
+	fmt.Println("  noisefs -upload -e -p mypassword secret.txt")
+	fmt.Println("  noisefs -upload -e secret.txt                    # Interactive password prompt")
+	fmt.Println("  NOISEFS_PASSWORD=secret noisefs -upload -e file.txt")
+	fmt.Println()
+	fmt.Println("PRIVACY NOTE:")
+	fmt.Println("  Without -e: File content is encrypted, but metadata (filename, size) is public")
+	fmt.Println("  With -e:    Both file content and metadata are encrypted for complete privacy")
 	fmt.Println()
 	fmt.Println("For more information, see the documentation in docs/")
 }

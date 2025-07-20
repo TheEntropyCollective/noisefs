@@ -147,6 +147,133 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 	return descriptorCID, nil
 }
 
+// EncryptedUpload uploads a file with encrypted descriptor metadata
+func (c *Client) EncryptedUpload(reader io.Reader, filename string, password string) (string, error) {
+	return c.EncryptedUploadWithBlockSize(reader, filename, password, blocks.DefaultBlockSize)
+}
+
+// EncryptedUploadWithProgress uploads a file with encrypted descriptor and progress reporting
+func (c *Client) EncryptedUploadWithProgress(reader io.Reader, filename string, password string, progress ProgressCallback) (string, error) {
+	return c.EncryptedUploadWithBlockSizeAndProgress(reader, filename, password, blocks.DefaultBlockSize, progress)
+}
+
+// EncryptedUploadWithBlockSize uploads a file with encrypted descriptor and specific block size
+func (c *Client) EncryptedUploadWithBlockSize(reader io.Reader, filename string, password string, blockSize int) (string, error) {
+	return c.EncryptedUploadWithBlockSizeAndProgress(reader, filename, password, blockSize, nil)
+}
+
+// EncryptedUploadWithBlockSizeAndProgress uploads a file with encrypted descriptor, specific block size and progress reporting
+func (c *Client) EncryptedUploadWithBlockSizeAndProgress(reader io.Reader, filename string, password string, blockSize int, progress ProgressCallback) (string, error) {
+	// Read all data to get size
+	if progress != nil {
+		progress("Reading file", 0, 100)
+	}
+
+	if reader == nil {
+		return "", fmt.Errorf("reader cannot be nil")
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return "", fmt.Errorf("failed to read data: %w", err)
+	}
+
+	fileSize := int64(len(data))
+
+	// Split into blocks
+	if progress != nil {
+		progress("Splitting file into blocks", 0, 100)
+	}
+
+	splitter, err := blocks.NewSplitter(blockSize)
+	if err != nil {
+		return "", fmt.Errorf("failed to create splitter: %w", err)
+	}
+	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
+	if err != nil {
+		return "", fmt.Errorf("failed to split file: %w", err)
+	}
+	if progress != nil {
+		progress("Splitting file into blocks", 100, 100)
+	}
+
+	// Calculate padded file size
+	paddedFileSize := int64(len(fileBlocks) * blockSize)
+
+	// Create descriptor with padding information
+	descriptor := descriptors.NewDescriptor(filename, fileSize, paddedFileSize, blockSize)
+
+	// Process blocks with anonymization
+	totalBlocks := len(fileBlocks)
+	var totalStorageUsed int64 = 0
+
+	for i, fileBlock := range fileBlocks {
+		if progress != nil {
+			progress("Anonymizing blocks", i, totalBlocks)
+		}
+		// Select two randomizer blocks (3-tuple XOR) and track NEW randomizer storage
+		randBlock1, cid1, randBlock2, cid2, randomizerBytesStored, err := c.SelectRandomizers(fileBlock.Size())
+		if err != nil {
+			return "", fmt.Errorf("failed to select randomizers: %w", err)
+		}
+
+		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
+		xorBlock, err := fileBlock.XOR(randBlock1, randBlock2)
+		if err != nil {
+			return "", fmt.Errorf("failed to XOR blocks: %w", err)
+		}
+
+		// Store anonymized block with tracking
+		dataCID, dataBytesStored, err := c.storeBlockWithTracking(context.Background(), xorBlock)
+		if err != nil {
+			return "", fmt.Errorf("failed to store data block: %w", err)
+		}
+
+		// Count both data and NEW randomizer storage
+		totalStorageUsed += dataBytesStored + randomizerBytesStored
+
+		// Cache the anonymized block
+		c.cacheBlock(dataCID, xorBlock, map[string]interface{}{
+			"block_type": "data",
+			"strategy":   "performance",
+		})
+
+		// Add block triple to descriptor
+		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
+			return "", fmt.Errorf("failed to add block triple: %w", err)
+		}
+	}
+
+	if progress != nil {
+		progress("Anonymizing blocks", totalBlocks, totalBlocks)
+	}
+
+	// Store descriptor using EncryptedStore
+	if progress != nil {
+		progress("Saving encrypted file descriptor", 0, 100)
+	}
+
+	// Create encrypted descriptor store with storage manager
+	encryptedStore, err := descriptors.NewEncryptedStoreWithPassword(c.storageManager, password)
+	if err != nil {
+		return "", fmt.Errorf("failed to create encrypted descriptor store: %w", err)
+	}
+
+	descriptorCID, err := encryptedStore.Save(descriptor)
+	if err != nil {
+		return "", fmt.Errorf("failed to save encrypted descriptor: %w", err)
+	}
+
+	if progress != nil {
+		progress("Saving encrypted file descriptor", 100, 100)
+	}
+
+	// Record metrics with actual storage used
+	c.RecordUpload(fileSize, totalStorageUsed)
+
+	return descriptorCID, nil
+}
+
 // RecordUpload records upload metrics
 func (c *Client) RecordUpload(originalBytes, storedBytes int64) {
 	c.metrics.RecordUpload(originalBytes, storedBytes)

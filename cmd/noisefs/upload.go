@@ -16,7 +16,7 @@ import (
 )
 
 // uploadFile uploads a single file to NoiseFS
-func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger, encrypt bool, password string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -37,10 +37,22 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	// Get filename from path
 	filename := filepath.Base(filePath)
 
-	// Upload the file
-	descriptorCID, err := client.Upload(file, filename)
-	if err != nil {
-		return fmt.Errorf("upload failed: %w", err)
+	// Upload the file (encrypted or unencrypted)
+	var descriptorCID string
+	if encrypt {
+		if password == "" {
+			// TODO: Implement interactive password prompt
+			return fmt.Errorf("password required for encrypted upload - use -p flag or NOISEFS_PASSWORD environment variable")
+		}
+		descriptorCID, err = client.EncryptedUpload(file, filename, password)
+		if err != nil {
+			return fmt.Errorf("encrypted upload failed: %w", err)
+		}
+	} else {
+		descriptorCID, err = client.Upload(file, filename)
+		if err != nil {
+			return fmt.Errorf("upload failed: %w", err)
+		}
 	}
 
 	uploadDuration := time.Since(startTime)
@@ -91,7 +103,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 }
 
 // uploadDirectory uploads a directory to NoiseFS
-func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger, encrypt bool, password string) error {
 	if !quiet && !jsonOutput {
 		fmt.Printf("Uploading directory: %s\n", dirPath)
 	}
@@ -111,7 +123,7 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 }
 
 // streamingUploadDirectory uploads a directory using streaming mode for memory efficiency
-func streamingUploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
+func streamingUploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger, encrypt bool, password string) error {
 	// Implementation would use streaming interfaces
 	logger.Info("Streaming directory upload", map[string]interface{}{
 		"directory": dirPath,
@@ -119,7 +131,7 @@ func streamingUploadDirectory(storageManager *storage.Manager, client *noisefs.C
 	
 	// For now, fall back to regular directory upload
 	// TODO: Implement actual streaming upload when streaming interfaces are available
-	return uploadDirectory(storageManager, client, dirPath, blockSize, excludePatterns, quiet, jsonOutput, cfg, logger)
+	return uploadDirectory(storageManager, client, dirPath, blockSize, excludePatterns, quiet, jsonOutput, cfg, logger, encrypt, password)
 }
 
 // DirectoryBlockProcessor handles directory block processing during streaming uploads
