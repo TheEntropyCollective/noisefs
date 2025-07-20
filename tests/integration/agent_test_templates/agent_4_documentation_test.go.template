@@ -1,0 +1,287 @@
+package integration
+
+import (
+	"testing"
+	"path/filepath"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"strings"
+	"os"
+)
+
+// AGENT 4 CRITICAL TESTS - Documentation and TODO Cleanup (128 TODOs identified)
+// These tests MUST be implemented before beginning documentation cleanup
+
+// TestTODOCleanup verifies systematic TODO resolution  
+func TestTODOCleanup(t *testing.T) {
+	t.Run("TODOInventoryComplete", func(t *testing.T) {
+		// Verify complete inventory of 128 TODOs
+		
+		// TODO: Scan all files for TODO comments
+		// TODO: Count total TODOs found (should be 128)
+		// TODO: Categorize TODOs by type (implementation, documentation, testing)
+		// TODO: Identify high-priority vs low-priority TODOs
+		
+		t.Skip("AGENT 4: Implement TODO inventory test")
+	})
+	
+	t.Run("TODOCategorizationAccurate", func(t *testing.T) {
+		// Test accurate categorization of TODOs
+		
+		// TODO: Identify critical TODOs (blocking functionality)
+		// TODO: Identify documentation TODOs  
+		// TODO: Identify code improvement TODOs
+		// TODO: Identify test coverage TODOs
+		// TODO: Prioritize by impact and effort
+		
+		t.Skip("AGENT 4: Implement TODO categorization test")
+	})
+	
+	t.Run("HighPriorityTODOsAddressed", func(t *testing.T) {
+		// Test that high-priority TODOs are addressed first
+		
+		// TODO: Identify TODOs marked as critical or blocking
+		// TODO: Verify these are resolved before lower priority ones
+		// TODO: Test that critical functionality TODOs are completed
+		// TODO: Ensure no high-impact TODOs remain
+		
+		t.Skip("AGENT 4: Implement high-priority TODO test")
+	})
+}
+
+// TestDocumentationCompleteness verifies documentation coverage
+func TestDocumentationCompleteness(t *testing.T) {
+	t.Run("PackageDocumentationComplete", func(t *testing.T) {
+		// Test that all packages have adequate documentation
+		
+		// TODO: Verify each package has package-level documentation
+		// TODO: Check that public types have documentation
+		// TODO: Verify public functions have documentation
+		// TODO: Test that complex algorithms are documented
+		
+		t.Skip("AGENT 4: Implement package documentation test")
+	})
+	
+	t.Run("CLAUDEMDFilesUpdated", func(t *testing.T) {
+		// Test CLAUDE.md files are current and accurate
+		
+		// TODO: Verify main CLAUDE.md reflects current state
+		// TODO: Check package-specific CLAUDE.md files exist
+		// TODO: Test that documentation matches implementation
+		// TODO: Verify architecture docs are current
+		
+		t.Skip("AGENT 4: Implement CLAUDE.md verification test")
+	})
+	
+	t.Run("APIDocumentationCurrent", func(t *testing.T) {
+		// Test that API documentation is current
+		
+		// TODO: Verify WebUI API endpoints documented
+		// TODO: Check CLI command documentation
+		// TODO: Test configuration options documented
+		// TODO: Verify integration examples work
+		
+		t.Skip("AGENT 4: Implement API documentation test")
+	})
+	
+	t.Run("ExampleCodeWorks", func(t *testing.T) {
+		// Test that documentation examples actually work
+		
+		// TODO: Extract code examples from documentation
+		// TODO: Verify examples compile and run
+		// TODO: Test that examples produce expected output
+		// TODO: Check example configurations are valid
+		
+		t.Skip("AGENT 4: Implement example code test")
+	})
+}
+
+// TestCodeCommentQuality verifies code comment improvements
+func TestCodeCommentQuality(t *testing.T) {
+	t.Run("ComplexFunctionsDocumented", func(t *testing.T) {
+		// Test that complex functions have adequate comments
+		
+		// TODO: Identify functions with high cyclomatic complexity
+		// TODO: Verify these functions have explanatory comments
+		// TODO: Check that algorithms are explained
+		// TODO: Test that edge cases are documented
+		
+		t.Skip("AGENT 4: Implement function documentation test")
+	})
+	
+	t.Run("PublicAPIDocumented", func(t *testing.T) {
+		// Test that public API is fully documented
+		
+		// TODO: Scan for public functions without documentation
+		// TODO: Verify public types have usage examples
+		// TODO: Check that return values are documented
+		// TODO: Test that parameters are explained
+		
+		t.Skip("AGENT 4: Implement public API documentation test")
+	})
+	
+	t.Run("SecurityImplicationsDocumented", func(t *testing.T) {
+		// Test that security-related code is well documented
+		
+		// TODO: Verify crypto operations are documented
+		// TODO: Check that privacy implications are explained
+		// TODO: Test that security assumptions are stated
+		// TODO: Verify threat model documentation
+		
+		t.Skip("AGENT 4: Implement security documentation test")
+	})
+}
+
+// TestDocumentationConsistency verifies consistency across docs
+func TestDocumentationConsistency(t *testing.T) {
+	t.Run("TerminologyConsistent", func(t *testing.T) {
+		// Test consistent terminology across documentation
+		
+		// TODO: Verify consistent use of "NoiseFS" vs "noisefs"
+		// TODO: Check consistent naming of components
+		// TODO: Test consistent capitalization
+		// TODO: Verify consistent technical terms
+		
+		t.Skip("AGENT 4: Implement terminology consistency test")
+	})
+	
+	t.Run("ArchitectureDescriptionAccurate", func(t *testing.T) {
+		// Test architecture documentation matches implementation
+		
+		// TODO: Verify component relationships are accurate
+		// TODO: Check that data flow descriptions match code
+		// TODO: Test that package dependencies are documented
+		// TODO: Verify interface descriptions are current
+		
+		t.Skip("AGENT 4: Implement architecture accuracy test")
+	})
+	
+	t.Run("CrossReferencesValid", func(t *testing.T) {
+		// Test that cross-references between docs are valid
+		
+		// TODO: Verify links between documentation files work
+		// TODO: Check references to code locations are accurate
+		// TODO: Test that related documentation is linked
+		// TODO: Verify no broken internal references
+		
+		t.Skip("AGENT 4: Implement cross-reference test")
+	})
+}
+
+// TestTODOResolutionTracking verifies progress tracking
+func TestTODOResolutionTracking(t *testing.T) {
+	t.Run("TODOProgressTracked", func(t *testing.T) {
+		// Test that TODO resolution progress is tracked
+		
+		// TODO: Count TODOs resolved vs remaining  
+		// TODO: Track resolution by category/priority
+		// TODO: Verify no new TODOs added without justification
+		// TODO: Test completion percentage calculation
+		
+		t.Skip("AGENT 4: Implement TODO progress test")
+	})
+	
+	t.Run("ResolvedTODOsVerified", func(t *testing.T) {
+		// Test that resolved TODOs actually implement the requirement
+		
+		// TODO: For each resolved TODO, verify implementation exists
+		// TODO: Check that implementation matches TODO description
+		// TODO: Test that resolution doesn't break functionality
+		// TODO: Verify test coverage for resolved TODOs
+		
+		t.Skip("AGENT 4: Implement TODO resolution verification")
+	})
+	
+	t.Run("RemainingTODOsJustified", func(t *testing.T) {
+		// Test that any remaining TODOs have valid justification
+		
+		// TODO: Identify TODOs that cannot be resolved immediately
+		// TODO: Verify these have clear justification for deferral
+		// TODO: Check that deferred TODOs have target resolution date
+		// TODO: Test that deferred TODOs are low-impact
+		
+		t.Skip("AGENT 4: Implement remaining TODO justification test")
+	})
+}
+
+// TestDocumentationBuildIntegration verifies doc build process
+func TestDocumentationBuildIntegration(t *testing.T) {
+	t.Run("GoDocGeneratesCleanly", func(t *testing.T) {
+		// Test that godoc generates without errors
+		
+		// TODO: Run 'go doc' on all packages
+		// TODO: Verify no documentation generation errors
+		// TODO: Check that output formatting is correct
+		// TODO: Test that examples appear in godoc
+		
+		t.Skip("AGENT 4: Implement godoc generation test")
+	})
+	
+	t.Run("MarkdownFilesValid", func(t *testing.T) {
+		// Test that markdown files are valid and well-formed
+		
+		// TODO: Parse all .md files for syntax errors
+		// TODO: Verify markdown headers are properly structured
+		// TODO: Check that code blocks have correct syntax highlighting
+		// TODO: Test that tables are properly formatted
+		
+		t.Skip("AGENT 4: Implement markdown validation test")
+	})
+	
+	t.Run("DocumentationLinksWork", func(t *testing.T) {
+		// Test that all documentation links are functional
+		
+		// TODO: Extract all URLs from documentation
+		// TODO: Test internal links point to valid locations
+		// TODO: Verify external links are accessible
+		// TODO: Check that code references are accurate
+		
+		t.Skip("AGENT 4: Implement link validation test")
+	})
+}
+
+// IMPLEMENTATION INSTRUCTIONS FOR AGENT 4:
+//
+// 1. Copy this template to: tests/integration/documentation_test.go
+// 2. Implement each TODO item with actual test logic
+// 3. Run initial scan to establish baseline TODO count
+// 4. Implement systematic TODO resolution process
+// 5. Re-run tests to verify progress and completion
+//
+// CRITICAL: Track progress carefully - 128 TODOs is substantial work
+//
+// TODO Resolution Strategy:
+// 1. Categorize all 128 TODOs by priority and type
+// 2. Address critical/blocking TODOs first
+// 3. Group related TODOs for efficient resolution
+// 4. Verify each resolution with appropriate tests
+// 5. Update documentation to reflect current state
+//
+// High Priority Tests:
+// - TODOInventoryComplete (BLOCKING - need accurate count)
+// - TODOCategorizationAccurate (BLOCKING - need prioritization)
+// - PackageDocumentationComplete (BLOCKING - core requirement)
+// - ExampleCodeWorks (BLOCKING - documentation quality)
+//
+// TODO Categories to Address:
+// 1. Critical functionality TODOs (highest priority)
+// 2. Documentation/comment TODOs (high priority)
+// 3. Test coverage TODOs (medium priority)  
+// 4. Code improvement TODOs (medium priority)
+// 5. Future enhancement TODOs (lowest priority - may defer)
+//
+// Documentation Files to Update:
+// - Main CLAUDE.md
+// - Package-specific CLAUDE.md files
+// - README files (if any)
+// - API documentation
+// - Architecture documentation
+// - Example code and configurations
+//
+// Success Criteria:
+// - All 128 TODOs resolved or properly deferred
+// - Complete package documentation coverage
+// - Working examples in all documentation
+// - Consistent terminology and style
+// - Valid cross-references and links

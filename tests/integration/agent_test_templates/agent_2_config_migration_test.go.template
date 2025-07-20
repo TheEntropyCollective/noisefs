@@ -1,0 +1,209 @@
+package integration
+
+import (
+	"testing"
+	"path/filepath"
+	"encoding/json"
+	"gopkg.in/yaml.v2"
+)
+
+// AGENT 2 CRITICAL TESTS - Config System Migration (70% reduction: 1546→400 lines)
+// These tests MUST be implemented before beginning config system changes
+
+// TestConfigSystemMigration verifies config reduction across 21 packages
+func TestConfigSystemMigration(t *testing.T) {
+	t.Run("BackwardCompatibility", func(t *testing.T) {
+		// Test that existing config files still work
+		
+		// TODO: Load sample existing config files
+		// TODO: Verify new config system can parse old formats
+		// TODO: Test graceful fallback for deprecated config options
+		// TODO: Ensure no breaking changes for existing users
+		
+		t.Skip("AGENT 2: Implement backward compatibility test")
+	})
+	
+	t.Run("ConfigLoadingAcrossPackages", func(t *testing.T) {
+		// Test config loading in all 21 affected packages
+		
+		// TODO: Test pkg/common/config loading
+		// TODO: Test pkg/infrastructure/config integration
+		// TODO: Verify FUSE config system works
+		// TODO: Test storage backend config loading
+		// TODO: Verify cache config integration
+		// TODO: Test all package config initialization
+		
+		t.Skip("AGENT 2: Implement multi-package config test")
+	})
+	
+	t.Run("ServiceInitialization", func(t *testing.T) {
+		// Test that all services start with new config
+		
+		// TODO: Test main noisefs service startup
+		// TODO: Test WebUI service startup  
+		// TODO: Test FUSE service initialization
+		// TODO: Verify storage manager initialization
+		// TODO: Test cache system initialization
+		
+		t.Skip("AGENT 2: Implement service initialization test")
+	})
+	
+	t.Run("ConfigValidation", func(t *testing.T) {
+		// Test config validation and error handling
+		
+		// TODO: Test malformed config handling
+		// TODO: Verify missing required fields detection
+		// TODO: Test invalid value range handling
+		// TODO: Verify clear error messages
+		
+		t.Skip("AGENT 2: Implement config validation test")
+	})
+}
+
+// TestConfigReduction verifies 70% line reduction (1546→400 lines)
+func TestConfigReduction(t *testing.T) {
+	t.Run("VerifyLineReduction", func(t *testing.T) {
+		// Verify actual line count reduction achieved
+		
+		// TODO: Count lines in config-related files before changes
+		// TODO: Set target of ~400 lines total config code
+		// TODO: Verify reduction achieved without losing functionality
+		// TODO: Document which config options were removed/simplified
+		
+		t.Skip("AGENT 2: Implement line count verification")
+	})
+	
+	t.Run("EssentialConfigPreserved", func(t *testing.T) {
+		// Ensure essential config options remain
+		
+		// TODO: Test IPFS endpoint configuration
+		// TODO: Test block size configuration  
+		// TODO: Test cache size settings
+		// TODO: Test storage backend selection
+		// TODO: Test security/privacy settings
+		
+		t.Skip("AGENT 2: Implement essential config test")
+	})
+	
+	t.Run("SimplifiedConfigStructure", func(t *testing.T) {
+		// Test new simplified config structure
+		
+		// TODO: Verify flattened config hierarchy
+		// TODO: Test reduced nesting levels
+		// TODO: Verify logical grouping of settings
+		// TODO: Test ease of configuration for users
+		
+		t.Skip("AGENT 2: Implement config structure test")
+	})
+}
+
+// TestConfigIntegrationSafety ensures config changes don't break systems
+func TestConfigIntegrationSafety(t *testing.T) {
+	t.Run("CoreSystemIntegration", func(t *testing.T) {
+		// Test core systems work with new config
+		
+		// TODO: Test block operations with new config
+		// TODO: Test crypto operations configuration
+		// TODO: Test descriptor handling config
+		// TODO: Verify client operations work
+		
+		t.Skip("AGENT 2: Implement core system integration test")
+	})
+	
+	t.Run("StorageIntegration", func(t *testing.T) {
+		// Test storage systems with new config
+		
+		// TODO: Test IPFS backend configuration
+		// TODO: Test cache configuration  
+		// TODO: Test directory manager config
+		// TODO: Verify storage backend selection works
+		
+		t.Skip("AGENT 2: Implement storage integration test")
+	})
+	
+	t.Run("FUSEIntegration", func(t *testing.T) {
+		// Test FUSE operations with new config
+		
+		// TODO: Test FUSE mount with new config structure
+		// TODO: Verify directory operations work
+		// TODO: Test file access permissions
+		// TODO: Verify workflow integrations work
+		
+		t.Skip("AGENT 2: Implement FUSE integration test")
+	})
+	
+	t.Run("WebUIIntegration", func(t *testing.T) {
+		// Test WebUI with new config system
+		
+		// TODO: Test WebUI startup with new config
+		// TODO: Verify configuration API endpoints
+		// TODO: Test dynamic config updates
+		// TODO: Verify settings persistence
+		
+		t.Skip("AGENT 2: Implement WebUI integration test")
+	})
+}
+
+// TestConfigMigrationEdgeCases tests edge cases and error scenarios
+func TestConfigMigrationEdgeCases(t *testing.T) {
+	t.Run("MissingConfigFiles", func(t *testing.T) {
+		// Test behavior when config files are missing
+		
+		// TODO: Test graceful fallback to defaults
+		// TODO: Verify helpful error messages
+		// TODO: Test creation of default config
+		
+		t.Skip("AGENT 2: Implement missing config test")
+	})
+	
+	t.Run("PartialConfigFiles", func(t *testing.T) {
+		// Test partial/incomplete configurations
+		
+		// TODO: Test configs with missing sections
+		// TODO: Verify default value population
+		// TODO: Test validation warnings
+		
+		t.Skip("AGENT 2: Implement partial config test")
+	})
+	
+	t.Run("ConfigUpdateScenarios", func(t *testing.T) {
+		// Test runtime config updates
+		
+		// TODO: Test dynamic config reloading
+		// TODO: Verify hot-swapping of settings
+		// TODO: Test rollback on invalid configs
+		
+		t.Skip("AGENT 2: Implement config update test")
+	})
+}
+
+// IMPLEMENTATION INSTRUCTIONS FOR AGENT 2:
+//
+// 1. Copy this template to: tests/integration/config_migration_test.go
+// 2. Also copy to: pkg/common/config/migration_test.go (package-specific tests)
+// 3. Implement each TODO item with actual test logic
+// 4. Test current config system BEFORE making changes
+// 5. Implement new simplified config incrementally
+// 6. Re-run tests after each major config change
+//
+// CRITICAL: This affects 21 packages - coordinate carefully!
+//
+// High Priority Tests:
+// - BackwardCompatibility (BLOCKING - existing users)
+// - ConfigLoadingAcrossPackages (BLOCKING - affects 21 packages)
+// - ServiceInitialization (BLOCKING - all services must start)
+// - ConfigValidation (BLOCKING - error handling)
+//
+// Package List to Test:
+// 1. pkg/common/config
+// 2. pkg/infrastructure/config  
+// 3. pkg/fuse (config integration)
+// 4. pkg/storage (backend config)
+// 5. pkg/storage/cache (cache config)
+// 6. pkg/core/* (various core configs)
+// 7. cmd/noisefs (main app config)
+// 8. cmd/noisefs-webui (webui config)
+// ... (verify all 21 packages)
+//
+// Target: Reduce from 1546 lines to ~400 lines (70% reduction)
+// Focus: Simplify without breaking existing functionality

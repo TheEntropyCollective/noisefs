@@ -1,0 +1,221 @@
+package integration
+
+import (
+	"testing"
+	"time"
+	"context"
+)
+
+// AGENT 3 CRITICAL TESTS - Performance Analyzer Removal (832 lines, zero production usage)
+// These tests MUST be implemented before beginning performance analyzer removal
+
+// TestPerformanceAnalyzerRemoval verifies safe removal of performance analyzer
+func TestPerformanceAnalyzerRemoval(t *testing.T) {
+	t.Run("VerifyZeroProductionUsage", func(t *testing.T) {
+		// Confirm performance analyzer has zero production usage
+		
+		// TODO: Scan codebase for PerformanceAnalyzer instantiation
+		// TODO: Verify no production code calls NewPerformanceAnalyzer()
+		// TODO: Check that it's only used in tests/integration/
+		// TODO: Confirm no critical metrics depend on it
+		
+		t.Skip("AGENT 3: Implement production usage verification")
+	})
+	
+	t.Run("IntegrationCoordinatorIndependence", func(t *testing.T) {
+		// Test that integration coordinator works without performance analyzer
+		
+		// TODO: Test pkg/integration/coordinator functionality
+		// TODO: Verify coordinator doesn't depend on performance analyzer
+		// TODO: Test performance_analyzer.go removal doesn't break coordinator
+		// TODO: Check timeout_test.go and bench_test.go independence
+		
+		t.Skip("AGENT 3: Implement coordinator independence test")
+	})
+	
+	t.Run("WebUIMetricsFallback", func(t *testing.T) {
+		// Test WebUI continues to work without performance analyzer
+		
+		// TODO: Test WebUI startup without performance metrics
+		// TODO: Verify WebUI has fallback metrics collection
+		// TODO: Test performance dashboard with analyzer removed
+		// TODO: Ensure no broken metrics endpoints
+		
+		t.Skip("AGENT 3: Implement WebUI metrics fallback test")
+	})
+	
+	t.Run("ServiceStartupWithoutAnalyzer", func(t *testing.T) {
+		// Test all services start properly without performance analyzer
+		
+		// TODO: Test main noisefs service startup
+		// TODO: Test WebUI service startup
+		// TODO: Test FUSE service initialization  
+		// TODO: Verify no startup dependencies on analyzer
+		
+		t.Skip("AGENT 3: Implement service startup test")
+	})
+}
+
+// TestMemoryMonitoringIntegration verifies memory monitoring still works
+func TestMemoryMonitoringIntegration(t *testing.T) {
+	t.Run("MemoryMonitoringIndependent", func(t *testing.T) {
+		// Test memory monitoring works independently
+		
+		// TODO: Test streaming memory monitoring functionality
+		// TODO: Verify memory limits are enforced
+		// TODO: Test memory monitoring flags in main apps
+		// TODO: Ensure memory monitoring doesn't depend on analyzer
+		
+		t.Skip("AGENT 3: Implement memory monitoring test")
+	})
+	
+	t.Run("StreamingOperationsMemoryBounded", func(t *testing.T) {
+		// Test streaming operations remain memory-bounded
+		
+		// TODO: Test large file streaming with memory limits
+		// TODO: Verify memory usage stays within bounds
+		// TODO: Test streaming buffer management
+		// TODO: Verify no memory leaks without analyzer
+		
+		t.Skip("AGENT 3: Implement streaming memory test")
+	})
+}
+
+// TestPerformanceAnalyzerFileRemoval verifies complete file removal
+func TestPerformanceAnalyzerFileRemoval(t *testing.T) {
+	t.Run("VerifyAnalyzerFilesRemoved", func(t *testing.T) {
+		// Test that all 832 lines of performance analyzer code are removed
+		
+		// TODO: Verify tests/integration/performance_analyzer.go is removed
+		// TODO: Verify pkg/integration/coordinator/performance_analyzer.go is removed  
+		// TODO: Verify performance_analyzer_bench_test.go is removed
+		// TODO: Count total lines removed = 832
+		
+		t.Skip("AGENT 3: Implement file removal verification")
+	})
+	
+	t.Run("VerifyNoAnalyzerImports", func(t *testing.T) {
+		// Test no imports reference the removed performance analyzer
+		
+		// TODO: Scan for imports of performance_analyzer package
+		// TODO: Verify no references to PerformanceAnalyzer type
+		// TODO: Check for any remaining analyzer method calls
+		// TODO: Verify clean removal with no dangling references
+		
+		t.Skip("AGENT 3: Implement import verification")
+	})
+	
+	t.Run("BuildSuccessAfterRemoval", func(t *testing.T) {
+		// Test project builds successfully after analyzer removal
+		
+		// TODO: Run 'go build ./...' and verify success
+		// TODO: Test integration tests still pass
+		// TODO: Verify no undefined references
+		// TODO: Check all import cycles resolved
+		
+		t.Skip("AGENT 3: Implement build verification")
+	})
+}
+
+// TestRemainingMetricsCollection verifies other metrics still work
+func TestRemainingMetricsCollection(t *testing.T) {
+	t.Run("CacheMetricsIndependent", func(t *testing.T) {
+		// Test cache metrics collection works independently
+		
+		// TODO: Test cache hit/miss metrics
+		// TODO: Verify cache statistics collection
+		// TODO: Test adaptive cache metrics
+		// TODO: Ensure cache monitoring doesn't need analyzer
+		
+		t.Skip("AGENT 3: Implement cache metrics test")
+	})
+	
+	t.Run("StorageMetricsIndependent", func(t *testing.T) {
+		// Test storage metrics work without analyzer
+		
+		// TODO: Test storage backend metrics
+		// TODO: Verify block storage statistics
+		// TODO: Test IPFS integration metrics
+		// TODO: Ensure storage monitoring independence
+		
+		t.Skip("AGENT 3: Implement storage metrics test")
+	})
+	
+	t.Run("SystemHealthMonitoring", func(t *testing.T) {
+		// Test system health monitoring remains functional
+		
+		// TODO: Test basic system health checks
+		// TODO: Verify resource usage monitoring
+		// TODO: Test error rate monitoring
+		// TODO: Ensure health checks don't need analyzer
+		
+		t.Skip("AGENT 3: Implement system health test")
+	})
+}
+
+// TestAnalyzerRemovalSafety ensures removal doesn't break functionality
+func TestAnalyzerRemovalSafety(t *testing.T) {
+	t.Run("CoreOperationsUnaffected", func(t *testing.T) {
+		// Test core operations work normally without analyzer
+		
+		// TODO: Test file upload/download operations
+		// TODO: Test block storage and retrieval
+		// TODO: Test cache operations
+		// TODO: Verify performance isn't degraded
+		
+		t.Skip("AGENT 3: Implement core operations test")
+	})
+	
+	t.Run("IntegrationTestsStillPass", func(t *testing.T) {
+		// Test that other integration tests pass without analyzer
+		
+		// TODO: Run existing integration test suite
+		// TODO: Verify no tests depend on performance analyzer
+		// TODO: Test coordinator timeout_test.go still works
+		// TODO: Ensure benchmark tests work independently
+		
+		t.Skip("AGENT 3: Implement integration test verification")
+	})
+	
+	t.Run("NoMetricsRegressions", func(t *testing.T) {
+		// Test no important metrics are lost
+		
+		// TODO: Verify essential performance metrics still collected
+		// TODO: Test operational monitoring still works
+		// TODO: Ensure debugging capabilities remain
+		// TODO: Verify no monitoring blind spots created
+		
+		t.Skip("AGENT 3: Implement metrics regression test")
+	})
+}
+
+// IMPLEMENTATION INSTRUCTIONS FOR AGENT 3:
+//
+// 1. Copy this template to: tests/integration/performance_removal_test.go
+// 2. Implement each TODO item with actual test logic
+// 3. Run tests BEFORE removing performance analyzer
+// 4. Verify all tests pass before proceeding with removal
+// 5. Re-run tests after removal to confirm success
+//
+// CRITICAL: While analyzer has zero production usage, ensure removal
+// doesn't accidentally break related systems.
+//
+// Files to Remove (832 lines total):
+// - tests/integration/performance_analyzer.go (791 lines)
+// - pkg/integration/coordinator/performance_analyzer_bench_test.go (~41 lines)
+//
+// High Priority Tests:
+// - VerifyZeroProductionUsage (BLOCKING - confirm safe to remove)
+// - IntegrationCoordinatorIndependence (BLOCKING - coordinator must work)
+// - WebUIMetricsFallback (BLOCKING - WebUI must work)
+// - ServiceStartupWithoutAnalyzer (BLOCKING - services must start)
+//
+// Verification Steps:
+// 1. Confirm no production code uses PerformanceAnalyzer
+// 2. Verify integration coordinator works independently  
+// 3. Test WebUI metrics fallback mechanisms
+// 4. Ensure memory monitoring remains functional
+// 5. Verify build success after removal
+//
+// Note: This should be the safest removal since the analyzer
+// was found to have zero production usage.

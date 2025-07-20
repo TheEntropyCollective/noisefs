@@ -1,0 +1,134 @@
+package integration
+
+import (
+	"testing"
+	"go/build"
+	"go/parser"
+	"go/token"
+	"path/filepath"
+	"strings"
+)
+
+// AGENT 1 CRITICAL TESTS - Search System Removal
+// These tests MUST be implemented before beginning search system removal
+
+// TestSearchSystemCompleteRemoval verifies complete removal of search system
+func TestSearchSystemCompleteRemoval(t *testing.T) {
+	t.Run("VerifySearchPackageRemoved", func(t *testing.T) {
+		// Test that pkg/core/search directory is completely removed
+		searchPath := filepath.Join("pkg", "core", "search")
+		
+		// TODO: Implement verification that search directory no longer exists
+		// TODO: Check that all search-related files are removed
+		// TODO: Verify no backup files or hidden search files remain
+		
+		t.Skip("AGENT 1: Implement search package removal verification")
+	})
+	
+	t.Run("VerifyNoSearchImports", func(t *testing.T) {
+		// Test that no imports reference the search package
+		
+		// TODO: Scan all Go files for search package imports
+		// TODO: Verify no "github.com/TheEntropyCollective/noisefs/pkg/core/search" imports exist
+		// TODO: Check for any relative imports to search components
+		
+		t.Skip("AGENT 1: Implement search import verification")
+	})
+	
+	t.Run("VerifyBuildAfterRemoval", func(t *testing.T) {
+		// Test that entire project builds after search removal
+		
+		// TODO: Run 'go build ./...' and verify success
+		// TODO: Check that no undefined references to search components exist
+		// TODO: Verify all import cycles are resolved
+		
+		t.Skip("AGENT 1: Implement build verification test")
+	})
+	
+	t.Run("VerifyFUSEIntegrationIntact", func(t *testing.T) {
+		// Critical: Ensure FUSE functionality not broken by search removal
+		
+		// TODO: Test FUSE mount/unmount operations
+		// TODO: Verify directory operations work without search
+		// TODO: Check file access patterns remain functional
+		// TODO: Test FUSE directory workflows
+		
+		t.Skip("AGENT 1: Implement FUSE integration test")
+	})
+}
+
+// TestNoHiddenSearchDependencies verifies no hidden search dependencies
+func TestNoHiddenSearchDependencies(t *testing.T) {
+	t.Run("ScanForSearchReferences", func(t *testing.T) {
+		// Scan all files for any remaining search references
+		
+		// TODO: Search for string literals containing "search"
+		// TODO: Look for comments referencing search functionality  
+		// TODO: Check configuration files for search settings
+		// TODO: Verify no search-related environment variables
+		
+		t.Skip("AGENT 1: Implement search reference scanning")
+	})
+	
+	t.Run("VerifyDeadCodeRemoval", func(t *testing.T) {
+		// Verify all 14,052 lines of search code are removed
+		
+		// TODO: Count lines of code before/after removal
+		// TODO: Verify semantic_search_engine.go is removed
+		// TODO: Verify semantic_vector_manager.go is removed  
+		// TODO: Verify all search test files are removed
+		
+		t.Skip("AGENT 1: Implement dead code verification")
+	})
+}
+
+// TestSearchRemovalSafety ensures removal doesn't break existing functionality
+func TestSearchRemovalSafety(t *testing.T) {
+	t.Run("CoreBlockFunctionality", func(t *testing.T) {
+		// Test that core block operations still work
+		
+		// TODO: Test block creation and storage
+		// TODO: Test block retrieval and verification
+		// TODO: Test randomizer selection (ensure no search dependency)
+		
+		t.Skip("AGENT 1: Implement core block functionality test")
+	})
+	
+	t.Run("CacheFunctionality", func(t *testing.T) {
+		// Test that caching works without search components
+		
+		// TODO: Test cache hit/miss scenarios
+		// TODO: Verify cache eviction policies work
+		// TODO: Test adaptive cache functionality
+		
+		t.Skip("AGENT 1: Implement cache functionality test")
+	})
+	
+	t.Run("WebUIWithoutSearch", func(t *testing.T) {
+		// Test WebUI functionality after search removal
+		
+		// TODO: Test WebUI startup without search endpoints
+		// TODO: Verify file upload/download still works
+		// TODO: Test directory operations through WebUI
+		
+		t.Skip("AGENT 1: Implement WebUI functionality test")
+	})
+}
+
+// IMPLEMENTATION INSTRUCTIONS FOR AGENT 1:
+//
+// 1. Copy this template to: tests/integration/search_removal_test.go
+// 2. Implement each TODO item with actual test logic
+// 3. Run tests BEFORE beginning search system removal
+// 4. Ensure ALL tests pass before proceeding with deletion
+// 5. Re-run tests after removal to verify success
+//
+// CRITICAL: Do not begin removing search code until all these tests are 
+// implemented and passing. The tests serve as safety checks to prevent
+// breaking changes.
+//
+// High Priority Tests:
+// - VerifyBuildAfterRemoval (BLOCKING)
+// - VerifyFUSEIntegrationIntact (BLOCKING)  
+// - VerifyNoSearchImports (BLOCKING)
+// - VerifyDeadCodeRemoval (verification)
