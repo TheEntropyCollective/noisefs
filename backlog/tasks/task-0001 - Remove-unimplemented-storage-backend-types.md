@@ -6,7 +6,8 @@ assignee:
   - '@claude'
 created_date: '2025-07-20'
 updated_date: '2025-07-20'
-labels: []
+labels:
+  - ipfs pkg cleanup
 dependencies: []
 ---
 
