@@ -344,10 +344,42 @@
 
 ### Agent B - Network & Recovery Infrastructure (Week 1) - 🟠 HIGH PRIORITY
 **Mission**: Build error recovery and network foundation
-- [ ] Implement circuit breaker pattern for storage operations (Day 1-2)
-- [ ] Build network layer foundation for announce/discovery (Day 3-4)
-- [ ] Add error recovery middleware to sync operations (Day 5)
-- **Parallel**: Can work independently of other agents
+
+**Current Milestone**: Phase 2 Network & Recovery Infrastructure
+
+**Sprint 1: Circuit Breaker Foundation (Days 1-2)**
+- [ ] Create pkg/storage/circuitbreaker/ package with CircuitBreakerManager
+- [ ] Integrate with existing HealthMonitor and RetryableError systems
+- [ ] Add configurable thresholds (failure count, timeout windows, recovery periods)
+- [ ] Implement exponential backoff enhancement to current retry logic
+- [ ] Per-backend circuit breakers maintaining storage layer design
+- [ ] Performance testing showing < 5% overhead requirement
+
+**Sprint 2: Network Layer Foundation (Days 3-4)**
+- [ ] Create pkg/network/foundation/ with transport abstraction layer
+- [ ] Build pkg/network/discovery/ for privacy-preserving peer discovery
+- [ ] Design pkg/network/announce/ protocol building blocks
+- [ ] Integrate with existing pkg/network/tor/ infrastructure
+- [ ] Privacy-preserving discovery using bloom filters and encrypted capabilities
+- [ ] Announcement protocol with encrypted message format
+
+**Sprint 3: Error Recovery Middleware (Day 5)**
+- [ ] Create pkg/sync/middleware/recovery.go with RecoveryMiddleware interface
+- [ ] Integrate circuit breakers and network layer into sync engine
+- [ ] Implement graceful degradation strategies for storage/network failures
+- [ ] Add configurable recovery policies and failure threshold management
+- [ ] Comprehensive integration testing with failure simulation
+- [ ] User-actionable error messages replacing raw system errors
+
+**Success Criteria**:
+- Storage operations protected with circuit breaker patterns
+- Network foundation ready for Week 2 announce/discover CLI commands
+- Error recovery middleware providing coordinated failure handling
+- < 5% performance overhead during normal operations
+- No breaking changes to existing sync functionality
+
+**Week 2 Enablement**: Foundation enables Agent B discover CLI command implementation
+**Parallel**: Independent execution alongside Agent A sync integration work
 
 ### Agent C - Search & Performance Systems (Week 1) - 🟡 MEDIUM PRIORITY  
 **Mission**: Complete search implementation and optimization
