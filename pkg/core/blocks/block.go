@@ -1,7 +1,6 @@
 package blocks
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -33,22 +32,6 @@ func NewBlock(data []byte) (*Block, error) {
 	}, nil
 }
 
-// NewBlockWithHMAC creates a new block with HMAC-based ID generation
-// This provides additional security by requiring a secret key for ID generation
-func NewBlockWithHMAC(data []byte, key []byte) (*Block, error) {
-	if len(data) == 0 {
-		return nil, errors.New("block data cannot be empty")
-	}
-	
-	if len(key) == 0 {
-		return nil, errors.New("HMAC key cannot be empty")
-	}
-	
-	return &Block{
-		ID:   generateBlockIDHMAC(data, key),
-		Data: data,
-	}, nil
-}
 
 // NewRandomBlock creates a new block filled with random data
 func NewRandomBlock(size int) (*Block, error) {
@@ -112,25 +95,6 @@ func (b *Block) VerifyIntegrity() bool {
 	return subtle.ConstantTimeCompare(expected, actual) == 1
 }
 
-// VerifyIntegrityHMAC verifies block integrity using HMAC for additional security
-// The key parameter should be a secret key known only to authorized parties
-func (b *Block) VerifyIntegrityHMAC(key []byte) bool {
-	expectedID := generateBlockIDHMAC(b.Data, key)
-	
-	// Convert strings to byte slices for constant-time comparison
-	expected, err := hex.DecodeString(expectedID)
-	if err != nil {
-		return false
-	}
-	
-	actual, err := hex.DecodeString(b.ID)
-	if err != nil {
-		return false
-	}
-	
-	// Use HMAC equal for constant-time comparison
-	return hmac.Equal(expected, actual)
-}
 
 // generateBlockID generates a content-addressed identifier for a block
 func generateBlockID(data []byte) string {
@@ -138,10 +102,3 @@ func generateBlockID(data []byte) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// generateBlockIDHMAC generates an HMAC-based identifier for a block
-// This provides additional security by requiring a secret key
-func generateBlockIDHMAC(data []byte, key []byte) string {
-	h := hmac.New(sha256.New, key)
-	h.Write(data)
-	return hex.EncodeToString(h.Sum(nil))
-}

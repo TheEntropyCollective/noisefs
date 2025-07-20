@@ -25,12 +25,11 @@ type DirectoryProcessor struct {
 	cancelFunc     context.CancelFunc
 	ctx            context.Context
 	
-	// Internal state (protected by stateMux)
+	// Internal state (protected by atomic operations)
 	processedFiles int64
 	processedBytes int64
 	totalFiles     int64
 	totalBytes     int64
-	stateMux       sync.RWMutex // Protects progress state fields
 	
 	// Worker pool management
 	workerPool chan struct{}
@@ -88,7 +87,7 @@ type DirectoryManifest struct {
 	CreatedAt    time.Time        `json:"created"`
 	ModifiedAt   time.Time        `json:"modified"`
 	SnapshotInfo *SnapshotInfo    `json:"snapshot_info,omitempty"` // Snapshot metadata if this is a snapshot
-	mu           sync.Mutex       // Protects concurrent access to Entries
+	mu           sync.Mutex       `json:"-"` // Protects concurrent access to Entries
 }
 
 // NewDirectoryManifest creates a new empty directory manifest
@@ -216,8 +215,23 @@ func EncryptManifest(manifest *DirectoryManifest, key *crypto.EncryptionKey) ([]
 	// Get a thread-safe snapshot
 	snapshot := manifest.GetSnapshot()
 	
+	// Create a serializable version without the mutex
+	serializable := struct {
+		Version      string           `json:"version"`
+		Entries      []DirectoryEntry `json:"entries"`
+		CreatedAt    time.Time        `json:"created"`
+		ModifiedAt   time.Time        `json:"modified"`
+		SnapshotInfo *SnapshotInfo    `json:"snapshot_info,omitempty"`
+	}{
+		Version:      snapshot.Version,
+		Entries:      snapshot.Entries,
+		CreatedAt:    snapshot.CreatedAt,
+		ModifiedAt:   snapshot.ModifiedAt,
+		SnapshotInfo: snapshot.SnapshotInfo,
+	}
+	
 	// Serialize manifest as JSON
-	data, err := json.Marshal(snapshot)
+	data, err := json.Marshal(serializable)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
@@ -653,7 +667,6 @@ type StreamingDirectoryProcessor struct {
 	*DirectoryProcessor
 	maxMemoryUsage int64
 	currentMemory  int64
-	memoryMux      sync.RWMutex
 }
 
 // NewStreamingDirectoryProcessor creates a processor optimized for large directories

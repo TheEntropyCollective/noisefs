@@ -115,15 +115,13 @@ func Decrypt(ciphertext []byte, key *EncryptionKey) ([]byte, error) {
 
 // HashPassword creates a bcrypt hash of a password for verification
 // Uses a cost factor of 12 for good security vs performance balance
-func HashPassword(password string) string {
+func HashPassword(password string) (string, error) {
 	// Use cost factor of 12 as specified
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
-		// In case of error, return empty string to maintain interface
-		// The caller should check for empty string
-		return ""
+		return "", fmt.Errorf("failed to hash password: %w", err)
 	}
-	return string(hash)
+	return string(hash), nil
 }
 
 // VerifyPassword verifies a password against its bcrypt hash
