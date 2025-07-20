@@ -8,6 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -15,12 +21,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
-	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
-	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 )
 
 // MockRequestMetrics represents mock request metrics
@@ -34,12 +34,12 @@ type MockRequestMetrics struct {
 
 // BenchmarkSuite provides comprehensive performance testing for NoiseFS
 type BenchmarkSuite struct {
-	clients          []*noisefs.Client
-	peerManagers     []*p2p.PeerManager
-	storageManagers  []*storage.Manager
-	blockSizes       []int
-	numPeers         int
-	numBlocks        int
+	clients         []*noisefs.Client
+	peerManagers    []*p2p.PeerManager
+	storageManagers []*storage.Manager
+	blockSizes      []int
+	numPeers        int
+	numBlocks       int
 }
 
 // NewBenchmarkSuite creates a new benchmark suite
@@ -54,7 +54,7 @@ func NewBenchmarkSuite(numPeers, numBlocks int) *BenchmarkSuite {
 // SetupBenchmark initializes the benchmark environment
 func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 	b.Helper()
-	
+
 	// Create storage managers
 	for i := 0; i < bs.numPeers; i++ {
 		// Create storage manager for benchmarking
@@ -63,27 +63,27 @@ func (bs *BenchmarkSuite) SetupBenchmark(b *testing.B) error {
 			return fmt.Errorf("failed to create storage manager %d: %w", i, err)
 		}
 		bs.storageManagers = append(bs.storageManagers, storageManager)
-		
+
 		// Create peer manager
 		host := NewMockHost(peer.ID(fmt.Sprintf("peer-%d", i)))
 		peerManager := p2p.NewPeerManager(host, 50)
 		bs.peerManagers = append(bs.peerManagers, peerManager)
-		
+
 		// Create cache
 		cache := cache.NewMemoryCache(1000)
-		
+
 		// Create NoiseFS client
 		client, err := noisefs.NewClient(storageManager, cache)
 		if err != nil {
 			return fmt.Errorf("failed to create NoiseFS client %d: %w", i, err)
 		}
-		
+
 		client.SetPeerManager(peerManager)
 		bs.clients = append(bs.clients, client)
 	}
-	
+
 	// Peer managers are initialized and will discover peers through the network
-	
+
 	return nil
 }
 
@@ -104,10 +104,10 @@ func BenchmarkRandomizerSelection(b *testing.B) {
 		b.Fatalf("Setup failed: %v", err)
 	}
 	defer suite.CleanupBenchmark()
-	
+
 	client := suite.clients[0]
 	blockSize := 131072 // 128KB
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -126,10 +126,10 @@ func BenchmarkPeerSelection(b *testing.B) {
 		b.Fatalf("Setup failed: %v", err)
 	}
 	defer suite.CleanupBenchmark()
-	
+
 	strategies := []string{"performance", "randomizer", "privacy", "hybrid"}
 	peerManager := suite.peerManagers[0]
-	
+
 	for _, strategy := range strategies {
 		b.Run(strategy, func(b *testing.B) {
 			b.ResetTimer()
@@ -151,11 +151,11 @@ func BenchmarkCachePerformance(b *testing.B) {
 		b.Fatalf("Setup failed: %v", err)
 	}
 	defer suite.CleanupBenchmark()
-	
+
 	client := suite.clients[0]
 	testBlocks := make([]*blocks.Block, 100)
 	cids := make([]string, 100)
-	
+
 	// Pre-populate cache
 	for i := 0; i < 100; i++ {
 		block, err := blocks.NewRandomBlock(4096)
@@ -163,14 +163,14 @@ func BenchmarkCachePerformance(b *testing.B) {
 			b.Fatalf("Failed to create block: %v", err)
 		}
 		testBlocks[i] = block
-		
+
 		cid, err := client.StoreBlockWithCache(block)
 		if err != nil {
 			b.Fatalf("Failed to store block: %v", err)
 		}
 		cids[i] = cid
 	}
-	
+
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
@@ -200,16 +200,16 @@ func BenchmarkThroughput(b *testing.B) {
 		b.Fatalf("Setup failed: %v", err)
 	}
 	defer suite.CleanupBenchmark()
-	
+
 	var totalBytes int64
 	var totalOps int64
-	
+
 	b.ResetTimer()
 	start := time.Now()
-	
+
 	b.RunParallel(func(pb *testing.PB) {
 		client := suite.clients[rand.Intn(len(suite.clients))]
-		
+
 		for pb.Next() {
 			// Create and store a block
 			blockSize := suite.blockSizes[rand.Intn(len(suite.blockSizes))]
@@ -218,29 +218,29 @@ func BenchmarkThroughput(b *testing.B) {
 				b.Errorf("Failed to create block: %v", err)
 				continue
 			}
-			
+
 			cid, err := client.StoreBlockWithCache(block)
 			if err != nil {
 				b.Errorf("Failed to store block: %v", err)
 				continue
 			}
-			
+
 			// Retrieve the block
 			_, err = client.RetrieveBlockWithCache(cid)
 			if err != nil {
 				b.Errorf("Failed to retrieve block: %v", err)
 				continue
 			}
-			
+
 			totalBytes += int64(blockSize * 2) // store + retrieve
 			totalOps += 2
 		}
 	})
-	
+
 	duration := time.Since(start)
 	throughputMBps := float64(totalBytes) / (1024 * 1024) / duration.Seconds()
 	opsPerSec := float64(totalOps) / duration.Seconds()
-	
+
 	b.ReportMetric(throughputMBps, "MB/s")
 	b.ReportMetric(opsPerSec, "ops/s")
 }
@@ -251,9 +251,9 @@ func BenchmarkMLPrediction(b *testing.B) {
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
-	
+
 	client := suite.clients[0]
-	
+
 	// Create access pattern
 	blockCIDs := make([]string, 50)
 	for i := 0; i < 50; i++ {
@@ -261,47 +261,47 @@ func BenchmarkMLPrediction(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to create block: %v", err)
 		}
-		
+
 		cid, err := client.StoreBlockWithCache(block)
 		if err != nil {
 			b.Fatalf("Failed to store block: %v", err)
 		}
 		blockCIDs[i] = cid
 	}
-	
+
 	// Create predictable access pattern for training
 	for round := 0; round < 100; round++ {
 		for i := 0; i < 10; i++ { // Access first 10 blocks frequently
 			client.RetrieveBlockWithCache(blockCIDs[i])
 		}
-		
+
 		if round%5 == 0 { // Access next 10 blocks occasionally
 			for i := 10; i < 20; i++ {
 				client.RetrieveBlockWithCache(blockCIDs[i])
 			}
 		}
 	}
-	
+
 	b.ResetTimer()
-	
+
 	// Test prediction accuracy
 	correct := 0
 	total := 0
-	
+
 	for i := 0; i < b.N; i++ {
 		// Predict which blocks will be accessed
 		predictions := make([]bool, len(blockCIDs))
 		for j := 0; j < 10; j++ { // Predict first 10 will be accessed
 			predictions[j] = true
 		}
-		
+
 		// Actually access blocks
 		accessed := make([]bool, len(blockCIDs))
 		for j := 0; j < 10; j++ { // Actually access first 10
 			client.RetrieveBlockWithCache(blockCIDs[j])
 			accessed[j] = true
 		}
-		
+
 		// Calculate accuracy
 		for j := 0; j < len(blockCIDs); j++ {
 			if predictions[j] == accessed[j] {
@@ -310,7 +310,7 @@ func BenchmarkMLPrediction(b *testing.B) {
 			total++
 		}
 	}
-	
+
 	accuracy := float64(correct) / float64(total) * 100
 	b.ReportMetric(accuracy, "%accuracy")
 }
@@ -321,57 +321,57 @@ func BenchmarkStorageOverhead(b *testing.B) {
 	if err := suite.SetupBenchmark(b); err != nil {
 		b.Fatalf("Setup failed: %v", err)
 	}
-	
+
 	client := suite.clients[0]
 	originalSize := int64(0)
 	storedSize := int64(0)
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		// Create source data
 		sourceData := make([]byte, 131072) // 128KB
 		rand.Read(sourceData)
 		originalSize += int64(len(sourceData))
-		
+
 		// Get two randomizers for 3-tuple XOR
 		randomizer1, _, randomizer2, _, _, err := client.SelectRandomizers(len(sourceData))
 		if err != nil {
 			b.Errorf("Failed to get randomizers: %v", err)
 			continue
 		}
-		
+
 		// Create data block
 		dataBlock, err := blocks.NewBlock(sourceData)
 		if err != nil {
 			b.Errorf("Failed to create data block: %v", err)
 			continue
 		}
-		
+
 		// Create anonymized block (3-tuple XOR: data XOR randomizer1 XOR randomizer2)
 		anonBlock, err := dataBlock.XOR(randomizer1, randomizer2)
 		if err != nil {
 			b.Errorf("Failed to XOR blocks: %v", err)
 			continue
 		}
-		
+
 		// Store anonymized block
 		_, err = client.StoreBlockWithCache(anonBlock)
 		if err != nil {
 			b.Errorf("Failed to store anonymized block: %v", err)
 			continue
 		}
-		
+
 		// Account for storage (anonymized block + two randomizer references)
 		storedSize += int64(len(anonBlock.Data))
 		if i == 0 { // Only count randomizers once if reused
 			storedSize += int64(len(randomizer1.Data))
 			storedSize += int64(len(randomizer2.Data))
 		}
-		
+
 		client.RecordUpload(int64(len(sourceData)), storedSize-originalSize)
 	}
-	
+
 	overhead := float64(storedSize-originalSize) / float64(originalSize) * 100
 	b.ReportMetric(overhead, "%overhead")
 }
@@ -391,7 +391,7 @@ func NewMockStorageManager() *storage.Manager {
 func (m *MockIPFSClient) StoreBlock(block *blocks.Block) (string, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	cid := fmt.Sprintf("mock-cid-%d", rand.Int63())
 	m.blocks[cid] = block
 	return cid, nil
@@ -400,7 +400,7 @@ func (m *MockIPFSClient) StoreBlock(block *blocks.Block) (string, error) {
 func (m *MockIPFSClient) RetrieveBlock(cid string) (*blocks.Block, error) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	if block, exists := m.blocks[cid]; exists {
 		return block, nil
 	}
@@ -423,7 +423,7 @@ func (m *MockIPFSClient) StoreBlockWithStrategy(block *blocks.Block, strategy st
 		delay = time.Microsecond * 500 // Faster for performance strategy
 	}
 	time.Sleep(delay)
-	
+
 	return m.StoreBlock(block)
 }
 

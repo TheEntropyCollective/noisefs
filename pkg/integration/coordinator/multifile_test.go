@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 func TestMultiFileBlockReuse(t *testing.T) {
@@ -19,7 +19,7 @@ func TestMultiFileBlockReuse(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(50) // Large cache to see maximum reuse
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestMultiFileBlockReuse(t *testing.T) {
 			expected: "Common pattern A",
 		},
 		{
-			name:     "file2.txt", 
+			name:     "file2.txt",
 			content:  bytes.Repeat([]byte("Common pattern B"), 15),
 			expected: "Common pattern B",
 		},
@@ -76,7 +76,7 @@ func TestMultiFileBlockReuse(t *testing.T) {
 
 	// Check block reuse metrics
 	finalMetrics := client.GetMetrics()
-	
+
 	t.Logf("Final metrics after all uploads:")
 	t.Logf("  Blocks reused: %d", finalMetrics.BlocksReused)
 	t.Logf("  Blocks generated: %d", finalMetrics.BlocksGenerated)
@@ -118,7 +118,7 @@ func TestMultiFileStorageEfficiency(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(100)
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -152,13 +152,13 @@ func TestMultiFileStorageEfficiency(t *testing.T) {
 	// Analyze storage efficiency
 	metrics := client.GetMetrics()
 	storageOverhead := float64(metrics.BytesStoredIPFS) / float64(totalOriginalSize)
-	
+
 	t.Logf("Storage efficiency analysis:")
 	t.Logf("  Total original size: %d bytes", totalOriginalSize)
 	t.Logf("  Total stored size: %d bytes", metrics.BytesStoredIPFS)
 	t.Logf("  Storage overhead: %.2fx", storageOverhead)
 	t.Logf("  Block reuse rate: %.2f%%", metrics.BlockReuseRate)
-	
+
 	// With block reuse, we should see less than 2x storage overhead
 	if storageOverhead > 2.5 {
 		t.Errorf("Storage overhead too high: %.2fx (expected < 2.5x)", storageOverhead)
@@ -177,7 +177,7 @@ func TestMultiFileWithDifferentBlockSizes(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(200)
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -196,7 +196,7 @@ func TestMultiFileWithDifferentBlockSizes(t *testing.T) {
 			blockSize: 16,
 		},
 		{
-			name:      "medium_blocks.txt", 
+			name:      "medium_blocks.txt",
 			content:   bytes.Repeat([]byte("Medium block content "), 30),
 			blockSize: 64,
 		},
@@ -223,7 +223,7 @@ func TestMultiFileWithDifferentBlockSizes(t *testing.T) {
 		desc.Filename = tc.name
 		descriptors[i] = desc
 
-		t.Logf("Uploaded %s: %d bytes, %d blocks of size %d", 
+		t.Logf("Uploaded %s: %d bytes, %d blocks of size %d",
 			tc.name, len(tc.content), len(desc.Blocks), tc.blockSize)
 	}
 
@@ -254,7 +254,7 @@ func TestMultiFileWithDifferentBlockSizes(t *testing.T) {
 }
 
 func TestConcurrentMultiFileOperations(t *testing.T) {
-	// Note: This test simulates concurrent operations by interleaving 
+	// Note: This test simulates concurrent operations by interleaving
 	// upload/download operations rather than true concurrency
 	// since our mock infrastructure isn't thread-safe
 
@@ -264,7 +264,7 @@ func TestConcurrentMultiFileOperations(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(50)
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -331,7 +331,7 @@ func TestMultiFileWithCacheEviction(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(8) // Very small cache
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -358,7 +358,7 @@ func TestMultiFileWithCacheEviction(t *testing.T) {
 		// Log metrics periodically
 		if (i+1)%5 == 0 {
 			metrics := client.GetMetrics()
-			t.Logf("After %d uploads - Cache hits: %d, Cache misses: %d", 
+			t.Logf("After %d uploads - Cache hits: %d, Cache misses: %d",
 				i+1, metrics.CacheHits, metrics.CacheMisses)
 		}
 	}
@@ -383,7 +383,7 @@ func TestMultiFileWithCacheEviction(t *testing.T) {
 	t.Logf("  Files processed: %d", numFiles)
 	t.Logf("  Cache size limit: 8 blocks")
 	t.Logf("  Upload phase - Hits: %d, Misses: %d", uploadMetrics.CacheHits, uploadMetrics.CacheMisses)
-	t.Logf("  Download phase - Additional hits: %d, Additional misses: %d", 
+	t.Logf("  Download phase - Additional hits: %d, Additional misses: %d",
 		finalMetrics.CacheHits-uploadMetrics.CacheHits, finalMetrics.CacheMisses-uploadMetrics.CacheMisses)
 	t.Logf("  Final cache hit rate: %.2f%%", finalMetrics.CacheHitRate)
 

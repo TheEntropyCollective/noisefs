@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	storagetesting "github.com/TheEntropyCollective/noisefs/pkg/storage/testing"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
@@ -19,7 +19,7 @@ func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(30)
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 		descriptors[i] = desc
 
 		metrics := client.GetMetrics()
-		t.Logf("After upload %d: Cache hits: %d, Cache misses: %d, Hit rate: %.2f%%", 
+		t.Logf("After upload %d: Cache hits: %d, Cache misses: %d, Hit rate: %.2f%%",
 			i+1, metrics.CacheHits, metrics.CacheMisses, metrics.CacheHitRate)
 	}
 
@@ -57,7 +57,7 @@ func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 	rounds := 3
 	for round := 1; round <= rounds; round++ {
 		t.Logf("=== Download Round %d ===", round)
-		
+
 		for i, desc := range descriptors {
 			reconstructed, err := simulateDownload(client, desc)
 			if err != nil {
@@ -74,7 +74,7 @@ func TestCacheEfficiencyWithRepeatedOperations(t *testing.T) {
 		roundMisses := roundMetrics.CacheMisses - initialMetrics.CacheMisses
 		roundHitRate := float64(roundHits) / float64(roundHits+roundMisses) * 100
 
-		t.Logf("Round %d results: Hits: %d, Misses: %d, Hit rate: %.2f%%", 
+		t.Logf("Round %d results: Hits: %d, Misses: %d, Hit rate: %.2f%%",
 			round, roundHits, roundMisses, roundHitRate)
 
 		// Cache hit rate should improve with each round
@@ -98,7 +98,7 @@ func TestCacheEfficiencyWithPopularityTracking(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(20)
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -119,7 +119,7 @@ func TestCacheEfficiencyWithPopularityTracking(t *testing.T) {
 			content: bytes.Repeat(sharedPattern, 20), // Will be popular
 		},
 		{
-			name:    "popular_file_2.txt", 
+			name:    "popular_file_2.txt",
 			content: bytes.Repeat(sharedPattern, 15), // Shares popular content
 		},
 		{
@@ -144,7 +144,7 @@ func TestCacheEfficiencyWithPopularityTracking(t *testing.T) {
 		}
 		desc.Filename = file.name
 		descriptors[i] = desc
-		
+
 		t.Logf("Uploaded %s (%d bytes, %d blocks)", file.name, len(file.content), len(desc.Blocks))
 	}
 
@@ -195,7 +195,7 @@ func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	cache := cache.NewMemoryCache(6) // Very small cache
 	client, err := noisefs.NewClient(storageManager, cache)
 	if err != nil {
@@ -224,18 +224,18 @@ func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 		// Check cache state periodically
 		if (i+1)%3 == 0 {
 			metrics := client.GetMetrics()
-			t.Logf("After %d uploads: Hit rate: %.2f%%, Blocks reused: %d", 
+			t.Logf("After %d uploads: Hit rate: %.2f%%, Blocks reused: %d",
 				i+1, metrics.CacheHitRate, metrics.BlocksReused)
 		}
 	}
 
 	// Test LRU behavior by accessing files in specific pattern
 	t.Log("=== LRU Access Pattern Test ===")
-	
+
 	// Access recent files (should be in cache)
 	recentFiles := descriptors[numFiles-3:] // Last 3 files
 	t.Log("Accessing recent files (should be cache hits)...")
-	
+
 	preRecentMetrics := client.GetMetrics()
 	for i, desc := range recentFiles {
 		_, err := simulateDownload(client, desc)
@@ -244,14 +244,14 @@ func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 		}
 	}
 	postRecentMetrics := client.GetMetrics()
-	
+
 	recentHits := postRecentMetrics.CacheHits - preRecentMetrics.CacheHits
 	recentMisses := postRecentMetrics.CacheMisses - preRecentMetrics.CacheMisses
-	
+
 	// Access old files (should be cache misses due to eviction)
 	oldFiles := descriptors[:3] // First 3 files
 	t.Log("Accessing old files (should be cache misses)...")
-	
+
 	preOldMetrics := client.GetMetrics()
 	for i, desc := range oldFiles {
 		_, err := simulateDownload(client, desc)
@@ -260,7 +260,7 @@ func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 		}
 	}
 	postOldMetrics := client.GetMetrics()
-	
+
 	oldHits := postOldMetrics.CacheHits - preOldMetrics.CacheHits
 	oldMisses := postOldMetrics.CacheMisses - preOldMetrics.CacheMisses
 
@@ -277,7 +277,7 @@ func TestCacheEfficiencyWithLRUEviction(t *testing.T) {
 	// Recent files should have better hit rate than old files
 	recentHitRate := float64(recentHits) / float64(recentHits+recentMisses) * 100
 	oldHitRate := float64(oldHits) / float64(oldHits+oldMisses) * 100
-	
+
 	t.Logf("Recent files hit rate: %.2f%%", recentHitRate)
 	t.Logf("Old files hit rate: %.2f%%", oldHitRate)
 
@@ -301,7 +301,7 @@ func TestCacheEfficiencyWithWorkloadPatterns(t *testing.T) {
 		},
 		{
 			name:        "random_access",
-			description: "Random file access pattern", 
+			description: "Random file access pattern",
 			testFunc:    testRandomAccess,
 		},
 		{
@@ -319,7 +319,7 @@ func TestCacheEfficiencyWithWorkloadPatterns(t *testing.T) {
 				t.Fatalf("Failed to create storage manager: %v", err)
 			}
 			defer storageManager.Stop(context.Background())
-			
+
 			cache := cache.NewMemoryCache(15)
 			client, err := noisefs.NewClient(storageManager, cache)
 			if err != nil {
@@ -366,8 +366,8 @@ func testSequentialAccess(t *testing.T, client *noisefs.Client, descriptors []*d
 	finalMetrics := client.GetMetrics()
 	accessHits := finalMetrics.CacheHits - initialMetrics.CacheHits
 	accessMisses := finalMetrics.CacheMisses - initialMetrics.CacheMisses
-	
-	t.Logf("Sequential access results: Hits: %d, Misses: %d, Hit rate: %.2f%%", 
+
+	t.Logf("Sequential access results: Hits: %d, Misses: %d, Hit rate: %.2f%%",
 		accessHits, accessMisses, float64(accessHits)/(float64(accessHits+accessMisses))*100)
 }
 
@@ -376,7 +376,7 @@ func testRandomAccess(t *testing.T, client *noisefs.Client, descriptors []*descr
 
 	// Random access pattern
 	accessOrder := []int{3, 1, 6, 2, 7, 0, 4, 5, 2, 6, 1, 3, 0, 7, 4, 5}
-	
+
 	for _, idx := range accessOrder {
 		if idx < len(descriptors) {
 			_, err := simulateDownload(client, descriptors[idx])
@@ -389,8 +389,8 @@ func testRandomAccess(t *testing.T, client *noisefs.Client, descriptors []*descr
 	finalMetrics := client.GetMetrics()
 	accessHits := finalMetrics.CacheHits - initialMetrics.CacheHits
 	accessMisses := finalMetrics.CacheMisses - initialMetrics.CacheMisses
-	
-	t.Logf("Random access results: Hits: %d, Misses: %d, Hit rate: %.2f%%", 
+
+	t.Logf("Random access results: Hits: %d, Misses: %d, Hit rate: %.2f%%",
 		accessHits, accessMisses, float64(accessHits)/(float64(accessHits+accessMisses))*100)
 }
 
@@ -422,8 +422,8 @@ func testHotspotAccess(t *testing.T, client *noisefs.Client, descriptors []*desc
 	finalMetrics := client.GetMetrics()
 	accessHits := finalMetrics.CacheHits - initialMetrics.CacheHits
 	accessMisses := finalMetrics.CacheMisses - initialMetrics.CacheMisses
-	
-	t.Logf("Hotspot access results: Hits: %d, Misses: %d, Hit rate: %.2f%%", 
+
+	t.Logf("Hotspot access results: Hits: %d, Misses: %d, Hit rate: %.2f%%",
 		accessHits, accessMisses, float64(accessHits)/(float64(accessHits+accessMisses))*100)
 
 	// Hotspot pattern should have high hit rate due to repeated access

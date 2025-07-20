@@ -8,51 +8,51 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/compliance"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/relay"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/reuse"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 // SystemCoordinator orchestrates all NoiseFS components
 type SystemCoordinator struct {
 	// Core components
-	config           *config.Config
-	storageManager   *storage.Manager
+	config         *config.Config
+	storageManager *storage.Manager
 	// blockManager is not needed - blocks are managed directly
-	noisefsClient    *noisefs.Client
-	
+	noisefsClient *noisefs.Client
+
 	// Privacy components
-	relayPool        *relay.RelayPool
-	coverTraffic     *relay.CoverTrafficGenerator
-	requestMixer     *relay.RequestMixer
-	peerManager      *p2p.PeerManager
-	
+	relayPool    *relay.RelayPool
+	coverTraffic *relay.CoverTrafficGenerator
+	requestMixer *relay.RequestMixer
+	peerManager  *p2p.PeerManager
+
 	// Reuse components
-	reuseClient      *reuse.ReuseAwareClient
-	universalPool    *reuse.UniversalBlockPool
-	reuseEnforcer    *reuse.ReuseEnforcer
-	publicMixer      *reuse.PublicDomainMixer
-	
+	reuseClient   *reuse.ReuseAwareClient
+	universalPool *reuse.UniversalBlockPool
+	reuseEnforcer *reuse.ReuseEnforcer
+	publicMixer   *reuse.PublicDomainMixer
+
 	// Legal components
-	complianceAudit  *compliance.ComplianceAuditSystem
-	
+	complianceAudit *compliance.ComplianceAuditSystem
+
 	// Cache components
-	blockCache       cache.Cache
-	adaptiveCache    *cache.AdaptiveCache
-	
+	blockCache    cache.Cache
+	adaptiveCache *cache.AdaptiveCache
+
 	// Descriptor storage
-	descriptorStore  *descriptors.Store
-	
+	descriptorStore *descriptors.Store
+
 	// Metrics
-	systemMetrics    *SystemMetrics
-	mu               sync.RWMutex
+	systemMetrics *SystemMetrics
+	mu            sync.RWMutex
 }
 
 // SystemMetrics tracks overall system performance
@@ -72,37 +72,37 @@ func NewSystemCoordinator(cfg *config.Config) (*SystemCoordinator, error) {
 		config:        cfg,
 		systemMetrics: &SystemMetrics{},
 	}
-	
+
 	// Initialize components in dependency order
 	if err := coordinator.initializeStorage(); err != nil {
 		return nil, fmt.Errorf("failed to initialize storage: %w", err)
 	}
-	
+
 	if err := coordinator.initializeCache(); err != nil {
 		return nil, fmt.Errorf("failed to initialize cache: %w", err)
 	}
-	
+
 	if err := coordinator.initializePrivacy(); err != nil {
 		return nil, fmt.Errorf("failed to initialize privacy: %w", err)
 	}
-	
+
 	if err := coordinator.initializeReuse(); err != nil {
 		return nil, fmt.Errorf("failed to initialize reuse: %w", err)
 	}
-	
+
 	if err := coordinator.initializeCompliance(); err != nil {
 		return nil, fmt.Errorf("failed to initialize compliance: %w", err)
 	}
-	
+
 	if err := coordinator.initializeCore(); err != nil {
 		return nil, fmt.Errorf("failed to initialize core: %w", err)
 	}
-	
+
 	// Wire components together
 	if err := coordinator.wireComponents(); err != nil {
 		return nil, fmt.Errorf("failed to wire components: %w", err)
 	}
-	
+
 	return coordinator, nil
 }
 
@@ -113,7 +113,7 @@ func (sc *SystemCoordinator) initializeStorage() error {
 	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
 		ipfsBackend.Connection.Endpoint = sc.config.IPFS.APIEndpoint
 	}
-	
+
 	manager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func (sc *SystemCoordinator) initializeCache() error {
 			PredictionInterval: time.Minute * 10,
 		}
 		sc.adaptiveCache = cache.NewAdaptiveCache(adaptiveCfg)
-		
+
 		// Wrap with altruistic cache if enabled
 		if sc.config.Cache.EnableAltruistic {
 			altruisticConfig := &cache.AltruisticCacheConfig{
@@ -146,12 +146,12 @@ func (sc *SystemCoordinator) initializeCache() error {
 				EnableAltruistic: true,
 				EvictionCooldown: 5 * time.Minute,
 			}
-			
+
 			// Use adaptive cache as the base
 			sc.blockCache = cache.NewAltruisticCache(
 				sc.adaptiveCache,
 				altruisticConfig,
-				int64(sc.config.Cache.MemoryLimit) * 1024 * 1024,
+				int64(sc.config.Cache.MemoryLimit)*1024*1024,
 			)
 		} else {
 			// Use adaptive cache directly
@@ -161,7 +161,7 @@ func (sc *SystemCoordinator) initializeCache() error {
 		// Create simple memory cache
 		sc.blockCache = cache.NewMemoryCache(sc.config.Cache.BlockCacheSize)
 	}
-	
+
 	return nil
 }
 
@@ -170,7 +170,7 @@ func (sc *SystemCoordinator) initializePrivacy() error {
 	// Peer manager creation would require a libp2p host
 	// For now, we'll skip this as it requires more setup
 	// sc.peerManager = p2p.NewPeerManager(host, maxPeers)
-	
+
 	// Create relay pool with default config
 	poolConfig := &relay.PoolConfig{
 		MaxRelays:           10,
@@ -181,19 +181,19 @@ func (sc *SystemCoordinator) initializePrivacy() error {
 		PrivacyLevel:        3, // 3 hops for high privacy
 	}
 	sc.relayPool = relay.NewRelayPool(poolConfig)
-	
+
 	// Create connection pool with config
 	connPoolConfig := &relay.ConnectionPoolConfig{
-		MaxConnections:      100,
-		MaxIdleTime:         time.Minute * 10,
-		ConnectionTimeout:   time.Second * 30,
-		KeepAliveInterval:   time.Minute,
-		ReconnectAttempts:   3,
-		ReconnectDelay:      time.Second * 5,
-		MaxRequestsPerConn:  10,
+		MaxConnections:     100,
+		MaxIdleTime:        time.Minute * 10,
+		ConnectionTimeout:  time.Second * 30,
+		KeepAliveInterval:  time.Minute,
+		ReconnectAttempts:  3,
+		ReconnectDelay:     time.Second * 5,
+		MaxRequestsPerConn: 10,
 	}
 	connectionPool := relay.NewConnectionPool(connPoolConfig)
-	
+
 	// Create popularity tracker with cache and config
 	popConfig := &relay.PopularityConfig{
 		RefreshInterval:     time.Minute,
@@ -204,21 +204,21 @@ func (sc *SystemCoordinator) initializePrivacy() error {
 		CategoryWeights:     map[string]float64{"default": 1.0},
 	}
 	popularityTracker := relay.NewPopularBlockTracker(sc.blockCache, popConfig)
-	
+
 	// Create cover traffic generator with defaults
 	coverConfig := &relay.CoverTrafficConfig{
-		NoiseRatio:         0.3,
-		MinCoverRequests:   5,
-		MaxCoverRequests:   20,
-		CoverInterval:      time.Second * 30,
-		RandomDelay:        time.Second * 5,
-		BandwidthLimit:     1024 * 1024, // 1MB/s
-		PopularityBias:     0.7,
-		BatchSize:          10,
-		MaxConcurrent:      50,
+		NoiseRatio:       0.3,
+		MinCoverRequests: 5,
+		MaxCoverRequests: 20,
+		CoverInterval:    time.Second * 30,
+		RandomDelay:      time.Second * 5,
+		BandwidthLimit:   1024 * 1024, // 1MB/s
+		PopularityBias:   0.7,
+		BatchSize:        10,
+		MaxConcurrent:    50,
 	}
 	sc.coverTraffic = relay.NewCoverTrafficGenerator(coverConfig, popularityTracker, sc.relayPool, connectionPool)
-	
+
 	// Create request distributor with default config
 	distConfig := &relay.DistributorConfig{
 		MaxConcurrentRequests: 50,
@@ -228,7 +228,7 @@ func (sc *SystemCoordinator) initializePrivacy() error {
 		FailoverEnabled:       true,
 	}
 	distributor := relay.NewRequestDistributor(sc.relayPool, distConfig)
-	
+
 	// Create request mixer with defaults
 	mixerConfig := &relay.MixerConfig{
 		MixingDelay:       time.Millisecond * 500,
@@ -241,7 +241,7 @@ func (sc *SystemCoordinator) initializePrivacy() error {
 		BatchTimeout:      time.Second * 2,
 	}
 	sc.requestMixer = relay.NewRequestMixer(mixerConfig, sc.coverTraffic, popularityTracker, distributor)
-	
+
 	return nil
 }
 
@@ -252,29 +252,29 @@ func (sc *SystemCoordinator) initializeReuse() error {
 	poolConfig.PublicDomainRatio = 0.3
 	poolConfig.MinReuseCount = 3
 	sc.universalPool = reuse.NewUniversalBlockPool(poolConfig, sc.storageManager)
-	
+
 	// Initialize the pool
 	if err := sc.universalPool.Initialize(); err != nil {
 		return fmt.Errorf("failed to initialize universal pool: %w", err)
 	}
-	
+
 	// Create reuse enforcer with defaults
 	reusePolicy := reuse.DefaultReusePolicy()
 	// Note: ReusePolicy fields might be different
 	sc.reuseEnforcer = reuse.NewReuseEnforcer(sc.universalPool, reusePolicy)
-	
+
 	// Create public domain mixer with defaults
 	mixerConfig := reuse.DefaultMixerConfig()
 	mixerConfig.MinPublicDomainRatio = 0.3
 	sc.publicMixer = reuse.NewPublicDomainMixer(sc.universalPool, mixerConfig, sc.storageManager)
-	
+
 	// Create reuse-aware client
 	reuseClient, err := reuse.NewReuseAwareClient(sc.storageManager, sc.blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create reuse client: %w", err)
 	}
 	sc.reuseClient = reuseClient
-	
+
 	return nil
 }
 
@@ -282,31 +282,31 @@ func (sc *SystemCoordinator) initializeReuse() error {
 func (sc *SystemCoordinator) initializeCompliance() error {
 	auditConfig := compliance.DefaultAuditConfig()
 	// Use default database path and retention period
-	
+
 	sc.complianceAudit = compliance.NewComplianceAuditSystem(auditConfig)
-	
+
 	// Compliance audit system is ready to use
-	
+
 	return nil
 }
 
 // initializeCore sets up core NoiseFS components
 func (sc *SystemCoordinator) initializeCore() error {
 	// Block management is handled by the blocks package directly
-	
+
 	// Create NoiseFS client
 	noisefsClient, err := noisefs.NewClient(sc.storageManager, sc.blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
 	sc.noisefsClient = noisefsClient
-	
+
 	// Create descriptor store
 	sc.descriptorStore, err = descriptors.NewStore(sc.storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -314,13 +314,13 @@ func (sc *SystemCoordinator) initializeCore() error {
 func (sc *SystemCoordinator) wireComponents() error {
 	// Skip peer manager wiring since we don't have it initialized
 	// In a real implementation, this would require libp2p host setup
-	
+
 	// Start privacy components
 	ctx := context.Background()
 	if err := sc.relayPool.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start relay pool: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -328,16 +328,16 @@ func (sc *SystemCoordinator) wireComponents() error {
 func (sc *SystemCoordinator) UploadFile(reader io.Reader, filename string) (string, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	
+
 	// Update metrics
 	sc.systemMetrics.TotalUploads++
-	
+
 	// Use reuse-aware client for upload with default block size
 	result, err := sc.reuseClient.UploadFile(reader, filename, blocks.DefaultBlockSize)
 	if err != nil {
 		return "", fmt.Errorf("upload failed: %w", err)
 	}
-	
+
 	// Log compliance event
 	err = sc.complianceAudit.LogComplianceEvent(
 		"file_upload",
@@ -345,9 +345,9 @@ func (sc *SystemCoordinator) UploadFile(reader io.Reader, filename string) (stri
 		result.DescriptorCID,
 		"upload_completed",
 		map[string]interface{}{
-			"filename":     filename,
-			"reuse_proof":  result.ReuseProof,
-			"mixing_plan":  result.MixingPlan,
+			"filename":      filename,
+			"reuse_proof":   result.ReuseProof,
+			"mixing_plan":   result.MixingPlan,
 			"privacy_score": sc.calculatePrivacyScore(result),
 		},
 	)
@@ -355,10 +355,10 @@ func (sc *SystemCoordinator) UploadFile(reader io.Reader, filename string) (stri
 		// Log error but don't fail upload
 		fmt.Printf("Warning: failed to log compliance event: %v\n", err)
 	}
-	
+
 	// Update system metrics
 	sc.updateMetricsFromUpload(result)
-	
+
 	return result.DescriptorCID, nil
 }
 
@@ -366,10 +366,10 @@ func (sc *SystemCoordinator) UploadFile(reader io.Reader, filename string) (stri
 func (sc *SystemCoordinator) DownloadFile(descriptorCID string) (io.Reader, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
-	
+
 	// Update metrics
 	sc.systemMetrics.TotalDownloads++
-	
+
 	// Mix download request with cover traffic
 	ctx := context.Background()
 	mixedResult, err := sc.requestMixer.SubmitRequest(ctx, descriptorCID, 1)
@@ -381,7 +381,7 @@ func (sc *SystemCoordinator) DownloadFile(descriptorCID string) (io.Reader, erro
 		}
 		return bytes.NewReader(data), nil
 	}
-	
+
 	// Use mixed result for download
 	if mixedResult.Success && mixedResult.Data != nil {
 		// Parse descriptor and download file
@@ -391,7 +391,7 @@ func (sc *SystemCoordinator) DownloadFile(descriptorCID string) (io.Reader, erro
 		}
 		return bytes.NewReader(data), nil
 	}
-	
+
 	return nil, fmt.Errorf("download failed")
 }
 
@@ -399,10 +399,10 @@ func (sc *SystemCoordinator) DownloadFile(descriptorCID string) (io.Reader, erro
 func (sc *SystemCoordinator) GetSystemMetrics() *SystemMetrics {
 	sc.mu.RLock()
 	defer sc.mu.RUnlock()
-	
+
 	// Calculate current metrics
 	metrics := *sc.systemMetrics
-	
+
 	// Get reuse statistics
 	if sc.reuseClient != nil {
 		reuseStats := sc.reuseClient.GetReuseStatistics()
@@ -412,7 +412,7 @@ func (sc *SystemCoordinator) GetSystemMetrics() *SystemMetrics {
 			}
 		}
 	}
-	
+
 	// Get cover traffic statistics
 	if sc.coverTraffic != nil {
 		coverStats := sc.coverTraffic.GetMetrics()
@@ -420,14 +420,20 @@ func (sc *SystemCoordinator) GetSystemMetrics() *SystemMetrics {
 			metrics.CoverTrafficRatio = coverStats.NoiseRatioAchieved
 		}
 	}
-	
-	// Calculate storage efficiency
+
+	// Calculate storage efficiency from real metrics
 	if sc.noisefsClient != nil {
-		// Storage efficiency would be calculated from actual metrics
-		// For now, use a placeholder
-		metrics.StorageEfficiency = 0.85
+		clientMetrics := sc.noisefsClient.GetMetrics()
+		if clientMetrics.BytesStoredIPFS > 0 {
+			// Calculate efficiency as ratio of original bytes to stored bytes
+			// 1.0 = perfect efficiency, <1.0 = storage overhead exists
+			metrics.StorageEfficiency = float64(clientMetrics.BytesUploadedOriginal) / float64(clientMetrics.BytesStoredIPFS)
+		} else {
+			// No data uploaded yet
+			metrics.StorageEfficiency = 0.0
+		}
 	}
-	
+
 	return &metrics
 }
 
@@ -437,17 +443,17 @@ func (sc *SystemCoordinator) Shutdown() error {
 	if sc.relayPool != nil {
 		sc.relayPool.Stop()
 	}
-	
+
 	if sc.coverTraffic != nil {
 		sc.coverTraffic.Stop()
 	}
-	
+
 	if sc.requestMixer != nil {
 		sc.requestMixer.Stop()
 	}
-	
+
 	// Storage manager cleanup would go here
-	
+
 	return nil
 }
 
@@ -455,22 +461,22 @@ func (sc *SystemCoordinator) Shutdown() error {
 
 func (sc *SystemCoordinator) calculatePrivacyScore(result *reuse.UploadResult) float64 {
 	score := 0.7 // Base score
-	
+
 	// Add points for reuse
 	if result.ReuseProof != nil {
 		score += 0.1
 	}
-	
+
 	// Add points for public domain mixing
 	if result.MixingPlan != nil && result.MixingPlan.PublicDomainBlocks > 0 {
 		score += 0.1
 	}
-	
+
 	// Add points for cover traffic
 	if sc.coverTraffic != nil && sc.coverTraffic.GetMetrics().TotalCoverRequests > 0 {
 		score += 0.1
 	}
-	
+
 	return score
 }
 
@@ -478,6 +484,6 @@ func (sc *SystemCoordinator) updateMetricsFromUpload(result *reuse.UploadResult)
 	if result.MixingPlan != nil {
 		sc.systemMetrics.TotalBlocks += int64(result.MixingPlan.TotalBlocks)
 	}
-	
+
 	sc.systemMetrics.PrivacyScore = sc.calculatePrivacyScore(result)
 }
