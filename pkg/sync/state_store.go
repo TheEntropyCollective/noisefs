@@ -21,7 +21,9 @@ type SyncStateStore struct {
 // NewSyncStateStore creates a new SyncStateStore
 func NewSyncStateStore(stateDir string) (*SyncStateStore, error) {
 	if err := os.MkdirAll(stateDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create state directory: %w", err)
+		// Sanitize error to remove potential path information
+		sanitizedErr := security.SanitizeErrorForUser(err, "")
+		return nil, fmt.Errorf("failed to create state directory: %w", sanitizedErr)
 	}
 
 	return &SyncStateStore{
@@ -46,7 +48,9 @@ func (s *SyncStateStore) SaveState(syncID string, state *SyncState) error {
 	}
 
 	if err := os.WriteFile(stateFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write sync state file: %w", err)
+		// Sanitize error to remove potential path information
+		sanitizedErr := security.SanitizeErrorForUser(err, "")
+		return fmt.Errorf("failed to write sync state file: %w", sanitizedErr)
 	}
 
 	return nil
@@ -71,7 +75,9 @@ func (s *SyncStateStore) LoadState(syncID string) (*SyncState, error) {
 
 	data, err := os.ReadFile(stateFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read sync state file: %w", err)
+		// Sanitize error to remove potential path information
+		sanitizedErr := security.SanitizeErrorForUser(err, "")
+		return nil, fmt.Errorf("failed to read sync state file: %w", sanitizedErr)
 	}
 
 	var state SyncState

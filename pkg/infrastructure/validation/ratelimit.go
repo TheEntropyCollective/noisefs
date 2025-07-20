@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	
+	"github.com/TheEntropyCollective/noisefs/pkg/security"
 )
 
 // RateLimiter provides rate limiting functionality
@@ -88,7 +90,9 @@ func (rl *RateLimiter) CheckLimit(r *http.Request) error {
 	
 	// Check if client is banned
 	if now.Before(client.BannedUntil) {
-		return fmt.Errorf("IP %s is temporarily banned", ip)
+		// Sanitize IP address in error message
+		sanitizedIP := security.SanitizeString(ip, "", false)
+		return fmt.Errorf("IP %s is temporarily banned", sanitizedIP)
 	}
 	
 	// Reset counters if needed
@@ -104,7 +108,9 @@ func (rl *RateLimiter) CheckLimit(r *http.Request) error {
 	
 	// Check concurrent requests
 	if client.ConcurrentRequests >= rl.config.MaxConcurrent {
-		return fmt.Errorf("too many concurrent requests from IP %s", ip)
+		// Sanitize IP address in error message
+		sanitizedIP := security.SanitizeString(ip, "", false)
+		return fmt.Errorf("too many concurrent requests from IP %s", sanitizedIP)
 	}
 	
 	// Check rate limits
@@ -113,11 +119,15 @@ func (rl *RateLimiter) CheckLimit(r *http.Request) error {
 		if client.RequestsThisMinute > rl.config.RequestsPerMinute*2 {
 			client.BannedUntil = now.Add(rl.config.BanDuration)
 		}
-		return fmt.Errorf("rate limit exceeded for IP %s (requests per minute)", ip)
+		// Sanitize IP address in error message
+		sanitizedIP := security.SanitizeString(ip, "", false)
+		return fmt.Errorf("rate limit exceeded for IP %s (requests per minute)", sanitizedIP)
 	}
 	
 	if client.RequestsThisHour >= rl.config.RequestsPerHour {
-		return fmt.Errorf("rate limit exceeded for IP %s (requests per hour)", ip)
+		// Sanitize IP address in error message
+		sanitizedIP := security.SanitizeString(ip, "", false)
+		return fmt.Errorf("rate limit exceeded for IP %s (requests per hour)", sanitizedIP)
 	}
 	
 	// Allow request - increment counters

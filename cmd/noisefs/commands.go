@@ -9,8 +9,12 @@ import (
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
+	"github.com/TheEntropyCollective/noisefs/pkg/security"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 )
+
+// Global verbose flag for debugging
+var globalVerbose bool
 
 // handleSubcommand handles various NoiseFS subcommands
 func handleSubcommand(cmd string, args []string) {
@@ -43,19 +47,45 @@ func handleSubcommand(cmd string, args []string) {
 	}
 }
 
+// handleError handles error display with optional sanitization
+func handleError(err error, context string, exit bool) {
+	if err == nil {
+		return
+	}
+	
+	var displayErr error
+	if globalVerbose {
+		// Verbose mode: preserve more context while still sanitizing
+		displayErr = security.SanitizeErrorForDebug(err, context)
+	} else {
+		// Normal mode: conservative sanitization
+		displayErr = security.SanitizeErrorForUser(err, context)
+	}
+	
+	fmt.Fprintf(os.Stderr, "Error: %v\n", displayErr)
+	if exit {
+		os.Exit(1)
+	}
+}
+
 // handleLsCommand handles the 'ls' subcommand
 func handleLsCommand(args []string) {
 	var (
 		configFile = flag.String("config", "", "Configuration file path")
 		quiet      = flag.Bool("quiet", false, "Minimal output")
 		jsonOutput = flag.Bool("json", false, "Output in JSON format")
+		verbose    = flag.Bool("verbose", false, "Enable verbose error messages for debugging")
 	)
 	
 	fs := flag.NewFlagSet("ls", flag.ExitOnError)
 	fs.StringVar(configFile, "config", "", "Configuration file path")
 	fs.BoolVar(quiet, "quiet", false, "Minimal output")
 	fs.BoolVar(jsonOutput, "json", false, "Output in JSON format")
+	fs.BoolVar(verbose, "verbose", false, "Enable verbose error messages for debugging")
 	fs.Parse(args)
+	
+	// Set global verbose flag
+	globalVerbose = *verbose
 
 	if fs.NArg() < 1 {
 		fmt.Fprintf(os.Stderr, "Usage: noisefs ls <directory-cid>\n")
@@ -67,22 +97,19 @@ func handleLsCommand(args []string) {
 	// Load configuration
 	cfg, err := loadConfig(*configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
+		handleError(fmt.Errorf("failed to load config: %w", err), *configFile, true)
 	}
 
 	// Initialize storage manager
 	storageManager, err := initializeStorageManager(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize storage: %v\n", err)
-		os.Exit(1)
+		handleError(fmt.Errorf("failed to initialize storage: %w", err), "", true)
 	}
 	defer storageManager.Stop(nil)
 
 	err = lsCommand([]string{directoryCID}, storageManager, *quiet, *jsonOutput)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ls command failed: %v\n", err)
-		os.Exit(1)
+		handleError(fmt.Errorf("ls command failed: %w", err), directoryCID, true)
 	}
 }
 

@@ -39,7 +39,7 @@ func TestValidator(t *testing.T) {
 				Nonce:      "abc123def456",
 			},
 			wantErr: true,
-			errMsg:  "missing version",
+			errMsg:  "missing required 'version' field",
 		},
 		{
 			name: "invalid descriptor",
@@ -65,7 +65,7 @@ func TestValidator(t *testing.T) {
 				Nonce:      "abc123def456",
 			},
 			wantErr: true,
-			errMsg:  "invalid hash length",
+			errMsg:  "invalid topic hash length",
 		},
 		{
 			name: "TTL too long",

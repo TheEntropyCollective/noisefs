@@ -202,13 +202,15 @@ func (se *SyncEngine) StopSync(syncID string) error {
 
 	// Remove from monitoring
 	if err := se.fileWatcher.RemovePath(session.LocalPath); err != nil {
-		// Log error but continue
-		fmt.Printf("Warning: failed to remove local path from watcher: %v\n", err)
+		// Log error but continue - sanitize for user display
+		sanitizedErr := security.SanitizeErrorForUser(err, session.LocalPath)
+		fmt.Printf("Warning: failed to remove local path from watcher: %v\n", sanitizedErr)
 	}
 
 	if err := se.remoteMonitor.RemovePath(session.RemotePath); err != nil {
-		// Log error but continue
-		fmt.Printf("Warning: failed to remove remote path from monitor: %v\n", err)
+		// Log error but continue - sanitize for user display
+		sanitizedErr := security.SanitizeErrorForUser(err, session.RemotePath)
+		fmt.Printf("Warning: failed to remove remote path from monitor: %v\n", sanitizedErr)
 	}
 
 	// Update session status
@@ -649,8 +651,9 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 	// 2. Update the directory manifest with the new file entry
 	// 3. Store the updated manifest
 	
-	// Simulate successful operation
-	fmt.Printf("Uploaded file: %s (manifest update pending)\n", op.LocalPath)
+	// Simulate successful operation - sanitize path for user display
+	sanitizedPath := security.SanitizeString(op.LocalPath, session.LocalPath, false)
+	fmt.Printf("Uploaded file: %s (manifest update pending)\n", sanitizedPath)
 	
 	return nil
 }
@@ -680,7 +683,9 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 	// 3. Find the specific file entry in the manifest
 	// 4. Download and reconstruct the file locally
 	
-	fmt.Printf("Downloaded file: %s (remote manifest integration pending)\n", op.LocalPath)
+	// Sanitize path for user display
+	sanitizedPath := security.SanitizeString(op.LocalPath, session.LocalPath, false)
+	fmt.Printf("Downloaded file: %s (remote manifest integration pending)\n", sanitizedPath)
 	
 	return nil
 }
@@ -709,7 +714,9 @@ func (se *SyncEngine) executeDelete(session *SyncSession, op SyncOperation) erro
 	// 1. Load the current directory manifest
 	// 2. Remove the file entry from the manifest
 	// 3. Store the updated manifest to NoiseFS
-	fmt.Printf("Deleted file: %s (manifest update pending)\n", op.LocalPath)
+	// Sanitize path for user display
+	sanitizedPath := security.SanitizeString(op.LocalPath, session.LocalPath, false)
+	fmt.Printf("Deleted file: %s (manifest update pending)\n", sanitizedPath)
 	
 	return nil
 }
@@ -736,7 +743,9 @@ func (se *SyncEngine) executeCreateDir(session *SyncSession, op SyncOperation) e
 	// 1. Load the parent directory manifest
 	// 2. Add a directory entry to the manifest  
 	// 3. Store the updated manifest to NoiseFS
-	fmt.Printf("Created directory: %s (manifest update pending)\n", op.LocalPath)
+	// Sanitize path for user display
+	sanitizedPath := security.SanitizeString(op.LocalPath, session.LocalPath, false)
+	fmt.Printf("Created directory: %s (manifest update pending)\n", sanitizedPath)
 	
 	return nil
 }
@@ -765,7 +774,9 @@ func (se *SyncEngine) executeDeleteDir(session *SyncSession, op SyncOperation) e
 	// 1. Load the parent directory manifest
 	// 2. Remove the directory entry from the manifest
 	// 3. Store the updated manifest to NoiseFS
-	fmt.Printf("Deleted directory: %s (manifest update pending)\n", op.LocalPath)
+	// Sanitize path for user display
+	sanitizedPath := security.SanitizeString(op.LocalPath, session.LocalPath, false)
+	fmt.Printf("Deleted directory: %s (manifest update pending)\n", sanitizedPath)
 	
 	return nil
 }

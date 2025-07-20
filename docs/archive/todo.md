@@ -1,8 +1,319 @@
 # NoiseFS Development Todo
 
-## Current Milestone: PKG/CORE CLEANUP & REFACTORING - 🔴 CRITICAL SYSTEM MAINTENANCE
+## Current Milestone: COMPLIANCE VALIDATION CONSOLIDATION - 🔴 CRITICAL SECURITY PRIORITY
 
-**Status**: 📋 **REVISED PLAN** - Ready for Implementation
+**Status**: 📋 **PLANNING COMPLETE** - Ready for Implementation
+
+**Summary**: Critical consolidation of redundant DMCA validation logic in NoiseFS compliance package. Analysis revealed production code vulnerable to XSS, SQL injection, and path traversal attacks while security validation patterns exist only in test stubs. Multiple duplicate implementations across modules create maintenance burden and inconsistent validation behavior.
+
+**CRITICAL SECURITY VULNERABILITIES IDENTIFIED**:
+- Email validation duplicated in processor.go and validation_test.go (identical implementations)
+- CID validation scattered across modules with different approaches and validation criteria
+- Security validation patterns (XSS, SQL injection, path traversal) exist only in test stubs
+- Production code in processor.go and database.go lacks comprehensive security checks
+- Counter-notice validation in database.go missing security protections present in validation_test.go
+- No centralized validation architecture - each module implements its own validation
+
+## Compliance Validation Consolidation Implementation Plan
+
+### Sprint 1: Security-First Foundation (Days 1-2) - Create Centralized ValidationEngine
+**Priority:** CRITICAL - Address immediate security vulnerability in production code
+
+**Tasks:**
+- [ ] Task 1.1: Create pkg/compliance/validation/ package structure (30 min)
+- [ ] Task 1.2: Extract security patterns from validation_test.go (2 hours)
+  - Extract XSS detection patterns (containsXSS function and payloads)
+  - Extract SQL injection patterns (containsSQLInjection function and payloads)  
+  - Extract path traversal patterns (containsPathTraversal function and payloads)
+  - Extract character validation patterns (isValidUTF8, containsControlCharacters)
+- [ ] Task 1.3: Create pkg/compliance/validation/validator.go (2.5 hours)
+  - Implement ValidationEngine interface with comprehensive validation methods
+  - Create ValidationError and ValidationResult types with detailed error reporting
+  - Implement security validation methods using extracted patterns
+  - Add email, CID, and phone number validation with security checks
+- [ ] Task 1.4: Create pkg/compliance/validation/validator_test.go (2 hours)
+  - Migrate relevant test patterns from validation_test.go
+  - Add integration tests for ValidationEngine interface
+  - Create performance benchmarks for validation operations
+  - Test all security validation patterns comprehensively
+- [ ] Task 1.5: Create ValidationContext for field-specific validation (1 hour)
+  - Implement context-aware validation (AllowHTML, MaxLength, RequiredField flags)
+  - Add field type awareness for different validation rules
+  - Create validation middleware patterns for HTTP endpoints
+
+**Success Criteria:** 
+- All security patterns migrated from test stubs to production ValidationEngine
+- Comprehensive ValidationEngine interface with consistent error handling
+- Security validation protects against XSS, SQL injection, and path traversal
+- Performance benchmarks show <5% overhead for validation operations
+- Foundation ready for processor.go and database.go migration
+
+### Sprint 2: Core DMCA Validation Migration (Days 3-4) - Migrate processor.go
+**Priority:** HIGH IMPACT - Protect core DMCA processing workflow with centralized validation
+
+**Tasks:**
+- [ ] Task 2.1: Migrate processor.go email validation (1 hour)
+  - Replace `isValidEmail()` function in processor.go with ValidationEngine call
+  - Remove duplicate email validation logic  
+  - Update DMCANoticeValidator to use ValidationEngine for email validation
+  - Add comprehensive security checks for email fields (XSS, injection prevention)
+- [ ] Task 2.2: Migrate processor.go CID validation (1.5 hours)  
+  - Replace `isValidCID()` function in processor.go with ValidationEngine call
+  - Consolidate CID validation logic with enhanced security checks
+  - Add path traversal protection for CID fields
+  - Update validation to include prefix validation from validation_test.go patterns
+- [ ] Task 2.3: Enhance DMCA notice validation security (3 hours)
+  - Replace `ValidateNotice()` method to use comprehensive ValidationEngine
+  - Add XSS protection for all text fields (RequestorName, CopyrightWork, Description, etc.)
+  - Add SQL injection protection for all user input fields
+  - Add length limits and character encoding validation for all fields
+  - Implement comprehensive error reporting with ValidationResult
+- [ ] Task 2.4: Add security validation to processor workflows (2 hours)
+  - Update `ProcessDMCANotice()` to use ValidationEngine for input validation
+  - Add security checks to counter-notice processing
+  - Validate URL fields for path traversal and malicious content
+  - Add comprehensive input sanitization throughout processor workflows
+- [ ] Task 2.5: Integration testing and validation (1.5 hours)
+  - Test processor.go integration with ValidationEngine
+  - Verify no regression in existing DMCA processing functionality
+  - Performance testing to ensure <5% overhead from enhanced validation
+  - Integration testing with existing compliance workflows
+
+**Success Criteria:**
+- All duplicate validation logic removed from processor.go  
+- Comprehensive security protection against XSS, SQL injection, path traversal
+- No functional regression in DMCA processing workflows
+- Performance impact <5% with enhanced security validation
+- ValidationEngine integration provides consistent error handling
+
+### Sprint 3: Database & Counter-Notice Migration (Days 5-6) - Migrate database.go  
+**Priority:** HIGH IMPACT - Add missing security checks to counter-notice processing
+
+**Tasks:**
+- [ ] Task 3.1: Migrate database.go counter-notice validation (2 hours)
+  - Replace basic `validateCounterNotice()` function with ValidationEngine integration
+  - Add comprehensive security validation for all counter-notice fields
+  - Implement XSS protection for UserName, UserEmail, SwornStatement, GoodFaithBelief
+  - Add SQL injection protection for all user input fields in counter-notices
+  - Add path traversal protection for UserID and other identifier fields
+- [ ] Task 3.2: Enhance database validation security (2.5 hours)
+  - Add comprehensive input validation to all database operations
+  - Implement security checks for TakedownRecord fields
+  - Add validation for ViolationRecord and AuditLogEntry user inputs
+  - Ensure all user-controlled data passes through ValidationEngine
+  - Add character encoding and length validation for all text fields
+- [ ] Task 3.3: Update database error handling (1.5 hours)
+  - Replace basic error messages with ValidationResult structured errors  
+  - Implement consistent error reporting across all database operations
+  - Add detailed validation error context for debugging and user feedback
+  - Ensure error messages don't leak sensitive information
+- [ ] Task 3.4: Database integration testing (2 hours)
+  - Test database.go integration with ValidationEngine
+  - Verify counter-notice validation meets security requirements
+  - Test database operations with malicious input to ensure protection
+  - Performance testing to ensure database operations maintain speed
+- [ ] Task 3.5: Remove duplicate validation patterns (1 hour)
+  - Clean up any remaining duplicate validation logic in database.go
+  - Ensure all validation goes through centralized ValidationEngine
+  - Update imports and dependencies to use validation package
+  - Final verification that no security gaps remain
+
+**Success Criteria:**
+- All counter-notice validation uses comprehensive SecurityEngine protection
+- Database operations protected against XSS, SQL injection, path traversal
+- No duplicate validation logic remaining in database.go
+- Consistent error handling and reporting across all database operations
+- Performance impact <5% with enhanced security validation
+
+### Sprint 4: Simulation & Comprehensive Integration (Days 7-8)
+**Priority:** Final modules and complete system validation - depends on all previous modules
+
+**Day 7 Tasks:**
+- [ ] Task 5.1: Court Simulation Tests (3 hours) - TestCourtSimulation_DMCADefense, TestCourtSimulation_CounterNoticeScenario, TestCourtSimulation_RepeatInfringerCase, TestSimulateExpertTestimony_TechnicalExpert, TestSimulateJuryDecision_VariousScenarios
+- [ ] Task 5.2: Test Case Generation Tests (2.5 hours) - TestGenerateTestCase_DMCAScenario, TestGenerateTestCase_CounterNoticeScenario, TestGenerateTestCase_EdgeCaseScenarios, TestTestCaseValidation_LegalAccuracy, TestTestCaseExport_MultipleFormats
+- [ ] Task 5.3: Legal Scenario Integration Tests (2 hours) - TestLegalScenario_EndToEndWorkflow, TestLegalScenario_MultipleJurisdictions, TestLegalScenario_ComplexCases, TestScenarioValidation_OutcomePrediction
+
+**Day 8 Tasks:**
+- [ ] Task 5.4: Cross-Module Integration Tests (3 hours) - TestCompleteComplianceWorkflow_DMCAToResolution, TestCompleteComplianceWorkflow_CounterNoticeFlow, TestCompleteComplianceWorkflow_AuditTrail, TestCompleteComplianceWorkflow_DocumentGeneration, TestCompleteComplianceWorkflow_NotificationDelivery
+- [ ] Task 5.5: Performance & Load Testing (2.5 hours) - BenchmarkCompleteWorkflow_HighVolume, BenchmarkAuditLogging_ConcurrentWrites, BenchmarkNotificationDelivery_BulkProcessing, TestSystemStability_ContinuousLoad, TestResourceUsage_MemoryAndCPU
+- [ ] Task 5.6: Final Validation & Documentation (2 hours) - TestCoverageValidation_AllModules, TestIntegrationValidation_CrossModuleFunctionality, TestPerformanceValidation_BenchmarkTargets, TestErrorHandling_ComprehensiveScenarios
+- [ ] Task 5.7: System Health & Regression Prevention (1.5 hours) - TestSystemHealth_ContinuousOperation, TestRegressionPrevention_ExistingFunctionality, TestErrorRecovery_SystemResilience
+
+**Success Criteria:** court_simulation_test.go and test_cases_test.go achieve >80% coverage, comprehensive integration across all modules validated, performance under realistic load confirmed, complete system validation with end-to-end legal workflows
+
+## Implementation Guidelines & Success Criteria
+
+### Technical Success Metrics
+- [ ] All 9 compliance modules achieve >80% test coverage
+- [ ] 0 regressions in existing functionality
+- [ ] All tests follow TDD methodology (written first, fail initially)
+- [ ] Integration tests validate cross-module functionality
+- [ ] Performance benchmarks establish baselines for all critical operations
+- [ ] Concurrent access scenarios validated and thread-safe
+
+### Quality Assurance Standards
+- [ ] All tests follow patterns from review_generator_test.go
+- [ ] Comprehensive error handling with realistic error scenarios
+- [ ] Table-driven tests for complex validation scenarios
+- [ ] Benchmark tests for performance-critical operations
+- [ ] Realistic legal test data based on actual DMCA procedures
+- [ ] Clear test naming conventions and documentation
+
+### Legal Compliance Validation
+- [ ] DMCA workflow tests cover complete legal procedures
+- [ ] Audit trail integrity maintained throughout all operations
+- [ ] Document generation meets legal formatting requirements
+- [ ] Counter-notice procedures follow statutory requirements
+- [ ] Notification timing and content meet legal standards
+
+### Development Standards
+- Follow TDD strictly: Write failing test → Implement minimal code → Refactor
+- Git commit after each completed task
+- Update docs/todo.md task completion status after each task
+- Validate integration with existing code after each module
+- Performance benchmark creation concurrent with functionality tests
+
+### Sprint Validation Gates
+- **Day 2**: Sprint 1 foundation validation (processor + database tests pass)
+- **Day 4**: Sprint 2 parallel streams validation (audit + notifications integration)
+- **Day 6**: Sprint 3 legal framework validation (documents + precedents working)
+- **Day 8**: Complete system integration and performance validation
+
+### Final Deliverables
+**Test Suites Created (9 files):**
+1. processor_test.go - DMCA processing workflows
+2. database_test.go - Compliance data persistence  
+3. audit_test.go - Legal audit trail validation
+4. notifications_test.go - User notification systems
+5. legal_docs_test.go - Legal document generation
+6. legal_framework_test.go - Legal framework validation
+7. precedents_test.go - Legal precedent analysis
+8. court_simulation_test.go - Court proceeding simulation
+9. test_cases_test.go - Test data generation
+
+**Supporting Documentation:**
+- Test coverage reports for all modules (>80% verified)
+- Performance benchmark baselines for critical operations
+- Integration test validation matrix
+- Regression prevention test suite for continuous integration
+
+**CRITICAL FUNCTIONALITY GAPS**: Search infrastructure exists but key integration missing:
+- Search CLI command shows "implementation pending" in commands.go line 31-33
+- Mature pkg/search/ infrastructure needs CLI integration
+- State persistence optimization needed (database-style updates vs full rewrites)
+- FileIndexInterface integration requires validation
+- Performance optimization opportunities in SearchManager cache state
+
+## Agent C Search & Performance Systems Implementation Plan
+
+### Sprint 1: Search Infrastructure Foundation & Enhancement (Days 1-2)
+**Goal**: Validate and enhance existing search infrastructure for production readiness
+
+**Tasks**:
+- [ ] Task 1.1: Infrastructure Validation - Review pkg/search/ components comprehensively
+- [ ] Task 1.2: Test SearchManager, ContentExtractor, and caching systems
+- [ ] Task 1.3: Validate Bleve integration and index operations
+- [ ] Task 1.4: FileIndexInterface Integration Analysis - Investigate integration patterns
+- [ ] Task 1.5: Test search manager initialization with file index
+- [ ] Task 1.6: Search Configuration Integration - Integrate with main NoiseFS configuration
+- [ ] Task 1.7: Content Extraction Enhancement - Optimize for NoiseFS storage patterns
+
+**Success Criteria**:
+- Search infrastructure validated, optimized, and ready for CLI integration
+- FileIndexInterface integration complexity assessed
+- Configuration integration working
+- Content extraction enhanced for encrypted files
+
+### Sprint 2: Search CLI Command Implementation (Days 3-4)
+**Goal**: Implement functional search CLI command replacing "implementation pending" placeholder
+
+**Tasks**:
+- [ ] Task 2.1: CLI Command Structure - Implement handleSearchCommand() following established patterns
+- [ ] Task 2.2: Add proper flag parsing for search options (query, format, filters)
+- [ ] Task 2.3: Search Manager Integration - Initialize SearchManager with FileIndex and storage
+- [ ] Task 2.4: Implement searchCommand() business logic function
+- [ ] Task 2.5: Output Format Implementation - Add JSON, quiet, verbose output modes
+- [ ] Task 2.6: Advanced Search Features - Implement metadata search with filters
+- [ ] Task 2.7: Add directory scoping, recursive search, highlighting, and preview functionality
+
+**Success Criteria**:
+- Functional search command operational, replaces placeholder
+- CLI follows established patterns from handleLsCommand/handleShareDirectoryCommand
+- JSON, quiet, and verbose output modes working
+- Advanced search features operational
+
+### Sprint 3: State Persistence Optimization & Performance Enhancement (Day 5)
+**Goal**: Optimize state persistence patterns and validate overall performance
+
+**Tasks**:
+- [ ] Task 3.1: State Persistence Analysis - Analyze current SearchManager persistence patterns
+- [ ] Task 3.2: Identify I/O thrashing issues with full state rewrites
+- [ ] Task 3.3: Database-Style Updates Implementation - Implement incremental cache updates
+- [ ] Task 3.4: Add write-through caching with periodic persistence
+- [ ] Task 3.5: Search Performance Benchmarking - Create performance benchmarks for search operations
+- [ ] Task 3.6: Integration Performance Testing - Test search CLI command performance with large indices
+- [ ] Task 3.7: Validate no regression in overall NoiseFS performance
+
+**Success Criteria**:
+- State persistence I/O reduced by >50% from current baseline
+- Search response time <2 seconds for typical queries
+- No memory leaks during continuous search operations
+- Cache hit rate >80% for repeated search queries
+
+## Risk Management & Contingency Planning
+
+**High-Priority Risks & Mitigation Strategies**:
+
+**Risk 1: FileIndexInterface Integration Complexity** (Probability: Medium, Impact: High)
+- **Early Detection**: Fail fast by testing FileIndex integration on Day 1 AM
+- **Mitigation**: Implement metadata-only search mode that doesn't require file content
+- **Fallback**: Create mock FileIndex implementation for development and testing
+
+**Risk 2: Performance Regression from Optimization** (Probability: Low, Impact: High)
+- **Early Detection**: Continuous benchmarking during optimization work
+- **Mitigation**: Implement optimization behind feature flags with rollback capability
+- **Fallback**: Revert to existing state persistence patterns if optimization fails
+
+**Risk 3: CLI Integration Breaks Existing Patterns** (Probability: Low, Impact: Medium)
+- **Early Detection**: Code review against existing commands during implementation
+- **Mitigation**: Follow handleLsCommand pattern exactly, adapt for search specifics
+- **Fallback**: Basic search command with minimal flags if complex patterns fail
+
+## Implementation Strategy
+
+**Technical Approach**:
+- Follow Test-Driven Development with incremental validation at each stage
+- Use Progressive Implementation approach for early value delivery and risk mitigation
+- Leverage existing mature pkg/search/ infrastructure (SearchManager, ContentExtractor, Bleve integration)
+- Follow established CLI patterns from handleLsCommand/handleShareDirectoryCommand for consistency
+- Implement optimization behind feature flags with rollback capability
+
+**Success Criteria**:
+
+**Functional Success**:
+- ✅ Search command replaces "implementation pending" in commands.go
+- ✅ Basic text search operational with query string input
+- ✅ Metadata search with filters (size, date, type) functional
+- ✅ JSON, quiet, and verbose output modes working
+- ✅ Error handling consistent with other NoiseFS commands
+- ✅ Integration with NoiseFS storage manager confirmed
+
+**Performance Success**:
+- ✅ Search response time <2 seconds for typical queries
+- ✅ State persistence I/O reduced by >50% from current baseline
+- ✅ No memory leaks during continuous search operations
+- ✅ Cache hit rate >80% for repeated search queries
+- ✅ No performance regression in core NoiseFS operations
+
+**Integration Success**:
+- ✅ CLI follows established patterns from existing commands
+- ✅ Configuration loading integrated with main NoiseFS config
+- ✅ FileIndexInterface integration working smoothly
+- ✅ Compatible with existing search indices and caches
+
+## Previous Milestone: PKG/CORE CLEANUP & REFACTORING - 🟡 DEFERRED
+
+**Status**: 📋 **REVISED PLAN** - Deferred for Infrastructure Priority
 
 **Summary**: Comprehensive cleanup of critical issues found in code review of pkg/core directory. Addresses build-breaking errors, architectural problems, security issues, and code quality concerns that are blocking production readiness.
 
