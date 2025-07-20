@@ -80,10 +80,10 @@ func NewValidator(config *ValidationConfig) *Validator {
 func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 	// Check version
 	if ann.Version == "" {
-		return fmt.Errorf("missing version")
+		return fmt.Errorf("announcement missing required 'version' field - please set to '%s'", DefaultVersion)
 	}
-	if ann.Version != "1.0" {
-		return fmt.Errorf("unsupported version: %s", ann.Version)
+	if ann.Version != DefaultVersion {
+		return fmt.Errorf("unsupported version '%s' - only version '%s' is currently supported", ann.Version, DefaultVersion)
 	}
 	
 	// Validate descriptor
@@ -129,10 +129,10 @@ func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 	
 	// Validate nonce
 	if ann.Nonce == "" {
-		return fmt.Errorf("missing nonce")
+		return fmt.Errorf("missing nonce - please provide a random string of %d-%d characters for replay protection", MinNonceLength, MaxNonceLength)
 	}
 	if len(ann.Nonce) < MinNonceLength || len(ann.Nonce) > MaxNonceLength {
-		return fmt.Errorf("nonce length must be %d-%d characters", MinNonceLength, MaxNonceLength)
+		return fmt.Errorf("invalid nonce length (%d characters) - must be %d-%d characters for security (current: '%s')", len(ann.Nonce), MinNonceLength, MaxNonceLength, ann.Nonce)
 	}
 	
 	// Validate peer ID if present
@@ -153,23 +153,23 @@ func (v *Validator) ValidateAnnouncement(ann *Announcement) error {
 // validateDescriptor validates a descriptor CID
 func (v *Validator) validateDescriptor(descriptor string) error {
 	if descriptor == "" {
-		return fmt.Errorf("empty descriptor")
+		return fmt.Errorf("descriptor CID is required - please provide a valid IPFS content identifier")
 	}
 	
 	if len(descriptor) > v.config.MaxDescriptorLength {
-		return fmt.Errorf("descriptor too long: %d > %d", len(descriptor), v.config.MaxDescriptorLength)
+		return fmt.Errorf("descriptor CID too long (%d characters) - maximum allowed is %d characters", len(descriptor), v.config.MaxDescriptorLength)
 	}
 	
 	// Basic CID validation (should start with Qm or bafy)
 	if !strings.HasPrefix(descriptor, "Qm") && !strings.HasPrefix(descriptor, "bafy") {
-		return fmt.Errorf("invalid CID format")
+		return fmt.Errorf("invalid CID format '%s' - must start with 'Qm' (CIDv0) or 'bafy' (CIDv1)", descriptor)
 	}
 	
 	// Check for valid base58/base32 characters
 	if strings.HasPrefix(descriptor, "Qm") {
 		// Base58 validation
 		if !isValidBase58(descriptor) {
-			return fmt.Errorf("invalid base58 encoding")
+			return fmt.Errorf("invalid base58 encoding in CID '%s' - contains invalid characters", descriptor)
 		}
 	}
 	
@@ -179,17 +179,17 @@ func (v *Validator) validateDescriptor(descriptor string) error {
 // validateTopicHash validates a topic hash
 func (v *Validator) validateTopicHash(topicHash string) error {
 	if topicHash == "" {
-		return fmt.Errorf("empty topic hash")
+		return fmt.Errorf("topic hash is required - please provide a SHA-256 hash of the topic")
 	}
 	
 	// Should be a hex-encoded SHA-256 hash (64 chars)
 	if len(topicHash) != SHA256HashLength {
-		return fmt.Errorf("invalid hash length: expected %d, got %d", SHA256HashLength, len(topicHash))
+		return fmt.Errorf("invalid topic hash length (%d characters) - must be exactly %d characters (SHA-256 hex)", len(topicHash), SHA256HashLength)
 	}
 	
 	// Validate hex encoding
 	if _, err := hex.DecodeString(topicHash); err != nil {
-		return fmt.Errorf("invalid hex encoding: %w", err)
+		return fmt.Errorf("invalid topic hash '%s' - must contain only hexadecimal characters (0-9, a-f): %w", topicHash, err)
 	}
 	
 	return nil
@@ -198,20 +198,24 @@ func (v *Validator) validateTopicHash(topicHash string) error {
 // validateTimestamp validates announcement timestamp
 func (v *Validator) validateTimestamp(timestamp int64) error {
 	if timestamp <= 0 {
-		return fmt.Errorf("invalid timestamp: %d", timestamp)
+		return fmt.Errorf("invalid timestamp %d - must be a positive Unix timestamp (seconds since epoch)", timestamp)
 	}
 	
 	now := time.Now().Unix()
 	
 	// Check if too far in the past (older than 1 year)
 	if timestamp < now - MaxTimestampAge {
-		return fmt.Errorf("timestamp too old")
+		oldTime := time.Unix(timestamp, 0)
+		return fmt.Errorf("timestamp too old (%s) - announcements cannot be older than 1 year", oldTime.Format("2006-01-02 15:04:05"))
 	}
 	
 	// Check if too far in the future
 	maxFuture := now + int64(v.config.MaxFutureTime.Seconds())
 	if timestamp > maxFuture {
-		return fmt.Errorf("timestamp too far in future")
+		futureTime := time.Unix(timestamp, 0)
+		maxTime := time.Unix(maxFuture, 0)
+		return fmt.Errorf("timestamp too far in future (%s) - cannot be more than %v ahead of current time (max: %s)", 
+			futureTime.Format("2006-01-02 15:04:05"), v.config.MaxFutureTime, maxTime.Format("2006-01-02 15:04:05"))
 	}
 	
 	return nil
@@ -220,17 +224,17 @@ func (v *Validator) validateTimestamp(timestamp int64) error {
 // validateTTL validates time-to-live
 func (v *Validator) validateTTL(ttl int64) error {
 	if ttl <= 0 {
-		return fmt.Errorf("TTL must be positive")
+		return fmt.Errorf("invalid TTL %d - must be a positive number of seconds (minimum: %v)", ttl, v.config.MinTTL)
 	}
 	
 	ttlDuration := time.Duration(ttl) * time.Second
 	
 	if ttlDuration < v.config.MinTTL {
-		return fmt.Errorf("TTL too short: %s < %s", ttlDuration, v.config.MinTTL)
+		return fmt.Errorf("TTL too short (%v) - minimum allowed is %v (announcements need sufficient time to propagate)", ttlDuration, v.config.MinTTL)
 	}
 	
 	if ttlDuration > v.config.MaxTTL {
-		return fmt.Errorf("TTL too long: %s > %s", ttlDuration, v.config.MaxTTL)
+		return fmt.Errorf("TTL too long (%v) - maximum allowed is %v (prevents resource exhaustion)", ttlDuration, v.config.MaxTTL)
 	}
 	
 	return nil
@@ -242,13 +246,16 @@ func (v *Validator) validateCategory(category string) error {
 		"video":    true,
 		"audio":    true,
 		"document": true,
+		"data":     true,
+		"software": true,
 		"image":    true,
 		"archive":  true,
 		"other":    true,
 	}
 	
 	if !validCategories[category] {
-		return fmt.Errorf("unknown category: %s", category)
+		validList := []string{"video", "audio", "document", "data", "software", "image", "archive", "other"}
+		return fmt.Errorf("invalid category '%s' - must be one of: %v (use 'other' if unsure)", category, validList)
 	}
 	
 	return nil
@@ -265,7 +272,8 @@ func (v *Validator) validateSizeClass(sizeClass string) error {
 	}
 	
 	if !validSizes[sizeClass] {
-		return fmt.Errorf("unknown size class: %s", sizeClass)
+		validList := []string{"tiny (<1MB)", "small (1-10MB)", "medium (10-100MB)", "large (100MB-1GB)", "huge (>1GB)"}
+		return fmt.Errorf("invalid size class '%s' - must be one of: %v", sizeClass, validList)
 	}
 	
 	return nil
@@ -279,13 +287,13 @@ func (v *Validator) validateBloomFilter(bloomStr string) error {
 	
 	// Should be base64 encoded
 	if len(bloomStr) < MinBloomLength {
-		return fmt.Errorf("bloom filter too short")
+		return fmt.Errorf("bloom filter too short (%d characters) - minimum length is %d characters for valid base64 encoding", len(bloomStr), MinBloomLength)
 	}
 	
 	// Try to decode
 	_, err := DecodeBloom(bloomStr)
 	if err != nil {
-		return fmt.Errorf("failed to decode bloom filter: %w", err)
+		return fmt.Errorf("invalid bloom filter encoding '%s' - must be valid base64 encoded bloom filter data: %w", bloomStr, err)
 	}
 	
 	return nil

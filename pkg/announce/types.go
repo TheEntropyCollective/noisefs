@@ -31,6 +31,8 @@ const (
 	CategoryDocument = "document"
 	CategoryData     = "data"
 	CategorySoftware = "software"
+	CategoryImage    = "image"
+	CategoryArchive  = "archive"
 	CategoryOther    = "other"
 )
 
@@ -151,7 +153,8 @@ func GetSizeClass(sizeBytes int64) string {
 func isValidCategory(category string) bool {
 	switch category {
 	case CategoryVideo, CategoryAudio, CategoryDocument, 
-	     CategoryData, CategorySoftware, CategoryOther:
+	     CategoryData, CategorySoftware, CategoryImage,
+	     CategoryArchive, CategoryOther:
 		return true
 	default:
 		return false
