@@ -21,6 +21,14 @@ func TestDefaultConfig(t *testing.T) {
 	if config.Logging.Level != "info" {
 		t.Errorf("Expected default log level info, got %s", config.Logging.Level)
 	}
+
+	if !config.Security.EnableEncryption {
+		t.Error("Expected encryption enabled by default")
+	}
+
+	if !config.Network.TorEnabled {
+		t.Error("Expected Tor enabled by default")
+	}
 }
 
 func TestConfigValidation(t *testing.T) {
@@ -50,10 +58,12 @@ func TestEnvironmentOverrides(t *testing.T) {
 	os.Setenv("NOISEFS_IPFS_API", "test.example.com:5001")
 	os.Setenv("NOISEFS_LOG_LEVEL", "debug")
 	os.Setenv("NOISEFS_READ_ONLY", "true")
+	os.Setenv("NOISEFS_TOR_ENABLED", "false")
 	defer func() {
 		os.Unsetenv("NOISEFS_IPFS_API")
 		os.Unsetenv("NOISEFS_LOG_LEVEL")
 		os.Unsetenv("NOISEFS_READ_ONLY")
+		os.Unsetenv("NOISEFS_TOR_ENABLED")
 	}()
 
 	config := DefaultConfig()
@@ -69,6 +79,10 @@ func TestEnvironmentOverrides(t *testing.T) {
 
 	if !config.FUSE.ReadOnly {
 		t.Error("Environment override failed for read-only flag")
+	}
+
+	if config.Network.TorEnabled {
+		t.Error("Environment override failed for Tor enabled flag")
 	}
 }
 

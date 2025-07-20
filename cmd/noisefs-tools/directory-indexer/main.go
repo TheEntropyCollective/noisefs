@@ -313,7 +313,7 @@ func uploadFile(client *noisefs.Client, filePath, relativePath string, blockSize
 	// Process each block with 3-tuple anonymization
 	for _, dataBlock := range fileBlocks {
 		// Select randomizers
-		rand1, cid1, rand2, cid2, err := client.SelectRandomizers(dataBlock.Size())
+		rand1, cid1, rand2, cid2, _, err := client.SelectRandomizers(context.Background(), dataBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}
@@ -325,7 +325,7 @@ func uploadFile(client *noisefs.Client, filePath, relativePath string, blockSize
 		}
 
 		// Store anonymized block
-		dataCID, err := client.StoreBlockWithCache(anonymizedBlock)
+		dataCID, err := client.StoreBlockWithCache(context.Background(), anonymizedBlock)
 		if err != nil {
 			return "", fmt.Errorf("failed to store block: %w", err)
 		}
@@ -347,7 +347,7 @@ func uploadFile(client *noisefs.Client, filePath, relativePath string, blockSize
 		return "", fmt.Errorf("failed to create descriptor block: %w", err)
 	}
 
-	descriptorCID, err := client.StoreBlockWithCache(descriptorBlock)
+	descriptorCID, err := client.StoreBlockWithCache(context.Background(), descriptorBlock)
 	if err != nil {
 		return "", fmt.Errorf("failed to store descriptor: %w", err)
 	}

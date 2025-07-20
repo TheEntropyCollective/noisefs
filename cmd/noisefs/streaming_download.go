@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -179,19 +180,19 @@ func (p *StreamingDownloadProcessor) fetchStage() {
 			
 			// Fetch data block
 			go func() {
-				dataBlock, err = p.client.RetrieveBlockWithCache(req.dataCID)
+				dataBlock, err = p.client.RetrieveBlockWithCache(context.Background(), req.dataCID)
 				fetchErrors <- err
 			}()
 			
 			// Fetch randomizer 1
 			go func() {
-				randomizer1, err = p.client.RetrieveBlockWithCache(req.randomizer1CID)
+				randomizer1, err = p.client.RetrieveBlockWithCache(context.Background(), req.randomizer1CID)
 				fetchErrors <- err
 			}()
 			
 			// Fetch randomizer 2
 			go func() {
-				randomizer2, err = p.client.RetrieveBlockWithCache(req.randomizer2CID)
+				randomizer2, err = p.client.RetrieveBlockWithCache(context.Background(), req.randomizer2CID)
 				fetchErrors <- err
 			}()
 			

@@ -103,7 +103,8 @@ func TestClient_StoreBlockWithCache(t *testing.T) {
 	}
 	
 	// Store block
-	cid, err := client.StoreBlockWithCache(block)
+	ctx := context.Background()
+	cid, err := client.StoreBlockWithCache(ctx, block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
@@ -133,13 +134,14 @@ func TestClient_RetrieveBlockWithCache(t *testing.T) {
 		t.Fatalf("Failed to create block: %v", err)
 	}
 	
-	cid, err := client.StoreBlockWithCache(block)
+	ctx := context.Background()
+	cid, err := client.StoreBlockWithCache(ctx, block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
 	
 	// Retrieve block
-	retrievedBlock, err := client.RetrieveBlockWithCache(cid)
+	retrievedBlock, err := client.RetrieveBlockWithCache(context.Background(), cid)
 	if err != nil {
 		t.Fatalf("Failed to retrieve block: %v", err)
 	}
@@ -164,7 +166,8 @@ func TestClient_SelectRandomizers(t *testing.T) {
 	
 	// Select randomizers
 	size := 64 * 1024 // 64KB
-	rand1, cid1, rand2, cid2, overhead, err := client.SelectRandomizers(size)
+	ctx := context.Background()
+	rand1, cid1, rand2, cid2, overhead, err := client.SelectRandomizers(ctx, size)
 	if err != nil {
 		t.Fatalf("Failed to select randomizers: %v", err)
 	}
@@ -214,8 +217,9 @@ func TestClient_UploadAndDownload(t *testing.T) {
 	// Upload file
 	filename := "test_file.txt"
 	blockSize := 64 * 1024
+	ctx := context.Background()
 	
-	descriptorCID, err := client.UploadWithBlockSize(reader, filename, blockSize)
+	descriptorCID, err := client.UploadWithBlockSize(ctx, reader, filename, blockSize)
 	if err != nil {
 		t.Fatalf("Failed to upload file: %v", err)
 	}
@@ -225,7 +229,7 @@ func TestClient_UploadAndDownload(t *testing.T) {
 	}
 	
 	// Download file
-	retrievedData, err := client.Download(descriptorCID)
+	retrievedData, err := client.Download(ctx, descriptorCID)
 	if err != nil {
 		t.Fatalf("Failed to download file: %v", err)
 	}
@@ -252,7 +256,8 @@ func TestClient_CacheIntegration(t *testing.T) {
 	}
 	
 	// Store block (should go to cache)
-	cid, err := client.StoreBlockWithCache(block)
+	ctx := context.Background()
+	cid, err := client.StoreBlockWithCache(ctx, block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
@@ -264,7 +269,7 @@ func TestClient_CacheIntegration(t *testing.T) {
 	}
 	
 	// Retrieve block (should come from cache)
-	retrievedBlock, err := client.RetrieveBlockWithCache(cid)
+	retrievedBlock, err := client.RetrieveBlockWithCache(context.Background(), cid)
 	if err != nil {
 		t.Fatalf("Failed to retrieve block: %v", err)
 	}
@@ -284,25 +289,26 @@ func TestClient_ErrorHandling(t *testing.T) {
 	}
 	
 	// Test retrieval of non-existent block
-	_, err = client.RetrieveBlockWithCache("non-existent-cid")
+	_, err = client.RetrieveBlockWithCache(context.Background(), "non-existent-cid")
 	if err == nil {
 		t.Error("Should fail to retrieve non-existent block")
 	}
 	
 	// Test download of non-existent descriptor
-	_, err = client.Download("non-existent-descriptor")
+	ctx := context.Background()
+	_, err = client.Download(ctx, "non-existent-descriptor")
 	if err == nil {
 		t.Error("Should fail to download non-existent descriptor")
 	}
 	
 	// Test invalid randomizer size
-	_, _, _, _, _, err = client.SelectRandomizers(-1)
+	_, _, _, _, _, err = client.SelectRandomizers(ctx, -1)
 	if err == nil {
 		t.Error("Should fail with negative block size")
 	}
 	
 	// Test zero-size randomizer
-	_, _, _, _, _, err = client.SelectRandomizers(0)
+	_, _, _, _, _, err = client.SelectRandomizers(ctx, 0)
 	if err == nil {
 		t.Error("Should fail with zero block size")
 	}
@@ -328,12 +334,13 @@ func TestClient_Metrics(t *testing.T) {
 		t.Fatalf("Failed to create block: %v", err)
 	}
 	
-	cid, err := client.StoreBlockWithCache(block)
+	ctx := context.Background()
+	cid, err := client.StoreBlockWithCache(ctx, block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
 	
-	_, err = client.RetrieveBlockWithCache(cid)
+	_, err = client.RetrieveBlockWithCache(context.Background(), cid)
 	if err != nil {
 		t.Fatalf("Failed to retrieve block: %v", err)
 	}
@@ -368,5 +375,65 @@ func TestClient_PeerManagement(t *testing.T) {
 	// Test that client exists and basic peer management structure is in place
 	if client == nil {
 		t.Error("Client should not be nil")
+	}
+}
+
+func TestClient_InputValidation(t *testing.T) {
+	storageManager := createTestStorageManager(t)
+	blockCache := cache.NewMemoryCache(1024 * 1024)
+	
+	client, err := NewClient(storageManager, blockCache)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	
+	ctx := context.Background()
+	
+	// Test invalid CID validation
+	_, err = client.RetrieveBlockWithCache(context.Background(), "")
+	if err == nil {
+		t.Error("Should fail with empty CID")
+	}
+	
+	_, err = client.RetrieveBlockWithCache(context.Background(), "invalid-cid")
+	if err == nil {
+		t.Error("Should fail with invalid CID format")
+	}
+	
+	_, err = client.Download(ctx, "")
+	if err == nil {
+		t.Error("Should fail with empty descriptor CID")
+	}
+	
+	// Test filename validation
+	reader := strings.NewReader("test data")
+	_, err = client.Upload(ctx, reader, "")
+	if err == nil {
+		t.Error("Should fail with empty filename")
+	}
+	
+	reader = strings.NewReader("test data")
+	_, err = client.Upload(ctx, reader, "../path/traversal")
+	if err == nil {
+		t.Error("Should fail with path traversal in filename")
+	}
+	
+	reader = strings.NewReader("test data")
+	longFilename := strings.Repeat("a", 300) // Exceeds MaxFilenameLength
+	_, err = client.Upload(ctx, reader, longFilename)
+	if err == nil {
+		t.Error("Should fail with filename too long")
+	}
+	
+	// Test file size validation (create a large buffer that exceeds MaxFileSize)
+	// Note: We can't easily test this without consuming too much memory, so we test the validation function directly
+	err = validateFileSize(-1)
+	if err == nil {
+		t.Error("Should fail with negative file size")
+	}
+	
+	err = validateFileSize(MaxFileSize + 1)
+	if err == nil {
+		t.Error("Should fail with file size exceeding maximum")
 	}
 }

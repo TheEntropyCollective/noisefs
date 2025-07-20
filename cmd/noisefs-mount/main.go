@@ -26,11 +26,11 @@ func main() {
 	var (
 		configFile   = flag.String("config", "", "Configuration file path")
 		mountPath    = flag.String("mount", "", "Mount point for the filesystem (overrides config)")
-		volumeName   = flag.String("volume", "", "Volume name (overrides config)")
+		// volumeName   = flag.String("volume", "", "Volume name (overrides config)") // Removed in simplified config
 		ipfsAPI      = flag.String("ipfs", "", "IPFS API endpoint (overrides config)")
 		cacheSize    = flag.Int("cache", 0, "Cache size (number of blocks, overrides config)")
 		readOnly     = flag.Bool("readonly", false, "Mount as read-only (overrides config)")
-		allowOther   = flag.Bool("allow-other", false, "Allow other users to access (overrides config)")
+		// allowOther   = flag.Bool("allow-other", false, "Allow other users to access (overrides config)") // Removed in simplified config
 		debug        = flag.Bool("debug", false, "Enable debug output (overrides config)")
 		daemon       = flag.Bool("daemon", false, "Run as daemon")
 		pidFile      = flag.String("pidfile", "", "PID file for daemon mode")
@@ -106,9 +106,7 @@ func main() {
 	if *mountPath != "" {
 		cfg.FUSE.MountPath = *mountPath
 	}
-	if *volumeName != "" {
-		cfg.FUSE.VolumeName = *volumeName
-	}
+	// Note: VolumeName is no longer configurable in simplified config
 	if *ipfsAPI != "" {
 		cfg.IPFS.APIEndpoint = *ipfsAPI
 	}
@@ -120,7 +118,7 @@ func main() {
 	}
 	// Apply boolean overrides (they override config regardless of value)
 	cfg.FUSE.ReadOnly = *readOnly
-	cfg.FUSE.AllowOther = *allowOther
+	// Note: AllowOther is no longer configurable in simplified config
 	cfg.FUSE.Debug = *debug
 
 	if cfg.FUSE.MountPath == "" {
@@ -130,7 +128,7 @@ func main() {
 
 	logger.Info("Starting NoiseFS mount", map[string]interface{}{
 		"mount_path":  cfg.FUSE.MountPath,
-		"volume_name": cfg.FUSE.VolumeName,
+		"volume_name": "NoiseFS", // Fixed volume name
 		"ipfs_api":    cfg.IPFS.APIEndpoint,
 		"read_only":   cfg.FUSE.ReadOnly,
 		"debug":       cfg.FUSE.Debug,
@@ -144,8 +142,8 @@ func main() {
 	}
 
 	// Mount filesystem
-	mountFS(cfg.FUSE.MountPath, cfg.FUSE.VolumeName, cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
-		cfg.FUSE.ReadOnly, cfg.FUSE.AllowOther, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, 
+	mountFS(cfg.FUSE.MountPath, "NoiseFS", cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
+		cfg.FUSE.ReadOnly, false, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, 
 		*directoryDescriptor, *directoryKey, *subdir, *multiDirs, logger)
 }
 
@@ -666,7 +664,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 	// Process each block
 	for _, dataBlock := range fileBlocks {
 		// Select randomizers for 3-tuple anonymization
-		rand1, cid1, rand2, cid2, err := client.SelectRandomizers(dataBlock.Size())
+		rand1, cid1, rand2, cid2, _, err := client.SelectRandomizers(context.Background(), dataBlock.Size())
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}
@@ -678,7 +676,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 		}
 		
 		// Store anonymized block
-		dataCID, err := client.StoreBlockWithCache(anonymizedBlock)
+		dataCID, err := client.StoreBlockWithCache(context.Background(), anonymizedBlock)
 		if err != nil {
 			return "", fmt.Errorf("failed to store block: %w", err)
 		}
@@ -700,7 +698,7 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 	}
 	
 	// Store descriptor in IPFS
-	descriptorCID, err := client.StoreBlockWithCache(descriptorBlock)
+	descriptorCID, err := client.StoreBlockWithCache(context.Background(), descriptorBlock)
 	if err != nil {
 		return "", fmt.Errorf("failed to store descriptor: %w", err)
 	}

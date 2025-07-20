@@ -488,8 +488,12 @@ func (ipfs *IPFSBackend) HealthCheck(ctx context.Context) *storage.HealthStatus 
 }
 
 // SetPeerManager sets the peer manager for intelligent peer selection
-func (ipfs *IPFSBackend) SetPeerManager(manager *p2p.PeerManager) {
-	ipfs.peerManager = manager
+func (ipfs *IPFSBackend) SetPeerManager(manager interface{}) error {
+	if peerMgr, ok := manager.(*p2p.PeerManager); ok {
+		ipfs.peerManager = peerMgr
+		return nil
+	}
+	return fmt.Errorf("invalid peer manager type: expected *p2p.PeerManager")
 }
 
 // GetConnectedPeers returns connected peer IDs (implements PeerAwareBackend)

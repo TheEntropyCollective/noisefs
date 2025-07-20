@@ -133,16 +133,16 @@ func (tb *testBackend) HealthCheck(ctx context.Context) *HealthStatus {
 
 // Test helper functions
 func createTestStorageManager(t *testing.T) *Manager {
-	// Register test backend
-	RegisterBackend("test", func(cfg *BackendConfig) (Backend, error) {
+	// Register mock backend for testing
+	RegisterBackend("mock", func(cfg *BackendConfig) (Backend, error) {
 		return newTestBackend(), nil
 	})
 	
 	config := &Config{
-		DefaultBackend: "test",
+		DefaultBackend: "mock",
 		Backends: map[string]*BackendConfig{
-			"test": {
-				Type:     "test",
+			"mock": {
+				Type:     "mock",
 				Enabled:  true,
 				Priority: 1,
 				Connection: &ConnectionConfig{
@@ -731,16 +731,16 @@ func BenchmarkDirectoryManager_RetrieveManifest(b *testing.B) {
 
 // Helper functions for benchmarks
 func createTestStorageManagerBench(b *testing.B) *Manager {
-	// Register test backend
-	RegisterBackend("test", func(cfg *BackendConfig) (Backend, error) {
+	// Register mock backend for testing
+	RegisterBackend("mock", func(cfg *BackendConfig) (Backend, error) {
 		return newTestBackend(), nil
 	})
 	
 	config := &Config{
-		DefaultBackend: "test",
+		DefaultBackend: "mock",
 		Backends: map[string]*BackendConfig{
-			"test": {
-				Type:     "test",
+			"mock": {
+				Type:     "mock",
 				Enabled:  true,
 				Priority: 1,
 				Connection: &ConnectionConfig{

@@ -9,7 +9,9 @@ import (
 	"sync"
 	"time"
 
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 // SyncEngine coordinates bi-directional synchronization between local and remote directories
@@ -19,6 +21,7 @@ type SyncEngine struct {
 	remoteMonitor    *RemoteChangeMonitor
 	conflictResolver *ConflictResolver
 	directoryManager *storage.DirectoryManager
+	noisefsClient    *noisefs.Client
 	config           *SyncConfig
 	
 	// Channels for coordinating events
@@ -120,6 +123,15 @@ func NewSyncEngine(
 		syncOpChan:       make(chan SyncOperation, 100),
 		stats:            &SyncEngineStats{},
 	}
+	
+	// Create NoiseFS client from directory manager's storage manager
+	// Use memory cache for sync operations
+	basicCache := cache.NewMemoryCache(1000) // 1000 blocks cache
+	noisefsClient, err := noisefs.NewClient(directoryManager.GetStorageManager(), basicCache)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NoiseFS client: %w", err)
+	}
+	engine.noisefsClient = noisefsClient
 
 	// Initialize conflict resolver
 	conflictResolver, err := NewConflictResolver(config.ConflictResolution)
@@ -628,30 +640,84 @@ func (se *SyncEngine) findSessionForOperation(op SyncOperation) *SyncSession {
 // executeUpload executes an upload operation
 func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) error {
 	// Check if local file exists
-	if _, err := os.Stat(op.LocalPath); os.IsNotExist(err) {
+	fileInfo, err := os.Stat(op.LocalPath)
+	if os.IsNotExist(err) {
 		return fmt.Errorf("local file does not exist: %s", op.LocalPath)
 	}
-
-	// TODO: Implement actual upload logic using DirectoryManager
-	// For now, just simulate the operation
-	fmt.Printf("Uploading: %s -> %s\n", op.LocalPath, op.RemotePath)
-	time.Sleep(100 * time.Millisecond)
-
+	
+	// Handle directories differently than files
+	if fileInfo.IsDir() {
+		// For directories, we don't need to upload content, just ensure remote directory exists
+		// This would be handled by the directory structure sync
+		fmt.Printf("Directory sync: %s -> %s\n", op.LocalPath, op.RemotePath)
+		return nil
+	}
+	
+	// Open the local file
+	file, err := os.Open(op.LocalPath)
+	if err != nil {
+		return fmt.Errorf("failed to open local file %s: %w", op.LocalPath, err)
+	}
+	defer file.Close()
+	
+	// Extract filename from path
+	filename := filepath.Base(op.LocalPath)
+	
+	// Upload file using NoiseFS client
+	ctx := context.Background()
+	descriptorCID, err := se.noisefsClient.Upload(ctx, file, filename)
+	if err != nil {
+		return fmt.Errorf("failed to upload file %s to NoiseFS: %w", op.LocalPath, err)
+	}
+	
+	fmt.Printf("Successfully uploaded: %s -> %s (CID: %s)\n", op.LocalPath, op.RemotePath, descriptorCID)
+	
+	// TODO: Store the mapping of remote path to descriptor CID in the sync state
+	// This would allow us to track which files exist remotely and their CIDs
+	
 	return nil
 }
 
 // executeDownload executes a download operation
 func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) error {
-	// TODO: Implement actual download logic using DirectoryManager
-	// For now, just simulate the operation
-	fmt.Printf("Downloading: %s -> %s\n", op.RemotePath, op.LocalPath)
-	time.Sleep(100 * time.Millisecond)
-
+	// TODO: Get the descriptor CID for the remote path from sync state
+	// For now, we'll assume the remote path contains or maps to a CID
+	// In a real implementation, this would be stored in the sync state
+	
+	// Extract potential CID from remote path or get it from state
+	// This is a placeholder - in reality, you'd have a mapping table
+	descriptorCID := strings.TrimPrefix(op.RemotePath, "noisefs://")
+	if descriptorCID == op.RemotePath {
+		// No noisefs:// prefix, might be a direct CID or need state lookup
+		return fmt.Errorf("cannot determine descriptor CID for remote path: %s", op.RemotePath)
+	}
+	
 	// Ensure local directory exists
 	if err := os.MkdirAll(filepath.Dir(op.LocalPath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-
+	
+	// Download file using NoiseFS client
+	ctx := context.Background()
+	data, filename, err := se.noisefsClient.DownloadWithMetadata(ctx, descriptorCID)
+	if err != nil {
+		return fmt.Errorf("failed to download file with CID %s: %w", descriptorCID, err)
+	}
+	
+	// Use the original filename if available, otherwise use the local path basename
+	targetPath := op.LocalPath
+	if filename != "" && filepath.Base(op.LocalPath) != filename {
+		// Update target path to use the original filename
+		targetPath = filepath.Join(filepath.Dir(op.LocalPath), filename)
+	}
+	
+	// Write the downloaded data to local file
+	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write downloaded file to %s: %w", targetPath, err)
+	}
+	
+	fmt.Printf("Successfully downloaded: %s -> %s (filename: %s)\n", op.RemotePath, targetPath, filename)
+	
 	return nil
 }
 

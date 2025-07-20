@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"regexp"
 	"strings"
 	"time"
 	
@@ -17,6 +18,57 @@ import (
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 	"github.com/TheEntropyCollective/noisefs/pkg/privacy/p2p"
 )
+
+// Input validation constants
+const (
+	// MaxFileSize limits upload size to prevent memory exhaustion (100MB)
+	MaxFileSize = 100 * 1024 * 1024
+	// MaxFilenameLength limits filename length to prevent buffer overflow
+	MaxFilenameLength = 255
+)
+
+// CID validation regex for IPFS/NoiseFS CIDs
+var cidPattern = regexp.MustCompile(`^[a-zA-Z0-9]{32,100}$`)
+
+// validateCID checks if a CID is properly formatted
+func validateCID(cid string) error {
+	if cid == "" {
+		return errors.New("CID cannot be empty")
+	}
+	if len(cid) < 32 || len(cid) > 100 {
+		return errors.New("CID length must be between 32 and 100 characters")
+	}
+	if !cidPattern.MatchString(cid) {
+		return errors.New("CID contains invalid characters")
+	}
+	return nil
+}
+
+// validateFilename checks if a filename is safe
+func validateFilename(filename string) error {
+	if filename == "" {
+		return errors.New("filename cannot be empty")
+	}
+	if len(filename) > MaxFilenameLength {
+		return fmt.Errorf("filename too long (max %d characters)", MaxFilenameLength)
+	}
+	// Check for path traversal attempts
+	if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+		return errors.New("filename contains invalid path characters")
+	}
+	return nil
+}
+
+// validateFileSize checks if file size is within limits
+func validateFileSize(size int64) error {
+	if size < 0 {
+		return errors.New("file size cannot be negative")
+	}
+	if size > MaxFileSize {
+		return fmt.Errorf("file size %d exceeds maximum allowed size %d", size, MaxFileSize)
+	}
+	return nil
+}
 
 // Client provides high-level NoiseFS operations with caching and peer selection
 type Client struct {
@@ -61,15 +113,6 @@ func NewClient(storageManager *storage.Manager, blockCache cache.Cache) (*Client
 	return NewClientWithConfig(storageManager, blockCache, config)
 }
 
-// NewClientWithStorageManager creates a NoiseFS client using the storage abstraction layer
-func NewClientWithStorageManager(storageManager *storage.Manager, blockCache cache.Cache) (*Client, error) {
-	return NewClient(storageManager, blockCache)
-}
-
-// NewClientWithStorageManagerAndConfig creates a NoiseFS client with storage manager and custom config
-func NewClientWithStorageManagerAndConfig(storageManager *storage.Manager, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
-	return NewClientWithConfig(storageManager, blockCache, config)
-}
 
 // NewClientWithConfig creates a new NoiseFS client with custom configuration
 func NewClientWithConfig(storageManager *storage.Manager, blockCache cache.Cache, config *ClientConfig) (*Client, error) {
@@ -116,7 +159,7 @@ func NewClientWithDefaultStorageManager(blockCache cache.Cache) (*Client, error)
 	}
 	
 	// Create client with storage manager
-	return NewClientWithStorageManager(storageManager, blockCache)
+	return NewClient(storageManager, blockCache)
 }
 
 // Storage abstraction methods
@@ -172,16 +215,17 @@ func (c *Client) SetPeerManager(manager *p2p.PeerManager) {
 	// The storage manager will propagate this to peer-aware backends
 	if ipfsBackend, ok := c.storageManager.GetBackend("ipfs"); ok {
 		if peerAware, ok := ipfsBackend.(storage.PeerAwareBackend); ok {
-			// TODO: Add SetPeerManager method to PeerAwareBackend interface
-			_ = peerAware // For now, just acknowledge the interface
+			if err := peerAware.SetPeerManager(manager); err != nil {
+				// Log error but don't fail - peer management is optional enhancement
+				fmt.Printf("Warning: failed to set peer manager on backend: %v\n", err)
+			}
 		}
 	}
 }
 
 
 // selectRandomizerWithPeerSelection uses peer selection to find optimal randomizer blocks
-func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block, string, error) {
-	ctx := context.Background()
+func (c *Client) selectRandomizerWithPeerSelection(ctx context.Context, blockSize int) (*blocks.Block, string, error) {
 	
 	// Get peers with randomizer blocks
 	criteria := p2p.SelectionCriteria{
@@ -191,7 +235,7 @@ func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block
 	peers, err := c.peerManager.SelectPeers(ctx, "randomizer", criteria)
 	if err != nil || len(peers) == 0 {
 		// Fall back to standard selection if no suitable peers
-		return c.selectStandardRandomizer(blockSize)
+		return c.selectStandardRandomizer(ctx, blockSize)
 	}
 	
 	// Try to get randomizer blocks from selected peers
@@ -215,11 +259,11 @@ func (c *Client) selectRandomizerWithPeerSelection(blockSize int) (*blocks.Block
 	}
 	
 	// If peer-based selection fails, fall back to standard method
-	return c.selectStandardRandomizer(blockSize)
+	return c.selectStandardRandomizer(ctx, blockSize)
 }
 
 // selectStandardRandomizer implements the original randomizer selection logic
-func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string, error) {
+func (c *Client) selectStandardRandomizer(ctx context.Context, blockSize int) (*blocks.Block, string, error) {
 	// Generate new randomizer
 	randBlock, err := blocks.NewRandomBlock(blockSize)
 	if err != nil {
@@ -227,7 +271,7 @@ func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string,
 	}
 	
 	// Store in IPFS
-	cid, err := c.storeBlockWithStrategy(randBlock, "randomizer")
+	cid, err := c.storeBlockWithStrategy(ctx, randBlock, "randomizer")
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to store randomizer: %w", err)
 	}
@@ -244,7 +288,7 @@ func (c *Client) selectStandardRandomizer(blockSize int) (*blocks.Block, string,
 
 // SelectRandomizers selects two randomizer blocks for 3-tuple anonymization
 // Returns the two blocks, their CIDs, and the total bytes of NEW storage required (excludes cached reuse)
-func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *blocks.Block, string, int64, error) {
+func (c *Client) SelectRandomizers(ctx context.Context, blockSize int) (*blocks.Block, string, *blocks.Block, string, int64, error) {
 	var totalNewStorage int64 = 0
 
 	// Try to get popular blocks from cache first
@@ -304,7 +348,7 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 				return nil, "", nil, "", 0, fmt.Errorf("failed to create second randomizer: %w", err)
 			}
 			
-			cid2, bytesStored, err := c.storeBlockWithTracking(context.Background(), randBlock2)
+			cid2, bytesStored, err := c.storeBlockWithTracking(ctx, randBlock2)
 			if err != nil {
 				return nil, "", nil, "", 0, fmt.Errorf("failed to store second randomizer: %w", err)
 			}
@@ -343,7 +387,6 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 	}
 	
 	// Store both randomizers using storage abstraction with tracking
-	ctx := context.Background() // TODO: Accept context parameter in future version
 	cid1, bytesStored1, err := c.storeBlockWithTracking(ctx, randBlock1)
 	if err != nil {
 		return nil, "", nil, "", 0, fmt.Errorf("failed to store first randomizer: %w", err)
@@ -371,13 +414,12 @@ func (c *Client) SelectRandomizers(blockSize int) (*blocks.Block, string, *block
 }
 
 // StoreBlockWithCache stores a block in IPFS and caches it
-func (c *Client) StoreBlockWithCache(block *blocks.Block) (string, error) {
-	return c.storeBlockWithStrategy(block, "performance")
+func (c *Client) StoreBlockWithCache(ctx context.Context, block *blocks.Block) (string, error) {
+	return c.storeBlockWithStrategy(ctx, block, "performance")
 }
 
 // storeBlockWithStrategy stores a block using the specified peer selection strategy
-func (c *Client) storeBlockWithStrategy(block *blocks.Block, strategy string) (string, error) {
-	ctx := context.Background() // TODO: Accept context parameter in future version
+func (c *Client) storeBlockWithStrategy(ctx context.Context, block *blocks.Block, strategy string) (string, error) {
 	
 	// Use storage manager (strategy is handled at backend level)
 	cid, err := c.storeBlock(ctx, block)
@@ -437,12 +479,20 @@ func (c *Client) cacheBlock(cid string, block *blocks.Block, metadata map[string
 }
 
 // RetrieveBlockWithCache retrieves a block, checking cache first
-func (c *Client) RetrieveBlockWithCache(cid string) (*blocks.Block, error) {
-	return c.RetrieveBlockWithCacheAndPeerHint(cid, nil)
+func (c *Client) RetrieveBlockWithCache(ctx context.Context, cid string) (*blocks.Block, error) {
+	// Validate CID input
+	if err := validateCID(cid); err != nil {
+		return nil, fmt.Errorf("invalid CID: %w", err)
+	}
+	return c.RetrieveBlockWithCacheAndPeerHint(ctx, cid, nil)
 }
 
 // RetrieveBlockWithCacheAndPeerHint retrieves a block with cache and peer hints
-func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+func (c *Client) RetrieveBlockWithCacheAndPeerHint(ctx context.Context, cid string, preferredPeers []peer.ID) (*blocks.Block, error) {
+	// Validate CID input (if not already validated by caller)
+	if err := validateCID(cid); err != nil {
+		return nil, fmt.Errorf("invalid CID: %w", err)
+	}
 	// Check adaptive cache first if enabled
 	if c.adaptiveCacheEnabled && c.adaptiveCache != nil {
 		if block, err := c.adaptiveCache.Get(cid); err == nil {
@@ -473,7 +523,7 @@ func (c *Client) RetrieveBlockWithCacheAndPeerHint(cid string, preferredPeers []
 	// Use storage manager for retrieval
 	// TODO: Implement peer hints in storage manager
 	_ = preferredPeers // TODO: Use preferredPeers for peer-aware retrieval
-	block, err = c.retrieveBlock(context.Background(), cid)
+	block, err = c.retrieveBlock(ctx, cid)
 	
 	if err != nil {
 		return nil, err
@@ -594,113 +644,153 @@ func (c *Client) GetConnectedPeers() []peer.ID {
 type ProgressCallback func(stage string, current, total int)
 
 // Upload uploads a file to NoiseFS with full protocol implementation
-func (c *Client) Upload(reader io.Reader, filename string) (string, error) {
-	return c.UploadWithBlockSize(reader, filename, blocks.DefaultBlockSize)
+func (c *Client) Upload(ctx context.Context, reader io.Reader, filename string) (string, error) {
+	return c.UploadWithBlockSize(ctx, reader, filename, blocks.DefaultBlockSize)
 }
 
 // UploadWithProgress uploads a file with progress reporting
-func (c *Client) UploadWithProgress(reader io.Reader, filename string, progress ProgressCallback) (string, error) {
-	return c.UploadWithBlockSizeAndProgress(reader, filename, blocks.DefaultBlockSize, progress)
+func (c *Client) UploadWithProgress(ctx context.Context, reader io.Reader, filename string, progress ProgressCallback) (string, error) {
+	return c.UploadWithBlockSizeAndProgress(ctx, reader, filename, blocks.DefaultBlockSize, progress)
 }
 
 // UploadWithBlockSize uploads a file with a specific block size
-func (c *Client) UploadWithBlockSize(reader io.Reader, filename string, blockSize int) (string, error) {
-	return c.UploadWithBlockSizeAndProgress(reader, filename, blockSize, nil)
+func (c *Client) UploadWithBlockSize(ctx context.Context, reader io.Reader, filename string, blockSize int) (string, error) {
+	return c.UploadWithBlockSizeAndProgress(ctx, reader, filename, blockSize, nil)
 }
 
 // UploadWithBlockSizeAndProgress uploads a file with a specific block size and progress reporting
-func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename string, blockSize int, progress ProgressCallback) (string, error) {
-	// Read all data to get size
-	if progress != nil {
-		progress("Reading file", 0, 100)
-	}
-	
+func (c *Client) UploadWithBlockSizeAndProgress(ctx context.Context, reader io.Reader, filename string, blockSize int, progress ProgressCallback) (string, error) {
+	// Validate inputs
 	if reader == nil {
-		return "", fmt.Errorf("reader cannot be nil")
+		return "", errors.New("reader cannot be nil")
 	}
 	
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return "", fmt.Errorf("failed to read data: %w", err)
+	if err := validateFilename(filename); err != nil {
+		return "", fmt.Errorf("invalid filename: %w", err)
 	}
 	
-	fileSize := int64(len(data))
+	if blockSize <= 0 {
+		return "", errors.New("block size must be positive")
+	}
+	
+	// Use streaming upload to avoid memory exhaustion
+	return c.streamingUploadImpl(ctx, reader, filename, blockSize, progress)
+}
+
+// streamingUploadImpl implements fully memory-efficient streaming upload
+func (c *Client) streamingUploadImpl(ctx context.Context, reader io.Reader, filename string, blockSize int, progress ProgressCallback) (string, error) {
 	if progress != nil {
-		progress("Reading file", 100, 100)
+		progress("Starting streaming upload", 0, 100)
 	}
 	
-	// Create splitter
-	splitter, err := blocks.NewSplitter(blockSize)
-	if err != nil {
-		return "", fmt.Errorf("failed to create splitter: %w", err)
-	}
+	// Create a limited reader to enforce MaxFileSize limit and track size as we read
+	limitedReader := &io.LimitedReader{R: reader, N: MaxFileSize + 1}
 	
-	// Split file into blocks (always padded for cache efficiency)
-	if progress != nil {
-		progress("Splitting file into blocks", 0, 100)
-	}
-	fileBlocks, err := splitter.Split(strings.NewReader(string(data)))
-	if err != nil {
-		return "", fmt.Errorf("failed to split file: %w", err)
-	}
-	if progress != nil {
-		progress("Splitting file into blocks", 100, 100)
-	}
+	// Create descriptor - we'll update file size later when we know it
+	descriptor := descriptors.NewDescriptor(filename, 0, 0, blockSize)
 	
-	// Calculate padded file size
-	paddedFileSize := int64(len(fileBlocks) * blockSize)
+	// Process file in fully streaming fashion - no block collection in memory
+	buffer := make([]byte, blockSize)
+	var totalBytesRead int64
+	var totalStorageUsed int64
+	blockIndex := 0
 	
-	// Create descriptor with padding information
-	descriptor := descriptors.NewDescriptor(filename, fileSize, paddedFileSize, blockSize)
-	
-	// Process each block with XOR and track actual storage
-	totalBlocks := len(fileBlocks)
-	var totalStorageUsed int64 = 0 // Track actual bytes stored
-	
-	for i, fileBlock := range fileBlocks {
-		if progress != nil {
-			progress("Anonymizing blocks", i, totalBlocks)
+	for {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
 		}
-		// Select two randomizer blocks (3-tuple XOR) and track NEW randomizer storage
-		randBlock1, cid1, randBlock2, cid2, randomizerBytesStored, err := c.SelectRandomizers(fileBlock.Size())
+		
+		// Read one block worth of data
+		n, err := limitedReader.Read(buffer)
+		if n > 0 {
+			totalBytesRead += int64(n)
+			
+			// Check if we've exceeded the maximum file size
+			if totalBytesRead > MaxFileSize {
+				return "", fmt.Errorf("file size %d exceeds maximum allowed size %d", totalBytesRead, MaxFileSize)
+			}
+			
+			// Create block with padding (always blockSize bytes)
+			blockData := make([]byte, blockSize)
+			copy(blockData, buffer[:n])
+			// Remaining bytes are zero-padded automatically
+			
+			fileBlock, blockErr := blocks.NewBlock(blockData)
+			if blockErr != nil {
+				return "", fmt.Errorf("failed to create block: %w", blockErr)
+			}
+			
+			if progress != nil {
+				// Estimate progress based on data read vs max file size
+				progressPct := int((totalBytesRead * 80) / MaxFileSize) // Reserve 20% for final processing
+				if progressPct > 80 {
+					progressPct = 80
+				}
+				progress("Processing block", progressPct, 100)
+			}
+			
+			// Process block immediately to minimize memory usage
+			// Select two randomizer blocks (3-tuple XOR) and track NEW randomizer storage
+			randBlock1, cid1, randBlock2, cid2, randomizerBytesStored, randErr := c.SelectRandomizers(ctx, fileBlock.Size())
+			if randErr != nil {
+				return "", fmt.Errorf("failed to select randomizers for block %d: %w", blockIndex, randErr)
+			}
+			
+			// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
+			xorBlock, xorErr := fileBlock.XOR(randBlock1, randBlock2)
+			if xorErr != nil {
+				return "", fmt.Errorf("failed to XOR blocks for block %d: %w", blockIndex, xorErr)
+			}
+			
+			// Store anonymized block with tracking
+			dataCID, dataBytesStored, storeErr := c.storeBlockWithTracking(ctx, xorBlock)
+			if storeErr != nil {
+				return "", fmt.Errorf("failed to store data block %d: %w", blockIndex, storeErr)
+			}
+			
+			// Count both data and NEW randomizer storage
+			totalStorageUsed += dataBytesStored + randomizerBytesStored
+			
+			// Add block triple to descriptor immediately
+			if addErr := descriptor.AddBlockTriple(dataCID, cid1, cid2); addErr != nil {
+				return "", fmt.Errorf("failed to add block triple %d: %w", blockIndex, addErr)
+			}
+			
+			blockIndex++
+			
+			// fileBlock, xorBlock, randBlock1, randBlock2 will be garbage collected here
+			// This keeps memory usage constant regardless of file size
+		}
+		
+		if err == io.EOF {
+			break
+		}
+		
 		if err != nil {
-			return "", fmt.Errorf("failed to select randomizers: %w", err)
-		}
-		
-		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
-		xorBlock, err := fileBlock.XOR(randBlock1, randBlock2)
-		if err != nil {
-			return "", fmt.Errorf("failed to XOR blocks: %w", err)
-		}
-		
-		// Store anonymized block with tracking
-		dataCID, dataBytesStored, err := c.storeBlockWithTracking(context.Background(), xorBlock)
-		if err != nil {
-			return "", fmt.Errorf("failed to store data block: %w", err)
-		}
-		
-		// Count both data and NEW randomizer storage
-		totalStorageUsed += dataBytesStored + randomizerBytesStored
-		
-		// Cache the anonymized block
-		c.cacheBlock(dataCID, xorBlock, map[string]interface{}{
-			"block_type": "data",
-			"strategy":   "performance",
-		})
-		
-		// Add block triple to descriptor
-		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
-			return "", fmt.Errorf("failed to add block triple: %w", err)
+			return "", fmt.Errorf("failed to read data: %w", err)
 		}
 	}
 	
-	if progress != nil {
-		progress("Anonymizing blocks", totalBlocks, totalBlocks)
+	// Validate final file size
+	if err := validateFileSize(totalBytesRead); err != nil {
+		return "", fmt.Errorf("file size validation failed: %w", err)
 	}
+	
+	if progress != nil {
+		progress("Finalizing upload", 85, 100)
+	}
+	
+	// Calculate padded file size and update descriptor
+	paddedFileSize := int64(blockIndex * blockSize)
+	descriptor.FileSize = totalBytesRead
+	descriptor.PaddedFileSize = paddedFileSize
 	
 	// Store descriptor in IPFS
 	if progress != nil {
-		progress("Saving file descriptor", 0, 100)
+		progress("Saving file descriptor", 90, 100)
 	}
 	
 	// Create descriptor store with storage manager
@@ -715,34 +805,39 @@ func (c *Client) UploadWithBlockSizeAndProgress(reader io.Reader, filename strin
 	}
 	
 	if progress != nil {
-		progress("Saving file descriptor", 100, 100)
+		progress("Upload complete", 100, 100)
 	}
 	
 	// Record metrics with actual storage used
-	c.RecordUpload(fileSize, totalStorageUsed)
+	c.RecordUpload(totalBytesRead, totalStorageUsed)
 	
 	return descriptorCID, nil
 }
 
 // Download downloads a file by descriptor CID and returns data
-func (c *Client) Download(descriptorCID string) ([]byte, error) {
-	data, _, err := c.DownloadWithMetadata(descriptorCID)
+func (c *Client) Download(ctx context.Context, descriptorCID string) ([]byte, error) {
+	data, _, err := c.DownloadWithMetadata(ctx, descriptorCID)
 	return data, err
 }
 
 // DownloadWithProgress downloads a file with progress reporting
-func (c *Client) DownloadWithProgress(descriptorCID string, progress ProgressCallback) ([]byte, error) {
-	data, _, err := c.DownloadWithMetadataAndProgress(descriptorCID, progress)
+func (c *Client) DownloadWithProgress(ctx context.Context, descriptorCID string, progress ProgressCallback) ([]byte, error) {
+	data, _, err := c.DownloadWithMetadataAndProgress(ctx, descriptorCID, progress)
 	return data, err
 }
 
 // DownloadWithMetadata downloads a file and returns both data and metadata
-func (c *Client) DownloadWithMetadata(descriptorCID string) ([]byte, string, error) {
-	return c.DownloadWithMetadataAndProgress(descriptorCID, nil)
+func (c *Client) DownloadWithMetadata(ctx context.Context, descriptorCID string) ([]byte, string, error) {
+	return c.DownloadWithMetadataAndProgress(ctx, descriptorCID, nil)
 }
 
 // DownloadWithMetadataAndProgress downloads a file with progress reporting
-func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress ProgressCallback) ([]byte, string, error) {
+func (c *Client) DownloadWithMetadataAndProgress(ctx context.Context, descriptorCID string, progress ProgressCallback) ([]byte, string, error) {
+	// Validate input CID
+	if err := validateCID(descriptorCID); err != nil {
+		return nil, "", fmt.Errorf("invalid descriptor CID: %w", err)
+	}
+	
 	if progress != nil {
 		progress("Loading file descriptor", 0, 100)
 	}
@@ -772,19 +867,19 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 			progress("Downloading blocks", i, totalBlocks)
 		}
 		// Retrieve anonymized data block
-		dataBlock, err := c.retrieveBlock(context.Background(), blockInfo.DataCID)
+		dataBlock, err := c.retrieveBlock(ctx, blockInfo.DataCID)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to retrieve data block: %w", err)
 		}
 		
 		// Retrieve randomizer blocks
-		randBlock1, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID1)
+		randBlock1, err := c.retrieveBlock(ctx, blockInfo.RandomizerCID1)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to retrieve randomizer1 block: %w", err)
 		}
 		
 		// Retrieve second randomizer block (3-tuple XOR)
-		randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
+		randBlock2, err := c.retrieveBlock(ctx, blockInfo.RandomizerCID2)
 		if err != nil {
 			return nil, "", fmt.Errorf("failed to retrieve randomizer2 block: %w", err)
 		}
@@ -831,300 +926,4 @@ func (c *Client) DownloadWithMetadataAndProgress(descriptorCID string, progress 
 	return assembledData, descriptor.Filename, nil
 }
 
-// StreamingProgressCallback is called during streaming operations to report progress
-type StreamingProgressCallback func(stage string, bytesProcessed int64, blocksProcessed int)
 
-// StreamingUpload uploads a file using streaming with constant memory usage
-func (c *Client) StreamingUpload(reader io.Reader, filename string) (string, error) {
-	return c.StreamingUploadWithBlockSize(reader, filename, blocks.DefaultBlockSize)
-}
-
-// StreamingUploadWithProgress uploads a file using streaming with progress reporting
-func (c *Client) StreamingUploadWithProgress(reader io.Reader, filename string, progress StreamingProgressCallback) (string, error) {
-	return c.StreamingUploadWithBlockSizeAndProgress(reader, filename, blocks.DefaultBlockSize, progress)
-}
-
-// StreamingUploadWithBlockSize uploads a file using streaming with a specific block size
-func (c *Client) StreamingUploadWithBlockSize(reader io.Reader, filename string, blockSize int) (string, error) {
-	return c.StreamingUploadWithBlockSizeAndProgress(reader, filename, blockSize, nil)
-}
-
-// StreamingUploadWithBlockSizeAndProgress uploads a file using streaming with block size and progress
-func (c *Client) StreamingUploadWithBlockSizeAndProgress(reader io.Reader, filename string, blockSize int, progress StreamingProgressCallback) (string, error) {
-	if reader == nil {
-		return "", errors.New("reader cannot be nil")
-	}
-	
-	// TODO: Streaming implementation not yet complete
-	return "", fmt.Errorf("streaming upload not yet implemented - use regular Upload method")
-	
-	// Create streaming splitter
-	// splitter, err := blocks.NewStreamingSplitter(blockSize)
-	// if err != nil {
-	//	return "", fmt.Errorf("failed to create streaming splitter: %w", err)
-	// }
-	
-	// Create descriptor (we'll estimate file size as we go)
-	descriptor := descriptors.NewDescriptor(filename, 0, 0, blockSize) // Size will be updated
-	
-	var totalBytesProcessed int64
-	var totalBlocksProcessed int
-	
-	// Define block processing callback
-	/*
-	blockProcessor := func(fileBlock *blocks.Block) error {
-		if progress != nil {
-			progress("Processing blocks", totalBytesProcessed, totalBlocksProcessed)
-		}
-		
-		// Select two randomizer blocks (3-tuple XOR) - optimize for streaming
-		randBlock1, cid1, randBlock2, cid2, err := c.selectRandomizersForStreaming(fileBlock.Size())
-		if err != nil {
-			return fmt.Errorf("failed to select randomizers: %w", err)
-		}
-		
-		// XOR the blocks (3-tuple: data XOR randomizer1 XOR randomizer2)
-		xorBlock, err := fileBlock.XOR(randBlock1, randBlock2)
-		if err != nil {
-			return fmt.Errorf("failed to XOR blocks: %w", err)
-		}
-		
-		// Store anonymized block
-		dataCID, err := c.StoreBlockWithCache(xorBlock)
-		if err != nil {
-			return fmt.Errorf("failed to store data block: %w", err)
-		}
-		
-		// Add block triple to descriptor
-		if err := descriptor.AddBlockTriple(dataCID, cid1, cid2); err != nil {
-			return fmt.Errorf("failed to add block triple: %w", err)
-		}
-		
-		totalBytesProcessed += int64(fileBlock.Size())
-		totalBlocksProcessed++
-		
-		return nil
-	}
-	*/
-	
-	// Define progress callback for streaming splitter
-	/*
-	streamingProgress := func(bytesProcessed int64, blocksProcessed int) {
-		totalBytesProcessed = bytesProcessed
-		totalBlocksProcessed = blocksProcessed
-		if progress != nil {
-			progress("Splitting and anonymizing", bytesProcessed, blocksProcessed)
-		}
-	}
-	*/
-	
-	// Process blocks in streaming fashion
-	// if err := splitter.StreamBlocks(reader, blockProcessor, streamingProgress); err != nil {
-	//	return "", fmt.Errorf("failed to process blocks: %w", err)
-	// }
-	
-	// Update descriptor with final file size
-	descriptor.FileSize = totalBytesProcessed
-	
-	if progress != nil {
-		progress("Saving descriptor", totalBytesProcessed, totalBlocksProcessed)
-	}
-	
-	// Store descriptor in IPFS
-	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
-	if err != nil {
-		return "", fmt.Errorf("failed to create descriptor store: %w", err)
-	}
-	
-	descriptorCID, err := descriptorStore.Save(descriptor)
-	if err != nil {
-		return "", fmt.Errorf("failed to save descriptor: %w", err)
-	}
-	
-	// Record metrics - TODO: Implement proper storage tracking for streaming uploads
-	c.RecordUpload(totalBytesProcessed, totalBytesProcessed*3) // *3 for data + 2 randomizer blocks - FIXME: Still hardcoded for streaming
-	
-	if progress != nil {
-		progress("Upload complete", totalBytesProcessed, totalBlocksProcessed)
-	}
-	
-	return descriptorCID, nil
-}
-
-// selectRandomizersForStreaming optimizes randomizer selection for streaming operations
-func (c *Client) selectRandomizersForStreaming(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
-	// For streaming, we want to avoid blocking operations
-	// First try to get from cache quickly, then generate if needed
-	
-	// Try to get popular blocks from cache first (non-blocking)
-	randomizers, err := c.cache.GetRandomizers(10) // Get fewer blocks for faster lookup
-	if err == nil && len(randomizers) > 0 {
-		// Filter by matching size
-		suitableBlocks := make([]*cache.BlockInfo, 0)
-		for _, info := range randomizers {
-			if info.Size == blockSize {
-				suitableBlocks = append(suitableBlocks, info)
-			}
-		}
-		
-		// If we have at least 2 suitable cached blocks, use them (streaming optimization)
-		if len(suitableBlocks) >= 2 {
-			selected1 := suitableBlocks[0]
-			selected2 := suitableBlocks[1]
-			
-			// Update cache metrics
-			c.cache.IncrementPopularity(selected1.CID)
-			c.cache.IncrementPopularity(selected2.CID)
-			c.metrics.RecordBlockReuse()
-			c.metrics.RecordBlockReuse()
-			
-			return selected1.Block, selected1.CID, selected2.Block, selected2.CID, nil
-		}
-		
-		// If we have exactly 1 suitable cached block, use it and generate another
-		if len(suitableBlocks) == 1 {
-			selected1 := suitableBlocks[0]
-			c.cache.IncrementPopularity(selected1.CID)
-			c.metrics.RecordBlockReuse()
-			
-			// Generate second randomizer
-			randBlock2, err := blocks.NewRandomBlock(blockSize)
-			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
-			}
-			
-			cid2, err := c.storeBlock(context.Background(), randBlock2)
-			if err != nil {
-				return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
-			}
-			
-			c.cache.Store(cid2, randBlock2)
-			c.metrics.RecordBlockGeneration()
-			
-			return selected1.Block, selected1.CID, randBlock2, cid2, nil
-		}
-	}
-	
-	// No suitable cached blocks, generate both (optimized for speed)
-	return c.generateRandomizerPairFast(blockSize)
-}
-
-// generateRandomizerPairFast quickly generates a pair of randomizers for streaming
-func (c *Client) generateRandomizerPairFast(blockSize int) (*blocks.Block, string, *blocks.Block, string, error) {
-	// Generate both randomizers
-	randBlock1, err := blocks.NewRandomBlock(blockSize)
-	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to create first randomizer: %w", err)
-	}
-	
-	randBlock2, err := blocks.NewRandomBlock(blockSize)
-	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to create second randomizer: %w", err)
-	}
-	
-	// Store both randomizers concurrently for speed (in future version)
-	ctx := context.Background()
-	cid1, err := c.storeBlock(ctx, randBlock1)
-	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to store first randomizer: %w", err)
-	}
-	
-	cid2, err := c.storeBlock(ctx, randBlock2)
-	if err != nil {
-		return nil, "", nil, "", fmt.Errorf("failed to store second randomizer: %w", err)
-	}
-	
-	// Cache both randomizers
-	c.cache.Store(cid1, randBlock1)
-	c.cache.Store(cid2, randBlock2)
-	c.metrics.RecordBlockGeneration()
-	c.metrics.RecordBlockGeneration()
-	
-	return randBlock1, cid1, randBlock2, cid2, nil
-}
-
-// StreamingDownload downloads a file using streaming with constant memory usage
-func (c *Client) StreamingDownload(descriptorCID string, writer io.Writer) error {
-	return c.StreamingDownloadWithProgress(descriptorCID, writer, nil)
-}
-
-// StreamingDownloadWithProgress downloads a file using streaming with progress reporting
-func (c *Client) StreamingDownloadWithProgress(descriptorCID string, writer io.Writer, progress StreamingProgressCallback) error {
-	if writer == nil {
-		return errors.New("writer cannot be nil")
-	}
-	
-	if progress != nil {
-		progress("Loading descriptor", 0, 0)
-	}
-	
-	// Create descriptor store with storage manager
-	descriptorStore, err := descriptors.NewStoreWithManager(c.storageManager)
-	if err != nil {
-		return fmt.Errorf("failed to create descriptor store: %w", err)
-	}
-	
-	// Load descriptor
-	descriptor, err := descriptorStore.Load(descriptorCID)
-	if err != nil {
-		return fmt.Errorf("failed to load descriptor: %w", err)
-	}
-	
-	if progress != nil {
-		progress("Descriptor loaded", 0, 0)
-	}
-	
-	// TODO: Streaming implementation not yet complete
-	return fmt.Errorf("streaming download not yet implemented - use regular Download method")
-	
-	// Create streaming assembler
-	// assembler, err := blocks.NewStreamingAssembler(writer)
-	// if err != nil {
-	//	return fmt.Errorf("failed to create streaming assembler: %w", err)
-	// }
-	
-	// Process blocks in streaming fashion
-	totalBlocks := len(descriptor.Blocks)
-	var totalBytesWritten int64
-	
-	for i, blockInfo := range descriptor.Blocks {
-		if progress != nil {
-			progress("Downloading blocks", totalBytesWritten, i)
-		}
-		
-		// Retrieve anonymized data block
-		dataBlock, err := c.retrieveBlock(context.Background(), blockInfo.DataCID)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve data block %d: %w", i, err)
-		}
-		
-		// Retrieve randomizer blocks
-		/*
-		randBlock1, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID1)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve randomizer1 block %d: %w", i, err)
-		}
-		
-		randBlock2, err := c.retrieveBlock(context.Background(), blockInfo.RandomizerCID2)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve randomizer2 block %d: %w", i, err)
-		}
-		*/
-		
-		// Reconstruct and write block immediately (streaming)
-		// if err := assembler.ProcessBlockWithXOR(dataBlock, randBlock1, randBlock2); err != nil {
-		//	return fmt.Errorf("failed to process block %d: %w", i, err)
-		// }
-		
-		totalBytesWritten += int64(dataBlock.Size())
-	}
-	
-	// Record download
-	c.RecordDownload()
-	
-	if progress != nil {
-		progress("Download complete", totalBytesWritten, totalBlocks)
-	}
-	
-	return nil
-}

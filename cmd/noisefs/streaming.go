@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -202,7 +203,7 @@ func (p *StreamingBlockProcessor) Start() error {
 func (p *StreamingBlockProcessor) xorStage() {
 	for blockData := range p.blockChannel {
 		// Select randomizers
-		randBlock1, cid1, randBlock2, cid2, err := p.client.SelectRandomizers(blockData.block.Size())
+		randBlock1, cid1, randBlock2, cid2, _, err := p.client.SelectRandomizers(context.Background(), blockData.block.Size())
 		if err != nil {
 			p.errors <- fmt.Errorf("failed to select randomizers for block %d: %w", blockData.index, err)
 			return
@@ -238,7 +239,7 @@ func (p *StreamingBlockProcessor) xorStage() {
 func (p *StreamingBlockProcessor) storeStage() {
 	for xorData := range p.xorChannel {
 		// Store anonymized block
-		dataCID, err := p.client.StoreBlockWithCache(xorData.anonymizedBlock)
+		dataCID, err := p.client.StoreBlockWithCache(context.Background(), xorData.anonymizedBlock)
 		if err != nil {
 			p.errors <- fmt.Errorf("failed to store block %d: %w", xorData.index, err)
 			return

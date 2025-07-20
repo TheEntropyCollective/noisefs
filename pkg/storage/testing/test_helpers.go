@@ -157,7 +157,7 @@ func CreateTestNoiseClientWithData(blockCount int) (*noisefs.Client, *storage.Ma
 			return nil, nil, nil, fmt.Errorf("failed to create test block %d: %w", i, err)
 		}
 		
-		cid, err := client.StoreBlockWithCache(block)
+		cid, err := client.StoreBlockWithCache(context.Background(), block)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to store test block %d: %w", i, err)
 		}

@@ -335,7 +335,7 @@ func runTests(client *noisefs.Client, fileSize, numFiles int, verbose bool, node
 
 		// Upload
 		uploadStart := time.Now()
-		cid, err := client.StoreBlockWithCache(block)
+		cid, err := client.StoreBlockWithCache(context.Background(), block)
 		uploadLatency := time.Since(uploadStart)
 
 		if err != nil {
@@ -348,7 +348,7 @@ func runTests(client *noisefs.Client, fileSize, numFiles int, verbose bool, node
 
 		// Download
 		downloadStart := time.Now()
-		retrievedBlock, err := client.RetrieveBlockWithCache(cid)
+		retrievedBlock, err := client.RetrieveBlockWithCache(context.Background(), cid)
 		downloadLatency := time.Since(downloadStart)
 
 		if err != nil {
@@ -406,7 +406,7 @@ func runCrossNodeTests(clients []*noisefs.Client, fileSize, numTests int, verbos
 			continue
 		}
 
-		cid, err := clients[sourceIdx].StoreBlockWithCache(block)
+		cid, err := clients[sourceIdx].StoreBlockWithCache(context.Background(), block)
 		if err != nil {
 			if verbose {
 				fmt.Printf("    ❌ Upload to source failed: %v\n", err)
@@ -420,7 +420,7 @@ func runCrossNodeTests(clients []*noisefs.Client, fileSize, numTests int, verbos
 
 		// Download from target
 		downloadStart := time.Now()
-		retrievedBlock, err := clients[targetIdx].RetrieveBlockWithCache(cid)
+		retrievedBlock, err := clients[targetIdx].RetrieveBlockWithCache(context.Background(), cid)
 		downloadLatency := time.Since(downloadStart)
 
 		if err != nil {
@@ -483,7 +483,7 @@ func runConcurrentTests(clients []*noisefs.Client, fileSize, numFiles int, verbo
 
 			// Upload
 			uploadStart := time.Now()
-			cid, err := clients[clientIdx].StoreBlockWithCache(block)
+			cid, err := clients[clientIdx].StoreBlockWithCache(context.Background(), block)
 			uploadLatency := time.Since(uploadStart)
 
 			if err != nil {
@@ -493,7 +493,7 @@ func runConcurrentTests(clients []*noisefs.Client, fileSize, numFiles int, verbo
 
 			// Download
 			downloadStart := time.Now()
-			retrievedBlock, err := clients[clientIdx].RetrieveBlockWithCache(cid)
+			retrievedBlock, err := clients[clientIdx].RetrieveBlockWithCache(context.Background(), cid)
 			downloadLatency := time.Since(downloadStart)
 
 			if err != nil {

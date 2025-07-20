@@ -51,6 +51,9 @@ type PeerAwareBackend interface {
 	GetWithPeerHint(ctx context.Context, address *BlockAddress, peers []string) (*blocks.Block, error)
 	BroadcastToNetwork(ctx context.Context, address *BlockAddress, block *blocks.Block) error
 	GetConnectedPeers() []string
+	
+	// Peer manager integration
+	SetPeerManager(manager interface{}) error
 }
 
 // BlockAddress represents a provider-agnostic block address

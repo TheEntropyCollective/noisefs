@@ -94,7 +94,7 @@ type CombinedStorageTask struct {
 	Index int
 	Block *blocks.Block
 	Client interface {
-		StoreBlockWithCache(block *blocks.Block) (string, error)
+		StoreBlockWithCache(ctx context.Context, block *blocks.Block) (string, error)
 	}
 }
 
@@ -103,7 +103,7 @@ func (t *CombinedStorageTask) ID() string {
 }
 
 func (t *CombinedStorageTask) Execute(ctx context.Context) (interface{}, error) {
-	cid, err := t.Client.StoreBlockWithCache(t.Block)
+	cid, err := t.Client.StoreBlockWithCache(ctx, t.Block)
 	if err != nil {
 		return nil, fmt.Errorf("combined storage operation failed for block %d: %w", t.Index, err)
 	}
@@ -161,7 +161,7 @@ func (b *BlockOperationBatch) ParallelXOR(ctx context.Context, dataBlocks, rando
 
 // ParallelStorage stores multiple blocks in parallel
 func (b *BlockOperationBatch) ParallelStorage(ctx context.Context, blocks []*blocks.Block, client interface {
-	StoreBlockWithCache(block *blocks.Block) (string, error)
+	StoreBlockWithCache(ctx context.Context, block *blocks.Block) (string, error)
 }) ([]string, error) {
 	// Create tasks
 	tasks := make([]Task, len(blocks))

@@ -471,6 +471,11 @@ type DirectoryManagerStats struct {
 }
 
 // GetStats returns comprehensive directory manager statistics
+// GetStorageManager returns the underlying storage manager
+func (dm *DirectoryManager) GetStorageManager() *Manager {
+	return dm.storageManager
+}
+
 func (dm *DirectoryManager) GetStats() *DirectoryManagerStats {
 	return &DirectoryManagerStats{
 		CacheStats: dm.GetCacheStats(),

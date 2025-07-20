@@ -528,7 +528,7 @@ func (w *UnifiedWebUI) handleUpload(wr http.ResponseWriter, r *http.Request) {
 	}()
 	
 	// Upload file using the client's proper implementation with progress
-	descriptorCID, err := w.noisefsClient.UploadWithProgress(file, header.Filename, func(stage string, current, total int) {
+	descriptorCID, err := w.noisefsClient.UploadWithProgress(context.Background(), file, header.Filename, func(stage string, current, total int) {
 		percent := 0
 		if total > 0 {
 			percent = (current * 100) / total
@@ -617,7 +617,7 @@ func (w *UnifiedWebUI) handleDownload(wr http.ResponseWriter, r *http.Request) {
 		}()
 		
 		// Download file using the client's proper implementation with progress
-		data, filename, err := w.noisefsClient.DownloadWithMetadataAndProgress(descriptorCID, func(stage string, current, total int) {
+		data, filename, err := w.noisefsClient.DownloadWithMetadataAndProgress(context.Background(), descriptorCID, func(stage string, current, total int) {
 			percent := 0
 			if total > 0 {
 				percent = (current * 100) / total
@@ -725,7 +725,7 @@ func (w *UnifiedWebUI) handleStream(wr http.ResponseWriter, r *http.Request) {
 	}
 
 	// Download file data  
-	data, err := w.noisefsClient.Download(cid)
+	data, err := w.noisefsClient.Download(context.Background(), cid)
 	if err != nil {
 		sendError(wr, err, http.StatusNotFound)
 		return

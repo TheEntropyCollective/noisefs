@@ -22,7 +22,7 @@ import (
 
 // RealIPFSTestSuite provides real IPFS network testing
 type RealIPFSTestSuite struct {
-	ipfsNodes      []*ipfs.Client
+	ipfsNodes      []string // IPFS node endpoints
 	noisefsClients []*noisefs.Client
 	reuseClients   []*reuse.ReuseAwareClient
 	testConfig     *config.Config

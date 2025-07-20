@@ -16,20 +16,20 @@ import (
 type AnnouncementPublisher struct {
 	torClient   *Client
 	transport   *IPFSTransport
-	config      *config.TorConfig
+	config      *config.NetworkConfig
 }
 
 // NewAnnouncementPublisher creates a Tor-enabled announcement publisher
 func NewAnnouncementPublisher(cfg *config.Config) (*AnnouncementPublisher, error) {
-	if !cfg.Tor.Enabled || !cfg.Tor.AnnounceEnabled {
-		return nil, fmt.Errorf("Tor announcements not enabled")
+	if !cfg.Network.TorEnabled {
+		return nil, fmt.Errorf("Tor is not enabled")
 	}
 	
 	// Create Tor configuration
 	torConfig := &Config{
 		Enabled:     true,
-		SOCKSProxy:  cfg.Tor.SOCKSProxy,
-		ControlPort: cfg.Tor.ControlPort,
+		SOCKSProxy:  cfg.Network.TorSOCKSProxy,
+		ControlPort: "9051", // Default control port
 		Announce: AnnounceConfig{
 			Enabled:          true,
 			UseHiddenService: false, // TODO: Implement .onion support
@@ -54,7 +54,7 @@ func NewAnnouncementPublisher(cfg *config.Config) (*AnnouncementPublisher, error
 	return &AnnouncementPublisher{
 		torClient: torClient,
 		transport: transport,
-		config:    &cfg.Tor,
+		config:    &cfg.Network,
 	}, nil
 }
 

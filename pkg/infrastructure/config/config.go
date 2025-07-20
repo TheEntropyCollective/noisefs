@@ -7,146 +7,89 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
 // Config holds all NoiseFS configuration
 type Config struct {
-	// IPFS Configuration
+	// Core service endpoints
 	IPFS IPFSConfig `json:"ipfs"`
-
-	// Cache Configuration
+	
+	// Storage and caching
 	Cache CacheConfig `json:"cache"`
-
-	// FUSE Configuration
+	
+	// Filesystem interface
 	FUSE FUSEConfig `json:"fuse"`
-
-	// Logging Configuration
+	
+	// System configuration
 	Logging LoggingConfig `json:"logging"`
-
-	// Performance Configuration
-	Performance PerformanceConfig `json:"performance"`
-
-	// WebUI Configuration
-	WebUI WebUIConfig `json:"webui"`
-
-	// Security Configuration
+	
+	// Security settings
 	Security SecurityConfig `json:"security"`
 	
-	// Tor Configuration
-	Tor TorConfig `json:"tor"`
+	// Network anonymization
+	Network NetworkConfig `json:"network"`
+	
+	// Backward compatibility: computed performance config
+	Performance PerformanceConfig `json:"-"` // Not serialized, computed on demand
 }
 
-// IPFSConfig holds IPFS-related configuration
+// IPFSConfig holds IPFS connection settings
 type IPFSConfig struct {
 	APIEndpoint string `json:"api_endpoint"`
 	Timeout     int    `json:"timeout_seconds"`
 }
 
-// CacheConfig holds cache-related configuration
+// CacheConfig holds cache and memory settings
 type CacheConfig struct {
-	BlockCacheSize        int  `json:"block_cache_size"`
-	MemoryLimit           int  `json:"memory_limit_mb"`
-	EnableAltruistic      bool `json:"enable_altruistic"`
-	MinPersonalCacheMB    int  `json:"min_personal_cache_mb"`
-	AltruisticBandwidthMB int  `json:"altruistic_bandwidth_mb,omitempty"`
+	BlockCacheSize        int `json:"block_cache_size"`
+	MemoryLimit           int `json:"memory_limit_mb"`
+	// Computed fields for backward compatibility
+	EnableAltruistic      bool `json:"-"` // Computed: true if BlockCacheSize >= 1500
+	MinPersonalCacheMB    int  `json:"-"` // Computed: MemoryLimit / 2
+	AltruisticBandwidthMB int  `json:"-"` // Computed: MemoryLimit / 4 if altruistic
 }
 
-// FUSEConfig holds FUSE filesystem configuration
+// FUSEConfig holds filesystem mount settings
 type FUSEConfig struct {
-	MountPath  string `json:"mount_path"`
-	VolumeName string `json:"volume_name"`
-	ReadOnly   bool   `json:"read_only"`
-	AllowOther bool   `json:"allow_other"`
-	Debug      bool   `json:"debug"`
-	IndexPath  string `json:"index_path"`
+	MountPath string `json:"mount_path"`
+	IndexPath string `json:"index_path"`
+	ReadOnly  bool   `json:"read_only"`
+	
+	// Computed fields for backward compatibility
+	Debug bool `json:"-"` // Computed: true when logging level is "debug"
 }
 
-// LoggingConfig holds logging configuration
+// LoggingConfig holds logging settings
 type LoggingConfig struct {
-	Level  string `json:"level"`
-	Format string `json:"format"`
-	Output string `json:"output"`
-	File   string `json:"file"`
+	Level  string `json:"level"`  // debug, info, warn, error
+	Output string `json:"output"` // console, file
+	File   string `json:"file,omitempty"`
+	Format string `json:"-"`      // Computed: always "text" for simplicity
 }
 
-// PerformanceConfig holds performance-related configuration
-type PerformanceConfig struct {
-	BlockSize              int  `json:"block_size"`
-	ReadAhead              bool `json:"read_ahead"`
-	WriteBack              bool `json:"write_back"`
-	MaxConcurrentOps       int  `json:"max_concurrent_ops"`
-	MemoryLimit            int  `json:"memory_limit_mb"`           // Memory limit for streaming operations in MB
-	StreamBufferSize       int  `json:"stream_buffer_size"`        // Buffer size for streaming pipeline
-	EnableMemoryMonitoring bool `json:"enable_memory_monitoring"`  // Enable memory usage monitoring
-}
-
-// WebUIConfig holds web UI server configuration
-type WebUIConfig struct {
-	Host         string   `json:"host"`
-	Port         int      `json:"port"`
-	TLSEnabled   bool     `json:"tls_enabled"`
-	TLSCertFile  string   `json:"tls_cert_file"`
-	TLSKeyFile   string   `json:"tls_key_file"`
-	TLSAutoGen   bool     `json:"tls_auto_gen"`
-	TLSHostnames []string `json:"tls_hostnames"`
-	TLSMinVersion string  `json:"tls_min_version"` // Minimum TLS version (e.g., "1.2", "1.3")
-}
-
-// SecurityConfig holds security-related configuration
-// WARNING: Disabling security features may expose sensitive data.
-// Only disable security features if you fully understand the implications.
+// SecurityConfig holds security settings
 type SecurityConfig struct {
-	// EncryptDescriptors controls whether file descriptors are encrypted.
-	// When true, descriptors are encrypted to prevent metadata leakage.
-	EncryptDescriptors bool `json:"encrypt_descriptors"`
+	// Master encryption switch
+	EnableEncryption bool `json:"enable_encryption"`
 	
-	// DefaultEncrypted determines if files are encrypted by default.
-	// When true, all new files are automatically encrypted.
-	DefaultEncrypted   bool `json:"default_encrypted"`
+	// Password protection
+	RequirePassword bool `json:"require_password"`
 	
-	// RequirePassword enforces password protection for all operations.
-	// When true, a password must be provided to access any files.
-	RequirePassword    bool `json:"require_password"`
-	
-	// PasswordPrompt enables interactive password prompting.
-	// When true, the system will prompt for passwords when needed.
-	PasswordPrompt     bool `json:"password_prompt"`
-	
-	// EncryptLocalIndex encrypts the local file index.
-	// When true, the file index is encrypted to protect file metadata.
-	EncryptLocalIndex  bool `json:"encrypt_local_index"`
-	
-	// SecureMemory enables secure memory handling to prevent swapping.
-	// When true, sensitive data is locked in memory and cleared after use.
-	SecureMemory       bool `json:"secure_memory"`
-	
-	// AntiForensics enables additional anti-forensic measures.
-	// When true, additional steps are taken to make forensic analysis harder.
-	AntiForensics      bool `json:"anti_forensics"`
-	
-	// EnableEncryption is the master switch for all encryption features.
-	// When false, NO encryption is performed regardless of other settings.
-	EnableEncryption   bool `json:"enable_encryption"`
+	// Computed fields for backward compatibility
+	DefaultEncrypted   bool `json:"-"` // Computed: follows EnableEncryption
+	PasswordPrompt     bool `json:"-"` // Computed: follows RequirePassword  
+	EncryptDescriptors bool `json:"-"` // Computed: follows EnableEncryption
+	EncryptLocalIndex  bool `json:"-"` // Computed: follows EnableEncryption
 }
 
-// TorConfig holds Tor-related configuration
-type TorConfig struct {
-	Enabled      bool   `json:"enabled"`
-	SOCKSProxy   string `json:"socks_proxy"`
-	ControlPort  string `json:"control_port"`
+// NetworkConfig holds network and anonymization settings
+type NetworkConfig struct {
+	// Tor anonymization
+	TorEnabled     bool   `json:"tor_enabled"`
+	TorSOCKSProxy  string `json:"tor_socks_proxy"`
 	
-	// Upload settings (default: enabled for privacy)
-	UploadEnabled     bool `json:"upload_enabled"`
-	UploadJitterMin   int  `json:"upload_jitter_min_seconds"`
-	UploadJitterMax   int  `json:"upload_jitter_max_seconds"`
-	
-	// Download settings (default: disabled for performance)  
-	DownloadEnabled   bool `json:"download_enabled"`
-	
-	// Announcement settings
-	AnnounceEnabled   bool `json:"announce_enabled"`
+	// Performance settings
+	MaxConcurrentOps int `json:"max_concurrent_ops"`
 }
 
 // DefaultConfig returns a configuration with sensible defaults
@@ -154,304 +97,50 @@ func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
 	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
 
-	return &Config{
+	config := &Config{
 		IPFS: IPFSConfig{
 			APIEndpoint: "127.0.0.1:5001",
 			Timeout:     30,
 		},
 		Cache: CacheConfig{
-			BlockCacheSize:     1000,
-			MemoryLimit:        512,
-			EnableAltruistic:   true,
-			MinPersonalCacheMB: 256, // Half of default memory limit
+			BlockCacheSize: 1000,
+			MemoryLimit:    512,
 		},
 		FUSE: FUSEConfig{
-			MountPath:  "",
-			VolumeName: "NoiseFS",
-			ReadOnly:   false,
-			AllowOther: false,
-			Debug:      false,
-			IndexPath:  defaultIndexPath,
+			MountPath: "",
+			IndexPath: defaultIndexPath,
+			ReadOnly:  false,
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
-			Format: "text",
 			Output: "console",
 			File:   "",
 		},
-		Performance: PerformanceConfig{
-			BlockSize:              blocks.DefaultBlockSize,
-			ReadAhead:              false,
-			WriteBack:              false,
-			MaxConcurrentOps:       10,
-			MemoryLimit:            512,  // 512MB default for streaming
-			StreamBufferSize:       10,   // Default buffer size
-			EnableMemoryMonitoring: false, // Disabled by default
-		},
-		WebUI: WebUIConfig{
-			Host:         "localhost",
-			Port:         8443,
-			TLSEnabled:   true,
-			TLSCertFile:  "",
-			TLSKeyFile:   "",
-			TLSAutoGen:   true,
-			TLSHostnames: []string{"localhost"},
-			TLSMinVersion: "1.2", // Minimum TLS 1.2 for security
-		},
 		Security: SecurityConfig{
-			// SECURE BY DEFAULT: All encryption features are enabled
-			EnableEncryption:   true,  // Master encryption switch
-			EncryptDescriptors: true,  // Encrypt file metadata
-			DefaultEncrypted:   true,  // All files encrypted by default
-			RequirePassword:    true,  // Password required for all operations
-			PasswordPrompt:     true,  // Interactive password prompting
-			EncryptLocalIndex:  true,  // Encrypt local file index
-			SecureMemory:       true,  // Prevent memory swapping
-			AntiForensics:      false, // Optional: user choice
+			EnableEncryption: true,
+			RequirePassword:  true,
 		},
-		Tor: TorConfig{
-			Enabled:         true,
-			SOCKSProxy:      "127.0.0.1:9050",
-			ControlPort:     "127.0.0.1:9051",
-			UploadEnabled:   true,  // ON by default for privacy
-			UploadJitterMin: 1,     // 1 second minimum jitter
-			UploadJitterMax: 5,     // 5 second maximum jitter
-			DownloadEnabled: false, // OFF by default for performance
-			AnnounceEnabled: true,  // ON by default for privacy
+		Network: NetworkConfig{
+			TorEnabled:       true,
+			TorSOCKSProxy:    "127.0.0.1:9050",
+			MaxConcurrentOps: 10,
 		},
 	}
+	
+	// Populate computed fields
+	config.updateComputedFields()
+	return config
 }
 
-// QuickStartConfig returns a simplified configuration for new users
-// Optimized for ease of use with reasonable security defaults
-func QuickStartConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
-	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
-
-	return &Config{
-		IPFS: IPFSConfig{
-			APIEndpoint: "127.0.0.1:5001",
-			Timeout:     30,
-		},
-		Cache: CacheConfig{
-			BlockCacheSize:     500,  // Smaller cache for quick start
-			MemoryLimit:        256,  // Conservative memory usage
-			EnableAltruistic:   false, // Disabled for simplicity
-			MinPersonalCacheMB: 128,
-		},
-		FUSE: FUSEConfig{
-			MountPath:  "",
-			VolumeName: "NoiseFS",
-			ReadOnly:   false,
-			AllowOther: false,
-			Debug:      false,
-			IndexPath:  defaultIndexPath,
-		},
-		Logging: LoggingConfig{
-			Level:  "warn", // Less verbose for new users
-			Format: "text",
-			Output: "console",
-			File:   "",
-		},
-		Performance: PerformanceConfig{
-			BlockSize:              blocks.DefaultBlockSize,
-			ReadAhead:              false,
-			WriteBack:              false,
-			MaxConcurrentOps:       5,    // Conservative for stability
-			MemoryLimit:            256,  // Conservative memory usage
-			StreamBufferSize:       5,    // Smaller buffer for quick start
-			EnableMemoryMonitoring: false,
-		},
-		WebUI: WebUIConfig{
-			Host:         "localhost",
-			Port:         8443,
-			TLSEnabled:   true,
-			TLSCertFile:  "",
-			TLSKeyFile:   "",
-			TLSAutoGen:   true,
-			TLSHostnames: []string{"localhost"},
-			TLSMinVersion: "1.2",
-		},
-		Security: SecurityConfig{
-			// Simplified security - still secure but less complex
-			EnableEncryption:   true,
-			EncryptDescriptors: true,
-			DefaultEncrypted:   true,
-			RequirePassword:    false, // Simplified for quick start
-			PasswordPrompt:     true,
-			EncryptLocalIndex:  false, // Simplified for quick start
-			SecureMemory:       false, // Simplified for quick start
-			AntiForensics:      false,
-		},
-		Tor: TorConfig{
-			Enabled:         false, // Disabled for simplicity and speed
-			SOCKSProxy:      "127.0.0.1:9050",
-			ControlPort:     "127.0.0.1:9051",
-			UploadEnabled:   false,
-			UploadJitterMin: 1,
-			UploadJitterMax: 5,
-			DownloadEnabled: false,
-			AnnounceEnabled: false,
-		},
-	}
-}
-
-// SecurityConfig returns a configuration optimized for maximum privacy and security
-// All security features enabled with conservative performance settings
-func SecurityPresetConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
-	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
-
-	return &Config{
-		IPFS: IPFSConfig{
-			APIEndpoint: "127.0.0.1:5001",
-			Timeout:     60, // Longer timeout for Tor operations
-		},
-		Cache: CacheConfig{
-			BlockCacheSize:     2000, // Larger cache for better anonymity
-			MemoryLimit:        1024, // More memory for security operations
-			EnableAltruistic:   true,  // Enhanced network participation
-			MinPersonalCacheMB: 512,
-		},
-		FUSE: FUSEConfig{
-			MountPath:  "",
-			VolumeName: "NoiseFS",
-			ReadOnly:   false,
-			AllowOther: false,
-			Debug:      false, // No debug logging for security
-			IndexPath:  defaultIndexPath,
-		},
-		Logging: LoggingConfig{
-			Level:  "error", // Minimal logging for security
-			Format: "json",  // Structured logging for security analysis
-			Output: "console",
-			File:   "",
-		},
-		Performance: PerformanceConfig{
-			BlockSize:        blocks.DefaultBlockSize,
-			ReadAhead:        false, // Conservative for security
-			WriteBack:        false, // Conservative for security
-			MaxConcurrentOps: 5,     // Conservative for stability
-		},
-		WebUI: WebUIConfig{
-			Host:         "127.0.0.1", // Strict localhost only
-			Port:         8443,
-			TLSEnabled:   true,
-			TLSCertFile:  "",
-			TLSKeyFile:   "",
-			TLSAutoGen:   true,
-			TLSHostnames: []string{"localhost", "127.0.0.1"},
-			TLSMinVersion: "1.3", // Maximum TLS security
-		},
-		Security: SecurityConfig{
-			// MAXIMUM SECURITY: All features enabled
-			EnableEncryption:   true,
-			EncryptDescriptors: true,
-			DefaultEncrypted:   true,
-			RequirePassword:    true,
-			PasswordPrompt:     true,
-			EncryptLocalIndex:  true,
-			SecureMemory:       true,
-			AntiForensics:      true, // Enable all anti-forensic features
-		},
-		Tor: TorConfig{
-			Enabled:         true,
-			SOCKSProxy:      "127.0.0.1:9050",
-			ControlPort:     "127.0.0.1:9051",
-			UploadEnabled:   true,
-			UploadJitterMin: 5,  // Longer jitter for better anonymity
-			UploadJitterMax: 15, // Longer jitter for better anonymity
-			DownloadEnabled: true, // Enable for maximum privacy
-			AnnounceEnabled: true,
-		},
-	}
-}
-
-// PerformanceConfig returns a configuration optimized for maximum performance
-// Security features balanced with performance requirements
-func PerformancePresetConfig() *Config {
-	homeDir, _ := os.UserHomeDir()
-	defaultIndexPath := filepath.Join(homeDir, ".noisefs", "index.json")
-
-	return &Config{
-		IPFS: IPFSConfig{
-			APIEndpoint: "127.0.0.1:5001",
-			Timeout:     15, // Shorter timeout for speed
-		},
-		Cache: CacheConfig{
-			BlockCacheSize:     5000, // Large cache for performance
-			MemoryLimit:        2048, // High memory allocation
-			EnableAltruistic:   true,
-			MinPersonalCacheMB: 1024, // Large personal cache
-		},
-		FUSE: FUSEConfig{
-			MountPath:  "",
-			VolumeName: "NoiseFS",
-			ReadOnly:   false,
-			AllowOther: false,
-			Debug:      false,
-			IndexPath:  defaultIndexPath,
-		},
-		Logging: LoggingConfig{
-			Level:  "warn", // Minimal logging overhead
-			Format: "text",
-			Output: "console",
-			File:   "",
-		},
-		Performance: PerformanceConfig{
-			BlockSize:        blocks.DefaultBlockSize,
-			ReadAhead:        true,  // Enable for performance
-			WriteBack:        true,  // Enable for performance
-			MaxConcurrentOps: 50,    // High concurrency
-		},
-		WebUI: WebUIConfig{
-			Host:         "localhost",
-			Port:         8443,
-			TLSEnabled:   true,
-			TLSCertFile:  "",
-			TLSKeyFile:   "",
-			TLSAutoGen:   true,
-			TLSHostnames: []string{"localhost"},
-			TLSMinVersion: "1.2", // Balanced security/performance
-		},
-		Security: SecurityConfig{
-			// Balanced security for performance
-			EnableEncryption:   true,
-			EncryptDescriptors: true,
-			DefaultEncrypted:   true,
-			RequirePassword:    true,
-			PasswordPrompt:     true,
-			EncryptLocalIndex:  false, // Disabled for performance
-			SecureMemory:       false, // Disabled for performance
-			AntiForensics:      false, // Disabled for performance
-		},
-		Tor: TorConfig{
-			Enabled:         false, // Disabled for maximum performance
-			SOCKSProxy:      "127.0.0.1:9050",
-			ControlPort:     "127.0.0.1:9051",
-			UploadEnabled:   false,
-			UploadJitterMin: 1,
-			UploadJitterMax: 3, // Minimal jitter for speed
-			DownloadEnabled: false,
-			AnnounceEnabled: false,
-		},
-	}
-}
 
 // GetPresetConfig returns a configuration based on the specified preset name
-// Available presets: "default", "quickstart", "security", "performance"
+// Available presets: "default"
 func GetPresetConfig(preset string) (*Config, error) {
 	switch preset {
 	case "default", "":
 		return DefaultConfig(), nil
-	case "quickstart":
-		return QuickStartConfig(), nil
-	case "security":
-		return SecurityPresetConfig(), nil
-	case "performance":
-		return PerformancePresetConfig(), nil
 	default:
-		return nil, fmt.Errorf("unknown preset '%s'. Available presets: default, quickstart, security, performance", preset)
+		return nil, fmt.Errorf("unknown preset '%s'. Available presets: default", preset)
 	}
 }
 
@@ -469,12 +158,65 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Apply environment variable overrides
 	config.applyEnvironmentOverrides()
 
+	// Update computed fields after overrides
+	config.updateComputedFields()
+
 	// Validate configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 	
 	// Log security warnings if insecure settings are detected
+	config.logSecurityWarnings()
+
+	return config, nil
+}
+
+// LoadConfigWithMigration loads configuration and handles legacy format migration
+func LoadConfigWithMigration(configPath string) (*Config, error) {
+	if configPath == "" {
+		return LoadConfig(configPath)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return LoadConfig("") // Use defaults
+		}
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Try to load as new format first
+	config := DefaultConfig()
+	if err := json.Unmarshal(data, config); err != nil {
+		// If that fails, try legacy migration
+		migratedConfig, migrationErr := MigrateFromLegacy(data)
+		if migrationErr != nil {
+			return nil, fmt.Errorf("failed to load config (tried both new and legacy formats): new format error: %w, legacy migration error: %v", err, migrationErr)
+		}
+		
+		// Successfully migrated, save the new format
+		if saveErr := migratedConfig.SaveToFile(configPath + ".migrated"); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "[WARNING] Failed to save migrated config: %v\n", saveErr)
+		} else {
+			fmt.Fprintf(os.Stderr, "[INFO] Legacy config migrated and saved to %s.migrated\n", configPath)
+		}
+		
+		config = migratedConfig
+	}
+
+	// Apply environment variable overrides
+	config.applyEnvironmentOverrides()
+
+	// Update computed fields
+	config.updateComputedFields()
+
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	
+	// Log security warnings
 	config.logSecurityWarnings()
 
 	return config, nil
@@ -492,6 +234,49 @@ func (c *Config) loadFromFile(path string) error {
 	}
 
 	return json.Unmarshal(data, c)
+}
+
+// updateComputedFields populates computed fields based on core configuration
+func (c *Config) updateComputedFields() {
+	// Update cache computed fields
+	c.Cache.EnableAltruistic = c.Cache.BlockCacheSize >= 1500
+	c.Cache.MinPersonalCacheMB = c.Cache.MemoryLimit / 2
+	if c.Cache.EnableAltruistic {
+		c.Cache.AltruisticBandwidthMB = c.Cache.MemoryLimit / 4
+	} else {
+		c.Cache.AltruisticBandwidthMB = 0
+	}
+	
+	// Update logging computed fields
+	c.Logging.Format = "text" // Always use text format in simplified config
+	
+	// Update security computed fields
+	c.Security.DefaultEncrypted = c.Security.EnableEncryption
+	c.Security.PasswordPrompt = c.Security.RequirePassword
+	c.Security.EncryptDescriptors = c.Security.EnableEncryption
+	c.Security.EncryptLocalIndex = c.Security.EnableEncryption
+	
+	// Update FUSE computed fields
+	c.FUSE.Debug = (c.Logging.Level == "debug")
+	
+	// Update performance computed fields
+	bufferSize := c.Cache.MemoryLimit / 50
+	if bufferSize < 5 {
+		bufferSize = 5
+	}
+	if bufferSize > 50 {
+		bufferSize = 50
+	}
+	
+	c.Performance = PerformanceConfig{
+		BlockSize:              131072, // 128KB - NoiseFS standard
+		MaxConcurrentOps:       c.Network.MaxConcurrentOps,
+		MemoryLimit:            c.Cache.MemoryLimit,
+		StreamBufferSize:       bufferSize,
+		EnableMemoryMonitoring: c.Cache.MemoryLimit >= 1024,
+		ReadAhead:              false, // Simplified - always false
+		WriteBack:              false, // Simplified - always false
+	}
 }
 
 // applyEnvironmentOverrides applies environment variable overrides
@@ -522,28 +307,19 @@ func (c *Config) applyEnvironmentOverrides() {
 	if val := os.Getenv("NOISEFS_MOUNT_PATH"); val != "" {
 		c.FUSE.MountPath = val
 	}
-	if val := os.Getenv("NOISEFS_VOLUME_NAME"); val != "" {
-		c.FUSE.VolumeName = val
+	if val := os.Getenv("NOISEFS_INDEX_PATH"); val != "" {
+		c.FUSE.IndexPath = val
 	}
 	if val := os.Getenv("NOISEFS_READ_ONLY"); val != "" {
 		c.FUSE.ReadOnly = strings.ToLower(val) == "true"
 	}
-	if val := os.Getenv("NOISEFS_ALLOW_OTHER"); val != "" {
-		c.FUSE.AllowOther = strings.ToLower(val) == "true"
-	}
 	if val := os.Getenv("NOISEFS_DEBUG"); val != "" {
 		c.FUSE.Debug = strings.ToLower(val) == "true"
-	}
-	if val := os.Getenv("NOISEFS_INDEX_PATH"); val != "" {
-		c.FUSE.IndexPath = val
 	}
 
 	// Logging overrides
 	if val := os.Getenv("NOISEFS_LOG_LEVEL"); val != "" {
 		c.Logging.Level = val
-	}
-	if val := os.Getenv("NOISEFS_LOG_FORMAT"); val != "" {
-		c.Logging.Format = val
 	}
 	if val := os.Getenv("NOISEFS_LOG_OUTPUT"); val != "" {
 		c.Logging.Output = val
@@ -552,49 +328,9 @@ func (c *Config) applyEnvironmentOverrides() {
 		c.Logging.File = val
 	}
 
-	// Performance overrides
-	if val := os.Getenv("NOISEFS_BLOCK_SIZE"); val != "" {
-		if size, err := strconv.Atoi(val); err == nil {
-			c.Performance.BlockSize = size
-		}
-	}
-	if val := os.Getenv("NOISEFS_READ_AHEAD"); val != "" {
-		c.Performance.ReadAhead = strings.ToLower(val) == "true"
-	}
-	if val := os.Getenv("NOISEFS_WRITE_BACK"); val != "" {
-		c.Performance.WriteBack = strings.ToLower(val) == "true"
-	}
-	if val := os.Getenv("NOISEFS_MAX_CONCURRENT_OPS"); val != "" {
-		if ops, err := strconv.Atoi(val); err == nil {
-			c.Performance.MaxConcurrentOps = ops
-		}
-	}
-
-	// WebUI overrides
-	if val := os.Getenv("NOISEFS_WEBUI_HOST"); val != "" {
-		c.WebUI.Host = val
-	}
-	if val := os.Getenv("NOISEFS_WEBUI_PORT"); val != "" {
-		if port, err := strconv.Atoi(val); err == nil {
-			c.WebUI.Port = port
-		}
-	}
-	if val := os.Getenv("NOISEFS_WEBUI_TLS_ENABLED"); val != "" {
-		c.WebUI.TLSEnabled = strings.ToLower(val) == "true"
-	}
-	if val := os.Getenv("NOISEFS_WEBUI_TLS_CERT"); val != "" {
-		c.WebUI.TLSCertFile = val
-	}
-	if val := os.Getenv("NOISEFS_WEBUI_TLS_KEY"); val != "" {
-		c.WebUI.TLSKeyFile = val
-	}
-	if val := os.Getenv("NOISEFS_WEBUI_TLS_AUTO"); val != "" {
-		c.WebUI.TLSAutoGen = strings.ToLower(val) == "true"
-	}
-
 	// Security overrides
-	if val := os.Getenv("NOISEFS_ENCRYPT_DESCRIPTORS"); val != "" {
-		c.Security.EncryptDescriptors = strings.ToLower(val) == "true"
+	if val := os.Getenv("NOISEFS_ENABLE_ENCRYPTION"); val != "" {
+		c.Security.EnableEncryption = strings.ToLower(val) == "true"
 	}
 	if val := os.Getenv("NOISEFS_DEFAULT_ENCRYPTED"); val != "" {
 		c.Security.DefaultEncrypted = strings.ToLower(val) == "true"
@@ -605,22 +341,24 @@ func (c *Config) applyEnvironmentOverrides() {
 	if val := os.Getenv("NOISEFS_PASSWORD_PROMPT"); val != "" {
 		c.Security.PasswordPrompt = strings.ToLower(val) == "true"
 	}
+	if val := os.Getenv("NOISEFS_ENCRYPT_DESCRIPTORS"); val != "" {
+		c.Security.EncryptDescriptors = strings.ToLower(val) == "true"
+	}
 	if val := os.Getenv("NOISEFS_ENCRYPT_LOCAL_INDEX"); val != "" {
 		c.Security.EncryptLocalIndex = strings.ToLower(val) == "true"
 	}
-	if val := os.Getenv("NOISEFS_SECURE_MEMORY"); val != "" {
-		c.Security.SecureMemory = strings.ToLower(val) == "true"
+
+	// Network overrides
+	if val := os.Getenv("NOISEFS_TOR_ENABLED"); val != "" {
+		c.Network.TorEnabled = strings.ToLower(val) == "true"
 	}
-	if val := os.Getenv("NOISEFS_ANTI_FORENSICS"); val != "" {
-		c.Security.AntiForensics = strings.ToLower(val) == "true"
+	if val := os.Getenv("NOISEFS_TOR_SOCKS_PROXY"); val != "" {
+		c.Network.TorSOCKSProxy = val
 	}
-	if val := os.Getenv("NOISEFS_ENABLE_ENCRYPTION"); val != "" {
-		c.Security.EnableEncryption = strings.ToLower(val) == "true"
-	}
-	
-	// WebUI TLS overrides
-	if val := os.Getenv("NOISEFS_WEBUI_TLS_MIN_VERSION"); val != "" {
-		c.WebUI.TLSMinVersion = val
+	if val := os.Getenv("NOISEFS_MAX_CONCURRENT_OPS"); val != "" {
+		if ops, err := strconv.Atoi(val); err == nil {
+			c.Network.MaxConcurrentOps = ops
+		}
 	}
 }
 
@@ -628,25 +366,21 @@ func (c *Config) applyEnvironmentOverrides() {
 func (c *Config) Validate() error {
 	// Validate IPFS configuration
 	if c.IPFS.APIEndpoint == "" {
-		return fmt.Errorf("IPFS API endpoint cannot be empty. Set it to '127.0.0.1:5001' for local IPFS node or use a preset: 'quickstart', 'security', or 'performance'")
+		return fmt.Errorf("IPFS API endpoint cannot be empty. Set it to '127.0.0.1:5001' for local IPFS node")
 	}
 	if c.IPFS.Timeout <= 0 {
-		return fmt.Errorf("IPFS timeout must be positive (current: %d). Try setting it to 30 seconds for normal use, 60 seconds for Tor connections, or 15 seconds for performance optimization", c.IPFS.Timeout)
+		return fmt.Errorf("IPFS timeout must be positive (current: %d). Use 30 seconds for normal use or 60 seconds for Tor", c.IPFS.Timeout)
 	}
 	if c.IPFS.Timeout > 300 {
-		return fmt.Errorf("IPFS timeout is very high (%d seconds). Consider using a shorter timeout (15-60 seconds) to improve responsiveness", c.IPFS.Timeout)
+		return fmt.Errorf("IPFS timeout is very high (%d seconds). Consider using 30-60 seconds", c.IPFS.Timeout)
 	}
 
 	// Validate cache configuration
 	if c.Cache.BlockCacheSize <= 0 {
-		return fmt.Errorf("block cache size must be positive (current: %d). Recommended values: 500 for quick start, 1000 for normal use, 2000+ for security/performance", c.Cache.BlockCacheSize)
+		return fmt.Errorf("block cache size must be positive (current: %d). Use 1000 for default or 2000+ for advanced", c.Cache.BlockCacheSize)
 	}
 	if c.Cache.MemoryLimit <= 0 {
-		return fmt.Errorf("memory limit must be positive (current: %d MB). Recommended values: 256MB for quick start, 512MB for normal use, 1024MB+ for performance", c.Cache.MemoryLimit)
-	}
-	if c.Cache.MinPersonalCacheMB > c.Cache.MemoryLimit {
-		return fmt.Errorf("personal cache minimum (%d MB) cannot exceed total memory limit (%d MB). Set personal cache to at most %d MB", 
-			c.Cache.MinPersonalCacheMB, c.Cache.MemoryLimit, c.Cache.MemoryLimit/2)
+		return fmt.Errorf("memory limit must be positive (current: %d MB). Use 512MB for default or 1024MB+ for advanced", c.Cache.MemoryLimit)
 	}
 
 	// Validate logging configuration
@@ -654,91 +388,46 @@ func (c *Config) Validate() error {
 		"debug": true, "info": true, "warn": true, "error": true,
 	}
 	if !validLevels[c.Logging.Level] {
-		return fmt.Errorf("invalid log level '%s'. Valid options: debug, info, warn, error. Use 'info' for normal operation, 'warn' for minimal output, or 'debug' for troubleshooting", c.Logging.Level)
-	}
-
-	validFormats := map[string]bool{
-		"text": true, "json": true,
-	}
-	if !validFormats[c.Logging.Format] {
-		return fmt.Errorf("invalid log format '%s'. Valid options: text, json. Use 'text' for human-readable logs or 'json' for automated processing", c.Logging.Format)
+		return fmt.Errorf("invalid log level '%s'. Valid options: debug, info, warn, error", c.Logging.Level)
 	}
 
 	validOutputs := map[string]bool{
-		"console": true, "file": true, "both": true,
+		"console": true, "file": true,
 	}
 	if !validOutputs[c.Logging.Output] {
-		return fmt.Errorf("invalid log output '%s'. Valid options: console, file, both. Use 'console' for development, 'file' for production, or 'both' for comprehensive logging", c.Logging.Output)
+		return fmt.Errorf("invalid log output '%s'. Valid options: console, file", c.Logging.Output)
 	}
 	
 	// Check if file output is configured properly
-	if (c.Logging.Output == "file" || c.Logging.Output == "both") && c.Logging.File == "" {
-		return fmt.Errorf("log file path is required when output is set to '%s'. Set logging.file to a valid file path like '/var/log/noisefs.log'", c.Logging.Output)
+	if c.Logging.Output == "file" && c.Logging.File == "" {
+		return fmt.Errorf("log file path is required when output is 'file'")
 	}
 
-	// Validate performance configuration
-	if c.Performance.BlockSize <= 0 {
-		return fmt.Errorf("block size must be positive (current: %d). Use the default block size or a power of 2 value (e.g., 32768, 65536, 131072)", c.Performance.BlockSize)
+	// Validate network configuration
+	if c.Network.MaxConcurrentOps <= 0 {
+		return fmt.Errorf("max concurrent operations must be positive (current: %d). Use 10 for default or 25+ for advanced", c.Network.MaxConcurrentOps)
 	}
-	if c.Performance.BlockSize < 1024 {
-		return fmt.Errorf("block size is very small (%d bytes), which may impact performance. Consider using at least 32KB for better efficiency", c.Performance.BlockSize)
-	}
-	if c.Performance.MaxConcurrentOps <= 0 {
-		return fmt.Errorf("max concurrent operations must be positive (current: %d). Recommended values: 5 for stability, 10 for normal use, 50+ for high performance", c.Performance.MaxConcurrentOps)
-	}
-	if c.Performance.MaxConcurrentOps > 100 {
-		return fmt.Errorf("max concurrent operations is very high (%d), which may overwhelm system resources. Consider using 10-50 for most use cases", c.Performance.MaxConcurrentOps)
+	if c.Network.MaxConcurrentOps > 100 {
+		return fmt.Errorf("max concurrent operations is very high (%d). Consider using 10-50", c.Network.MaxConcurrentOps)
 	}
 
-	// Validate WebUI configuration
-	if c.WebUI.Host == "" {
-		return fmt.Errorf("WebUI host cannot be empty. Use 'localhost' for local access only, '127.0.0.1' for strict localhost, or '0.0.0.0' for external access (not recommended)")
-	}
-	if c.WebUI.Port <= 0 || c.WebUI.Port > 65535 {
-		return fmt.Errorf("WebUI port must be between 1 and 65535 (current: %d). Recommended ports: 8443 (default), 8080, or 3000", c.WebUI.Port)
-	}
-	if c.WebUI.Port < 1024 && c.WebUI.Port != 80 && c.WebUI.Port != 443 {
-		return fmt.Errorf("WebUI port %d is a privileged port. Use ports above 1024 (e.g., 8443, 8080) or run as administrator", c.WebUI.Port)
-	}
-	if c.WebUI.TLSEnabled && !c.WebUI.TLSAutoGen {
-		if c.WebUI.TLSCertFile == "" || c.WebUI.TLSKeyFile == "" {
-			return fmt.Errorf("TLS cert and key files required when TLS enabled and auto-generation disabled. Provide valid paths or set tls_auto_gen to true")
-		}
-		// Check if files exist
-		if _, err := os.Stat(c.WebUI.TLSCertFile); os.IsNotExist(err) {
-			return fmt.Errorf("TLS certificate file does not exist: %s. Generate certificates or enable auto-generation", c.WebUI.TLSCertFile)
-		}
-		if _, err := os.Stat(c.WebUI.TLSKeyFile); os.IsNotExist(err) {
-			return fmt.Errorf("TLS key file does not exist: %s. Generate certificates or enable auto-generation", c.WebUI.TLSKeyFile)
-		}
-	}
-	
-	// Validate TLS configuration
-	if c.WebUI.TLSEnabled {
-		validTLSVersions := map[string]bool{
-			"1.0": true, "1.1": true, "1.2": true, "1.3": true,
-		}
-		if !validTLSVersions[c.WebUI.TLSMinVersion] {
-			return fmt.Errorf("invalid TLS minimum version '%s'. Valid options: 1.2, 1.3. Use '1.2' for compatibility or '1.3' for maximum security", c.WebUI.TLSMinVersion)
-		}
-		// Warn about insecure TLS versions
-		if c.WebUI.TLSMinVersion == "1.0" || c.WebUI.TLSMinVersion == "1.1" {
-			return fmt.Errorf("TLS versions 1.0 and 1.1 are insecure and not allowed. Use TLS 1.2 or 1.3 for security")
-		}
-	} else {
-		// Warning for disabled TLS, but don't make it an error to allow QuickStart preset
-		fmt.Fprintf(os.Stderr, "[SECURITY WARNING] TLS is disabled for WebUI, which is insecure. Enable TLS by setting tls_enabled to true or use the 'security' preset\n")
-	}
-	
-	// Validate host security
-	if c.WebUI.Host != "localhost" && c.WebUI.Host != "127.0.0.1" && !c.WebUI.TLSEnabled {
-		return fmt.Errorf("WebUI is accessible from external hosts (%s) without TLS encryption. Enable TLS or restrict host to 'localhost' for security", c.WebUI.Host)
-	}
-	
+
 	// Validate security configuration
-	if err := c.ValidateSecuritySettings(); err != nil {
-		return fmt.Errorf("security validation failed: %w", err)
+	if !c.Security.EnableEncryption {
+		return fmt.Errorf("CRITICAL: Encryption is disabled. All data will be stored in plaintext")
 	}
+	
+	if c.Security.RequirePassword && !c.Security.PasswordPrompt {
+		return fmt.Errorf("password is required but prompting is disabled. Enable password_prompt or set NOISEFS_PASSWORD environment variable")
+	}
+
+	// Validate Tor configuration
+	if c.Network.TorEnabled && c.Network.TorSOCKSProxy == "" {
+		return fmt.Errorf("Tor is enabled but SOCKS proxy is not configured. Set tor_socks_proxy to '127.0.0.1:9050'")
+	}
+
+	// Log security warnings
+	c.logSecurityWarnings()
 
 	return nil
 }
@@ -771,72 +460,125 @@ func GetDefaultConfigPath() (string, error) {
 	return filepath.Join(homeDir, ".noisefs", "config.json"), nil
 }
 
-// ValidateSecuritySettings performs comprehensive security validation with helpful guidance
-func (c *Config) ValidateSecuritySettings() error {
-	// If encryption is disabled, provide clear guidance
-	if !c.Security.EnableEncryption {
-		if c.Security.RequirePassword {
-			return fmt.Errorf("cannot require password when encryption is disabled. Either enable encryption or disable password requirement. Use 'security' preset for maximum protection")
-		}
-		if c.Security.EncryptDescriptors || c.Security.EncryptLocalIndex {
-			return fmt.Errorf("cannot encrypt descriptors or index when encryption is disabled. Enable master encryption (enable_encryption: true) or disable specific encryption features")
-		}
-		// Warn user about security implications
-		return fmt.Errorf("CRITICAL SECURITY WARNING: Encryption is completely disabled. All data will be stored in plaintext. Use 'security' or 'quickstart' preset for secure operation")
-	}
-	
-	// Validate password configuration
-	if c.Security.RequirePassword && !c.Security.PasswordPrompt {
-		return fmt.Errorf("password is required but prompting is disabled. Enable password_prompt or provide password via environment variable NOISEFS_PASSWORD")
-	}
-	
-	// Provide security best practice guidance
-	if !c.Security.RequirePassword && c.Security.EnableEncryption {
-		// This is a warning, not an error - encryption without password is still valid
-		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Password protection is disabled. Consider enabling require_password for better security\n")
-	}
-	
-	if !c.Security.EncryptLocalIndex && c.Security.EnableEncryption {
-		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Local index is not encrypted. Enable encrypt_local_index to protect file metadata\n")
-	}
-	
-	if !c.Security.SecureMemory && c.Security.EnableEncryption {
-		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Secure memory is disabled. Enable secure_memory to prevent sensitive data from being swapped to disk\n")
-	}
-	
-	// Validate Tor configuration if enabled
-	if c.Tor.Enabled {
-		if c.Tor.UploadJitterMin < 0 || c.Tor.UploadJitterMax < 0 {
-			return fmt.Errorf("Tor jitter values must be non-negative (upload_jitter_min: %d, upload_jitter_max: %d). Use positive values like 1-5 seconds for basic anonymity", 
-				c.Tor.UploadJitterMin, c.Tor.UploadJitterMax)
-		}
-		if c.Tor.UploadJitterMin > c.Tor.UploadJitterMax {
-			return fmt.Errorf("Tor upload jitter min (%d) must be <= max (%d). Try setting min to 1 and max to 5 for basic timing obfuscation", 
-				c.Tor.UploadJitterMin, c.Tor.UploadJitterMax)
-		}
-		if c.Tor.UploadJitterMax > 60 {
-			return fmt.Errorf("Tor upload jitter max is very high (%d seconds), which may impact usability. Consider using 5-15 seconds for good anonymity without excessive delays", 
-				c.Tor.UploadJitterMax)
-		}
-		
-		// Check Tor proxy accessibility
-		if c.Tor.SOCKSProxy == "" {
-			return fmt.Errorf("Tor is enabled but SOCKS proxy is not configured. Set socks_proxy to '127.0.0.1:9050' for standard Tor setup")
-		}
-		
-		// Provide Tor usage guidance
-		if !c.Tor.UploadEnabled && !c.Tor.DownloadEnabled {
-			fmt.Fprintf(os.Stderr, "[SECURITY WARNING] Tor is enabled but both uploads and downloads are disabled. Enable upload_enabled for anonymity or disable Tor entirely\n")
-		}
-	}
-	
-	// Check for security/performance trade-offs
-	if c.Security.AntiForensics && (c.Performance.ReadAhead || c.Performance.WriteBack) {
-		fmt.Fprintf(os.Stderr, "[SECURITY TIP] Anti-forensics is enabled with performance optimizations. This may reduce anti-forensic effectiveness\n")
-	}
-	
-	return nil
+// LegacyConfig represents the old configuration structure for migration
+type LegacyConfig struct {
+	IPFS        map[string]interface{} `json:"ipfs"`
+	Cache       map[string]interface{} `json:"cache"`
+	FUSE        map[string]interface{} `json:"fuse"`
+	Logging     map[string]interface{} `json:"logging"`
+	Performance map[string]interface{} `json:"performance"`
+	WebUI       map[string]interface{} `json:"webui"`
+	Security    map[string]interface{} `json:"security"`
+	Tor         map[string]interface{} `json:"tor"`
 }
+
+// MigrateFromLegacy converts a legacy configuration to the new simplified format
+func MigrateFromLegacy(legacyData []byte) (*Config, error) {
+	var legacy LegacyConfig
+	if err := json.Unmarshal(legacyData, &legacy); err != nil {
+		return nil, fmt.Errorf("failed to parse legacy config: %w", err)
+	}
+
+	config := DefaultConfig()
+
+	// Migrate IPFS settings
+	if legacy.IPFS != nil {
+		if endpoint, ok := legacy.IPFS["api_endpoint"].(string); ok && endpoint != "" {
+			config.IPFS.APIEndpoint = endpoint
+		}
+		if timeout, ok := legacy.IPFS["timeout_seconds"].(float64); ok && timeout > 0 {
+			config.IPFS.Timeout = int(timeout)
+		}
+	}
+
+	// Migrate cache settings
+	if legacy.Cache != nil {
+		if size, ok := legacy.Cache["block_cache_size"].(float64); ok && size > 0 {
+			config.Cache.BlockCacheSize = int(size)
+		}
+		if limit, ok := legacy.Cache["memory_limit_mb"].(float64); ok && limit > 0 {
+			config.Cache.MemoryLimit = int(limit)
+		}
+	}
+
+	// Migrate FUSE settings
+	if legacy.FUSE != nil {
+		if path, ok := legacy.FUSE["mount_path"].(string); ok {
+			config.FUSE.MountPath = path
+		}
+		if path, ok := legacy.FUSE["index_path"].(string); ok && path != "" {
+			config.FUSE.IndexPath = path
+		}
+		if readonly, ok := legacy.FUSE["read_only"].(bool); ok {
+			config.FUSE.ReadOnly = readonly
+		}
+		if debug, ok := legacy.FUSE["debug"].(bool); ok {
+			config.FUSE.Debug = debug
+		}
+	}
+
+	// Migrate logging settings
+	if legacy.Logging != nil {
+		if level, ok := legacy.Logging["level"].(string); ok && level != "" {
+			config.Logging.Level = level
+		}
+		if output, ok := legacy.Logging["output"].(string); ok && output != "" {
+			// Map old values to new simplified values
+			switch output {
+			case "console":
+				config.Logging.Output = "console"
+			case "file", "both":
+				config.Logging.Output = "file"
+			}
+		}
+		if file, ok := legacy.Logging["file"].(string); ok && file != "" {
+			config.Logging.File = file
+		}
+	}
+
+	// Migrate security settings
+	if legacy.Security != nil {
+		if enabled, ok := legacy.Security["enable_encryption"].(bool); ok {
+			config.Security.EnableEncryption = enabled
+		}
+		if encrypted, ok := legacy.Security["default_encrypted"].(bool); ok {
+			config.Security.DefaultEncrypted = encrypted
+		}
+		if password, ok := legacy.Security["require_password"].(bool); ok {
+			config.Security.RequirePassword = password
+		}
+		if prompt, ok := legacy.Security["password_prompt"].(bool); ok {
+			config.Security.PasswordPrompt = prompt
+		}
+		if descriptors, ok := legacy.Security["encrypt_descriptors"].(bool); ok {
+			config.Security.EncryptDescriptors = descriptors
+		}
+		if index, ok := legacy.Security["encrypt_local_index"].(bool); ok {
+			config.Security.EncryptLocalIndex = index
+		}
+	}
+
+	// Migrate network settings (from Performance, WebUI, and Tor sections)
+	if legacy.Performance != nil {
+		if ops, ok := legacy.Performance["max_concurrent_ops"].(float64); ok && ops > 0 {
+			config.Network.MaxConcurrentOps = int(ops)
+		}
+	}
+
+	// WebUI is no longer supported in simplified config
+
+	if legacy.Tor != nil {
+		if enabled, ok := legacy.Tor["enabled"].(bool); ok {
+			config.Network.TorEnabled = enabled
+		}
+		if proxy, ok := legacy.Tor["socks_proxy"].(string); ok && proxy != "" {
+			config.Network.TorSOCKSProxy = proxy
+		}
+	}
+
+	return config, nil
+}
+
 
 // logSecurityWarnings logs warnings about insecure configuration settings
 func (c *Config) logSecurityWarnings() {
@@ -855,29 +597,25 @@ func (c *Config) logSecurityWarnings() {
 	if !c.Security.EncryptLocalIndex {
 		warnings = append(warnings, "WARNING: Local index encryption is disabled - file listings may be exposed")
 	}
-	if !c.Security.SecureMemory {
-		warnings = append(warnings, "WARNING: Secure memory is disabled - sensitive data may be swapped to disk")
-	}
 	
-	// Check WebUI security
-	if !c.WebUI.TLSEnabled {
-		warnings = append(warnings, "WARNING: TLS is disabled for WebUI - connections are not encrypted")
-	}
-	if c.WebUI.Host != "localhost" && c.WebUI.Host != "127.0.0.1" {
-		warnings = append(warnings, "WARNING: WebUI is accessible from external hosts - ensure proper network security")
-	}
-	
-	// Check Tor configuration
-	if !c.Tor.Enabled {
+	// Check network security
+	if !c.Network.TorEnabled {
 		warnings = append(warnings, "INFO: Tor is disabled - network traffic is not anonymized")
-	} else if !c.Tor.UploadEnabled {
-		warnings = append(warnings, "WARNING: Tor uploads disabled - upload patterns may reveal identity")
 	}
 	
 	// Log all warnings
 	for _, warning := range warnings {
-		// In a real implementation, this would use the actual logger
-		// For now, we'll just print to stderr
 		fmt.Fprintf(os.Stderr, "[SECURITY] %s\n", warning)
 	}
+}
+
+// PerformanceConfig holds performance-related configuration for backward compatibility
+type PerformanceConfig struct {
+	BlockSize              int  // Computed: Always 128KB (NoiseFS standard)
+	MaxConcurrentOps       int  // From Network.MaxConcurrentOps 
+	MemoryLimit            int  // From Cache.MemoryLimit
+	StreamBufferSize       int  // Computed: MemoryLimit/50, min 5, max 50
+	EnableMemoryMonitoring bool // Computed: true if MemoryLimit >= 1024MB
+	ReadAhead              bool // Computed: false (simplified)
+	WriteBack              bool // Computed: false (simplified)
 }

@@ -344,7 +344,7 @@ func (h *RealIPFSTestHarness) TestRealUploadDownload(nodeIndex int, testData []b
 
 	// Real upload - actually store in IPFS
 	uploadStart := time.Now()
-	cid, err := node.NoiseClient.StoreBlockWithCache(block)
+	cid, err := node.NoiseClient.StoreBlockWithCache(context.Background(), block)
 	if err != nil {
 		return nil, fmt.Errorf("real upload failed: %w", err)
 	}
@@ -355,7 +355,7 @@ func (h *RealIPFSTestHarness) TestRealUploadDownload(nodeIndex int, testData []b
 
 	// Real download - actually retrieve from IPFS  
 	downloadStart := time.Now()
-	retrievedBlock, err := node.NoiseClient.RetrieveBlockWithCache(cid)
+	retrievedBlock, err := node.NoiseClient.RetrieveBlockWithCache(context.Background(), cid)
 	if err != nil {
 		return nil, fmt.Errorf("real download failed: %w", err)
 	}
@@ -402,7 +402,7 @@ func (h *RealIPFSTestHarness) TestCrossNodeReplication(sourceNodeIndex, targetNo
 	}
 
 	uploadStart := time.Now()
-	cid, err := sourceNode.NoiseClient.StoreBlockWithCache(block)
+	cid, err := sourceNode.NoiseClient.StoreBlockWithCache(context.Background(), block)
 	if err != nil {
 		return nil, fmt.Errorf("upload to source node failed: %w", err)
 	}
@@ -413,7 +413,7 @@ func (h *RealIPFSTestHarness) TestCrossNodeReplication(sourceNodeIndex, targetNo
 
 	// Try to retrieve from target node
 	downloadStart := time.Now()
-	retrievedBlock, err := targetNode.NoiseClient.RetrieveBlockWithCache(cid)
+	retrievedBlock, err := targetNode.NoiseClient.RetrieveBlockWithCache(context.Background(), cid)
 	if err != nil {
 		return nil, fmt.Errorf("download from target node failed: %w", err)
 	}

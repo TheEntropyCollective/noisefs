@@ -458,7 +458,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	randomizer2CIDs := make([]string, len(fileBlocks))
 
 	for i := range fileBlocks {
-		randBlock1, cid1, randBlock2, cid2, err := client.SelectRandomizers(fileBlocks[i].Size())
+		randBlock1, cid1, randBlock2, cid2, _, err := client.SelectRandomizers(context.Background(), fileBlocks[i].Size())
 		if err != nil {
 			return fmt.Errorf("failed to select randomizer blocks: %w", err)
 		}
@@ -1072,8 +1072,7 @@ func showSystemStats(storageManager *storage.Manager, client *noisefs.Client, bl
 	testBlock, _ := blocks.NewBlock([]byte("test"))
 	if _, err := storageManager.Put(context.Background(), testBlock); err == nil {
 		ipfsConnected = true
-		// TODO: Get peer count from storage manager
-		peerCount = 0
+		peerCount = storageManager.GetConnectedPeerCount()
 	}
 
 	// Get cache stats

@@ -1,0 +1,36 @@
+{
+  "ipfs": {
+    "api_endpoint": "127.0.0.1:5001",
+    "timeout_seconds": 30
+  },
+  "cache": {
+    "block_cache_size": 1000,
+    "memory_limit_mb": 512
+  },
+  "fuse": {
+    "mount_path": "/mnt/noisefs",
+    "index_path": "/home/user/.noisefs/index.json",
+    "read_only": false,
+    "debug": false
+  },
+  "logging": {
+    "level": "info",
+    "output": "console",
+    "file": ""
+  },
+  "security": {
+    "enable_encryption": true,
+    "default_encrypted": true,
+    "require_password": true,
+    "password_prompt": true,
+    "encrypt_descriptors": true,
+    "encrypt_local_index": true
+  },
+  "network": {
+    "tor_enabled": true,
+    "tor_socks_proxy": "127.0.0.1:9050",
+    "max_concurrent_ops": 10,
+    "webui_enabled": true,
+    "webui_port": 8443
+  }
+}

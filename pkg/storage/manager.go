@@ -584,3 +584,19 @@ func (m *Manager) HasBlock(cid string) (bool, error) {
 	}
 	return m.Has(ctx, address)
 }
+
+// GetConnectedPeerCount returns the number of connected peers from peer-aware backends
+func (m *Manager) GetConnectedPeerCount() int {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	
+	totalPeers := 0
+	for _, backend := range m.backends {
+		if peerAware, ok := backend.(PeerAwareBackend); ok {
+			peers := peerAware.GetConnectedPeers()
+			totalPeers += len(peers)
+		}
+	}
+	
+	return totalPeers
+}

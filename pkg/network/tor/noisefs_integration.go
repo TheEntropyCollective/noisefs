@@ -16,7 +16,7 @@ type TorEnabledClient struct {
 	baseClient  storage.Backend
 	torClient   *Client
 	transport   *IPFSTransport
-	config      *config.TorConfig
+	config      *config.NetworkConfig
 	metrics     *IntegrationMetrics
 }
 
@@ -32,32 +32,32 @@ type IntegrationMetrics struct {
 
 // NewTorEnabledClient creates a new Tor-enabled storage client
 func NewTorEnabledClient(baseClient storage.Backend, cfg *config.Config) (*TorEnabledClient, error) {
-	if !cfg.Tor.Enabled {
+	if !cfg.Network.TorEnabled {
 		// Return wrapper that just uses base client
 		return &TorEnabledClient{
 			baseClient: baseClient,
-			config:     &cfg.Tor,
+			config:     &cfg.Network,
 			metrics:    &IntegrationMetrics{},
 		}, nil
 	}
 	
 	// Create Tor configuration from NoiseFS config
 	torConfig := &Config{
-		Enabled:     cfg.Tor.Enabled,
-		SOCKSProxy:  cfg.Tor.SOCKSProxy,
-		ControlPort: cfg.Tor.ControlPort,
+		Enabled:     cfg.Network.TorEnabled,
+		SOCKSProxy:  cfg.Network.TorSOCKSProxy,
+		ControlPort: "9051", // Default control port
 		Upload: UploadConfig{
-			Enabled:       cfg.Tor.UploadEnabled,
-			JitterMin:     time.Duration(cfg.Tor.UploadJitterMin) * time.Second,
-			JitterMax:     time.Duration(cfg.Tor.UploadJitterMax) * time.Second,
+			Enabled:       cfg.Network.TorEnabled,
+			JitterMin:     1 * time.Second, // Default jitter
+			JitterMax:     5 * time.Second, // Default jitter
 			SplitCircuits: true,
 		},
 		Download: DownloadConfig{
-			Enabled:      cfg.Tor.DownloadEnabled,
+			Enabled:      cfg.Network.TorEnabled,
 			CircuitReuse: true,
 		},
 		Announce: AnnounceConfig{
-			Enabled: cfg.Tor.AnnounceEnabled,
+			Enabled: false, // Simplified: disable announcements
 		},
 	}
 	
@@ -77,7 +77,7 @@ func NewTorEnabledClient(baseClient storage.Backend, cfg *config.Config) (*TorEn
 		fmt.Printf("Warning: Tor not available (%v), using direct connection\n", err)
 		return &TorEnabledClient{
 			baseClient: baseClient,
-			config:     &cfg.Tor,
+			config:     &cfg.Network,
 			metrics:    &IntegrationMetrics{},
 		}, nil
 	}
@@ -90,7 +90,7 @@ func NewTorEnabledClient(baseClient storage.Backend, cfg *config.Config) (*TorEn
 		baseClient: baseClient,
 		torClient:  torClient,
 		transport:  transport,
-		config:     &cfg.Tor,
+		config:     &cfg.Network,
 		metrics:    &IntegrationMetrics{},
 	}, nil
 }
@@ -249,7 +249,7 @@ func (c *TorEnabledClient) BatchStoreBlocks(blocks []*blocks.Block) ([]string, e
 // StoreDescriptor stores a descriptor, always using Tor for metadata
 func (c *TorEnabledClient) StoreDescriptor(desc *descriptors.Descriptor) (string, error) {
 	// PRIVACY: Always use Tor for descriptors if available
-	if c.torClient != nil && c.config.UploadEnabled {
+	if c.torClient != nil && c.config.TorEnabled {
 		data, err := desc.Marshal()
 		if err != nil {
 			return "", err
@@ -275,12 +275,12 @@ func (c *TorEnabledClient) StoreDescriptor(desc *descriptors.Descriptor) (string
 
 // shouldUseTorForUpload decides whether to use Tor for uploads
 func (c *TorEnabledClient) shouldUseTorForUpload() bool {
-	return c.torClient != nil && c.config.UploadEnabled
+	return c.torClient != nil && c.config.TorEnabled
 }
 
 // shouldUseTorForDownload decides whether to use Tor for downloads
 func (c *TorEnabledClient) shouldUseTorForDownload() bool {
-	return c.torClient != nil && c.config.DownloadEnabled
+	return c.torClient != nil && c.config.TorEnabled
 }
 
 // updateMetrics updates performance metrics
