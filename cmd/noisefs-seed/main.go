@@ -13,16 +13,16 @@ import (
 
 func main() {
 	var (
-		profile     = flag.String("profile", "standard", "Seeding profile: minimal, standard, maximum")
-		outputDir   = flag.String("output", "./seed-data", "Output directory for seed data")
-		ipfsAPI     = flag.String("ipfs", "http://localhost:5001", "IPFS API endpoint")
-		parallel    = flag.Int("parallel", 4, "Number of parallel downloads")
+		profile      = flag.String("profile", "standard", "Seeding profile: minimal, standard, maximum")
+		outputDir    = flag.String("output", "./seed-data", "Output directory for seed data")
+		ipfsAPI      = flag.String("ipfs", "http://localhost:5001", "IPFS API endpoint")
+		parallel     = flag.Int("parallel", 4, "Number of parallel downloads")
 		videoQuality = flag.String("video-quality", "720p", "Maximum video quality to download")
 		skipDownload = flag.Bool("skip-download", false, "Skip download phase (use existing data)")
 		skipGenerate = flag.Bool("skip-generate", false, "Skip block generation phase")
 		skipInit     = flag.Bool("skip-init", false, "Skip pool initialization phase")
-		verbose     = flag.Bool("verbose", false, "Enable verbose logging")
-		dryRun      = flag.Bool("dry-run", false, "Preview actions without executing")
+		verbose      = flag.Bool("verbose", false, "Enable verbose logging")
+		dryRun       = flag.Bool("dry-run", false, "Preview actions without executing")
 	)
 	flag.Parse()
 
@@ -39,7 +39,7 @@ func main() {
 
 	// Create seeder configuration based on profile
 	config := createSeedConfig(*profile, *outputDir, *ipfsAPI, *parallel, *videoQuality, *verbose)
-	
+
 	if *dryRun {
 		fmt.Println("🔍 DRY RUN MODE - Preview Only")
 		previewSeeding(config)
@@ -191,7 +191,7 @@ func estimateTime(config *bootstrap.SeedConfig) string {
 
 func downloadContent(config *bootstrap.SeedConfig) error {
 	downloader := bootstrap.NewContentDownloader(config)
-	
+
 	// Download each content type
 	contentTypes := []string{"books", "images", "audio", "documents"}
 	if config.IncludeVideo {
@@ -210,7 +210,7 @@ func downloadContent(config *bootstrap.SeedConfig) error {
 
 func generateBlocks(config *bootstrap.SeedConfig) error {
 	generator := bootstrap.NewBlockGenerator(config)
-	
+
 	// Generate blocks from downloaded content
 	fmt.Println("\nProcessing downloaded content into blocks...")
 	stats, err := generator.GenerateFromContent()
@@ -226,7 +226,7 @@ func generateBlocks(config *bootstrap.SeedConfig) error {
 
 	fmt.Printf("\nBlock Generation Summary:\n")
 	fmt.Printf("- Total Blocks: %d\n", stats.TotalBlocks)
-	fmt.Printf("- Public Domain: %d (%.1f%%)\n", stats.PublicDomainBlocks, 
+	fmt.Printf("- Public Domain: %d (%.1f%%)\n", stats.PublicDomainBlocks,
 		float64(stats.PublicDomainBlocks)/float64(stats.TotalBlocks)*100)
 	fmt.Printf("- Average Reuse Potential: %.1fx\n", stats.AverageReusePotential)
 
@@ -235,7 +235,7 @@ func generateBlocks(config *bootstrap.SeedConfig) error {
 
 func initializePool(config *bootstrap.SeedConfig) error {
 	initializer := bootstrap.NewPoolInitializer(config)
-	
+
 	fmt.Println("\nStoring blocks in IPFS...")
 	if err := initializer.StoreBlocks(); err != nil {
 		return fmt.Errorf("failed to store blocks: %w", err)
@@ -261,12 +261,12 @@ func initializePool(config *bootstrap.SeedConfig) error {
 }
 
 func generateReport(config *bootstrap.SeedConfig, duration time.Duration) {
-	reportPath := filepath.Join(config.OutputDir, "reports", 
+	reportPath := filepath.Join(config.OutputDir, "reports",
 		fmt.Sprintf("seed-report-%s.txt", time.Now().Format("20060102-150405")))
 
 	fmt.Printf("Duration: %v\n", duration)
 	fmt.Printf("Report saved to: %s\n", reportPath)
-	
+
 	// In full implementation, generate detailed report with:
 	// - Content inventory
 	// - Block statistics

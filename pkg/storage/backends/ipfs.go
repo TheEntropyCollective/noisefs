@@ -395,93 +395,26 @@ func (ipfs *IPFSBackend) HealthCheck(ctx context.Context) *storage.HealthStatus 
 			Healthy:   false,
 			Status:    "offline",
 			LastCheck: ipfs.lastHealthCheck,
-			Issues: []storage.HealthIssue{
-				{
-					Severity:    "critical",
-					Code:        "NOT_CONNECTED",
-					Description: "Not connected to IPFS node",
-					Timestamp:   ipfs.lastHealthCheck,
-				},
-			},
 		}
 		return ipfs.healthStatus
 	}
 
 	// Perform basic connectivity test
-	startTime := time.Now()
 	_, err := ipfs.shell.ID()
-	latency := time.Since(startTime)
 
 	if err != nil {
 		ipfs.healthStatus = &storage.HealthStatus{
 			Healthy:   false,
-			Status:    "unhealthy",
-			Latency:   latency,
+			Status:    "offline",
 			LastCheck: ipfs.lastHealthCheck,
-			Issues: []storage.HealthIssue{
-				{
-					Severity:    "error",
-					Code:        "CONNECTION_ERROR",
-					Description: fmt.Sprintf("Failed to communicate with IPFS: %v", err),
-					Timestamp:   ipfs.lastHealthCheck,
-				},
-			},
 		}
 		return ipfs.healthStatus
 	}
 
-	// Get connected peers
-	peers := ipfs.getConnectedPeers()
-
-	// Calculate error rate from metrics
-	errorMetrics := ipfs.errorReporter.GetErrorMetrics()
-	errorRate := errorMetrics.ErrorRate
-
-	// Determine health status
-	status := "healthy"
-	healthy := true
-	issues := []storage.HealthIssue{}
-
-	if latency > 5*time.Second {
-		status = "degraded"
-		issues = append(issues, storage.HealthIssue{
-			Severity:    "warning",
-			Code:        "HIGH_LATENCY",
-			Description: fmt.Sprintf("High latency: %v", latency),
-			Timestamp:   ipfs.lastHealthCheck,
-		})
-	}
-
-	if errorRate > 0.1 {
-		status = "degraded"
-		healthy = false
-		issues = append(issues, storage.HealthIssue{
-			Severity:    "warning",
-			Code:        "HIGH_ERROR_RATE",
-			Description: fmt.Sprintf("High error rate: %.2f%%", errorRate*100),
-			Timestamp:   ipfs.lastHealthCheck,
-		})
-	}
-
-	if len(peers) == 0 {
-		status = "degraded"
-		issues = append(issues, storage.HealthIssue{
-			Severity:    "warning",
-			Code:        "NO_PEERS",
-			Description: "No connected peers",
-			Timestamp:   ipfs.lastHealthCheck,
-		})
-	}
-
 	ipfs.healthStatus = &storage.HealthStatus{
-		Healthy:        healthy,
-		Status:         status,
-		Latency:        latency,
-		ErrorRate:      errorRate,
-		ConnectedPeers: len(peers),
-		NetworkHealth:  ipfs.assessNetworkHealth(peers),
-		LastCheck:      ipfs.lastHealthCheck,
-		Issues:         issues,
+		Healthy:   true,
+		Status:    "healthy",
+		LastCheck: ipfs.lastHealthCheck,
 	}
 
 	return ipfs.healthStatus
@@ -715,17 +648,6 @@ func (ipfs *IPFSBackend) updateHealthStatus() {
 	ipfs.healthStatus.LastCheck = time.Now()
 }
 
-func (ipfs *IPFSBackend) assessNetworkHealth(peers []string) string {
-	if len(peers) == 0 {
-		return "poor"
-	} else if len(peers) < 5 {
-		return "fair"
-	} else if len(peers) < 20 {
-		return "good"
-	} else {
-		return "excellent"
-	}
-}
 
 // Ensure IPFSBackend implements all required interfaces
 var _ storage.Backend = (*IPFSBackend)(nil)

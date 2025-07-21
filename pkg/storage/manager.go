@@ -324,8 +324,6 @@ func (m *Manager) GetManagerStatus() *ManagerStatus {
 			Connected:    backend.IsConnected(),
 			Healthy:      backendHealth.Healthy,
 			Status:       backendHealth.Status,
-			Latency:      backendHealth.Latency,
-			ErrorRate:    backendHealth.ErrorRate,
 			LastCheck:    backendHealth.LastCheck,
 			Capabilities: backendInfo.Capabilities,
 		}
@@ -429,8 +427,6 @@ type BackendStatus struct {
 	Connected    bool          `json:"connected"`
 	Healthy      bool          `json:"healthy"`
 	Status       string        `json:"status"`
-	Latency      time.Duration `json:"latency"`
-	ErrorRate    float64       `json:"error_rate"`
 	LastCheck    time.Time     `json:"last_check"`
 	Capabilities []string      `json:"capabilities"`
 }
@@ -523,33 +519,16 @@ func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
 	
 	healthy := status.HealthyBackends > 0
 	healthStr := "healthy"
-	var issues []HealthIssue
 	
 	if status.HealthyBackends == 0 {
 		healthy = false
-		healthStr = "critical"
-		issues = append(issues, HealthIssue{
-			Severity:    "critical",
-			Code:        "NO_HEALTHY_BACKENDS",
-			Description: "No healthy backends available",
-			Timestamp:   time.Now(),
-		})
-	} else if status.HealthyBackends < status.ActiveBackends {
-		healthStr = "degraded"
-		issues = append(issues, HealthIssue{
-			Severity:    "warning",
-			Code:        "SOME_BACKENDS_UNHEALTHY",
-			Description: fmt.Sprintf("%d of %d backends unhealthy", 
-				status.ActiveBackends-status.HealthyBackends, status.ActiveBackends),
-			Timestamp:   time.Now(),
-		})
+		healthStr = "offline"
 	}
 	
 	return &HealthStatus{
 		Healthy:   healthy,
 		Status:    healthStr,
 		LastCheck: time.Now(),
-		Issues:    issues,
 	}
 }
 

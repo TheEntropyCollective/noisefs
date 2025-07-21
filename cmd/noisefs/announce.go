@@ -23,16 +23,16 @@ import (
 func announceCommand(args []string, storageManager *storage.Manager, shell *shell.Shell, quiet bool, jsonOutput bool) error {
 	// Create flag set for announce command
 	flagSet := flag.NewFlagSet("announce", flag.ExitOnError)
-	
+
 	var (
-		topic     = flagSet.String("topic", "", "Topic for the announcement (required)")
-		tags      = flagSet.String("tags", "", "Comma-separated tags for discovery")
-		ttl       = flagSet.Duration("ttl", 24*time.Hour, "Time to live for announcement")
-		autoTags  = flagSet.Bool("auto-tags", true, "Automatically extract tags from file")
-		realtime  = flagSet.Bool("realtime", true, "Also publish to PubSub for real-time delivery")
-		help      = flagSet.Bool("help", false, "Show help for announce command")
+		topic    = flagSet.String("topic", "", "Topic for the announcement (required)")
+		tags     = flagSet.String("tags", "", "Comma-separated tags for discovery")
+		ttl      = flagSet.Duration("ttl", 24*time.Hour, "Time to live for announcement")
+		autoTags = flagSet.Bool("auto-tags", true, "Automatically extract tags from file")
+		realtime = flagSet.Bool("realtime", true, "Also publish to PubSub for real-time delivery")
+		help     = flagSet.Bool("help", false, "Show help for announce command")
 	)
-	
+
 	// Custom usage
 	flagSet.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: noisefs announce <file> [options]\n\n")
@@ -43,84 +43,84 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 		fmt.Fprintf(os.Stderr, "  noisefs announce myfile.pdf --topic \"documents/research\"\n")
 		fmt.Fprintf(os.Stderr, "  noisefs announce video.mp4 --topic \"movies/scifi\" --tags \"4k,remastered\"\n")
 	}
-	
+
 	if err := flagSet.Parse(args); err != nil {
 		return err
 	}
-	
+
 	if *help || flagSet.NArg() == 0 {
 		flagSet.Usage()
 		return nil
 	}
-	
+
 	// Get file path
 	filePath := flagSet.Arg(0)
-	
+
 	// Validate inputs
 	if *topic == "" {
 		return fmt.Errorf("topic is required")
 	}
-	
+
 	// Check if file exists
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to access file: %w", err)
 	}
-	
+
 	logger := logging.GetGlobalLogger().WithComponent("announce")
-	
+
 	// First, upload the file to get descriptor
 	if !quiet {
 		fmt.Printf("Uploading %s to NoiseFS...\n", filePath)
 	}
-	
+
 	// Create descriptor store
 	descStore, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	// Upload file (simplified - in real implementation would use full upload flow)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
-	
+
 	// Store file using storage manager (simplified)
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read file: %w", err)
 	}
-	
+
 	block, err := blocks.NewBlock(data)
 	if err != nil {
 		return fmt.Errorf("failed to create block: %w", err)
 	}
-	
+
 	address, err := storageManager.Put(context.Background(), block)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 	cid := address.ID
-	
+
 	// Create descriptor (simplified - would normally include proper block structure)
 	descriptor := descriptors.NewDescriptor(fileInfo.Name(), fileInfo.Size(), fileInfo.Size(), 131072)
 	descriptor.AddBlockTriple(cid, cid+"_rand1", cid+"_rand2") // Simplified for demo
-	
+
 	// Save descriptor
 	descriptorCID, err := descStore.Save(descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to save descriptor: %w", err)
 	}
-	
+
 	if !quiet {
 		fmt.Printf("Created descriptor: %s\n", descriptorCID)
 	}
-	
+
 	// Create announcement
 	creator := announce.NewCreator()
-	
+
 	// Parse tags
 	var tagList []string
 	if *tags != "" {
@@ -129,7 +129,7 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 			tagList[i] = strings.TrimSpace(tag)
 		}
 	}
-	
+
 	// Create announcement options
 	opts := announce.CreateOptions{
 		Topic:    *topic,
@@ -137,36 +137,36 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 		TTL:      *ttl,
 		AutoTags: *autoTags,
 	}
-	
+
 	// Create announcement with file metadata
 	announcement, err := creator.CreateFromFile(descriptorCID, filePath, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create announcement: %w", err)
 	}
-	
+
 	// Publish to DHT
 	if !quiet {
 		fmt.Printf("Publishing announcement to topic: %s\n", *topic)
 		fmt.Printf("Topic hash: %s\n", announcement.TopicHash)
 	}
-	
+
 	// Create DHT publisher
 	pubConfig := dht.PublisherConfig{
 		StorageManager: storageManager,
 		IPFSShell:      shell,
 		PublishRate:    1 * time.Minute,
 	}
-	
+
 	publisher, err := dht.NewPublisher(pubConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create publisher: %w", err)
 	}
-	
+
 	ctx := context.Background()
 	if err := publisher.Publish(ctx, announcement); err != nil {
 		return fmt.Errorf("failed to publish announcement: %w", err)
 	}
-	
+
 	// Also publish to PubSub if requested
 	if *realtime {
 		rtPublisher, err := pubsub.NewRealtimePublisher(shell)
@@ -184,17 +184,17 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 			}
 		}
 	}
-	
+
 	// Output results
 	if jsonOutput {
 		result := map[string]interface{}{
-			"success":       true,
-			"descriptor":    descriptorCID,
-			"topic":         *topic,
-			"topic_hash":    announcement.TopicHash,
-			"tags":          announcement.TagBloom != "",
-			"ttl":           announcement.TTL,
-			"realtime":      *realtime,
+			"success":    true,
+			"descriptor": descriptorCID,
+			"topic":      *topic,
+			"topic_hash": announcement.TopicHash,
+			"tags":       announcement.TagBloom != "",
+			"ttl":        announcement.TTL,
+			"realtime":   *realtime,
 		}
 		util.PrintJSON(result)
 	} else if !quiet {
@@ -206,6 +206,6 @@ func announceCommand(args []string, storageManager *storage.Manager, shell *shel
 		}
 		fmt.Printf("Expires in: %v\n", *ttl)
 	}
-	
+
 	return nil
 }

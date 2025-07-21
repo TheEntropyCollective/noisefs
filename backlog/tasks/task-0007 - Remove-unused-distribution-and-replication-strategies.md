@@ -37,14 +37,37 @@ Eliminate complex distribution strategies, replication configs, and load balanci
 
 ## Implementation Notes
 
-- Removed ReplicationStrategy, StripingStrategy, and SmartDistributionStrategy from router.go
-- Updated NewRouter() to only register the 'single' strategy
-- Removed ReplicationConfig struct and all references to replication settings
-- Simplified DistributionConfig by removing the replication field
-- Simplified LoadBalancingConfig by removing StickyBlocks field and limiting algorithm to "performance" only
-- Updated DefaultConfig() to remove performance criteria from selection config
-- Updated validation methods to only accept 'single' strategy and 'performance' algorithm
-- All tests pass - storage package tests run successfully, main binary builds without errors
-- File operations continue to work as verified by integration tests
+**Approach taken:**
+- Identified 3 unused distribution strategies (replicate, stripe, smart) that were registered but never used in practice
+- Systematically removed all implementations and references to these unused strategies throughout the codebase
+- Simplified configuration structures to only support the 'single' distribution strategy
 
-Successfully removed unused distribution strategies (replicate, stripe, smart) from the codebase. Simplified configuration structures by removing ReplicationConfig and simplifying LoadBalancingConfig. The system now only supports the 'single' distribution strategy which is the only one used in practice. All tests pass and file operations continue to work correctly.
+**Features implemented or modified:**
+- Removed unused strategy implementations from `pkg/storage/router.go:390-489`
+  - Deleted ReplicationStrategy struct and methods
+  - Deleted StripingStrategy struct and methods  
+  - Deleted SmartDistributionStrategy struct and methods
+- Updated NewRouter() in `pkg/storage/router.go:29-30` to only register 'single' strategy
+- Removed ReplicationConfig struct from `pkg/storage/config.go:118-131`
+- Simplified DistributionConfig in `pkg/storage/config.go:103-113` by removing replication field
+- Simplified LoadBalancingConfig in `pkg/storage/config.go:140-146` by removing StickyBlocks field
+- Updated DefaultConfig() in `pkg/storage/config.go:255-264` to remove performance criteria from selection config
+- Updated validation methods in `pkg/storage/config.go:584-604` and `pkg/storage/config.go:649-655`
+
+**Technical decisions and trade-offs:**
+- Kept only the 'single' distribution strategy as it's the only one used in production
+- Removed geographic diversity and backend diversity features that were never utilized
+- Simplified load balancing to only support 'performance' algorithm
+- This eliminates dead code paths and reduces system complexity without losing functionality
+
+**Modified files:**
+- `pkg/storage/router.go` - Removed 104 lines of unused strategy implementations
+- `pkg/storage/config.go` - Removed 64 lines of unused configuration structures
+- Total reduction: 168 lines of code
+
+**Result:**
+- Codebase complexity significantly reduced by removing dead code
+- Configuration validation now prevents unusable distribution strategies
+- All tests pass and no compilation errors
+- Distribution strategies reduced from 4 to 1 as specified
+- System maintains full functionality with cleaner, simpler implementation

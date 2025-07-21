@@ -44,14 +44,14 @@ func (m *MemoryMonitor) Update() {
 	if !m.enabled {
 		return
 	}
-	
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	m.currentAlloc = memStats.Alloc
-	
+
 	if memStats.Alloc > m.peakMemory {
 		m.peakMemory = memStats.Alloc
 	}
@@ -66,24 +66,24 @@ func (m *MemoryMonitor) GetStats() (current, peak, start uint64) {
 
 // StreamingBlockProcessor handles streaming block processing with bounded memory
 type StreamingBlockProcessor struct {
-	client          *noisefs.Client
-	descriptor      *descriptors.Descriptor
-	storageManager  *storage.Manager
-	pool            *workers.Pool
-	memoryLimit     int64
-	bufferSize      int
-	currentMemory   int64
-	mu              sync.Mutex
-	logger          *logging.Logger
-	memMonitor      *MemoryMonitor
-	
+	client         *noisefs.Client
+	descriptor     *descriptors.Descriptor
+	storageManager *storage.Manager
+	pool           *workers.Pool
+	memoryLimit    int64
+	bufferSize     int
+	currentMemory  int64
+	mu             sync.Mutex
+	logger         *logging.Logger
+	memMonitor     *MemoryMonitor
+
 	// Channels for pipelined processing
-	blockChannel    chan *blockData
-	xorChannel      chan *xorData
-	storeChannel    chan *storeData
-	errors          chan error
-	done            chan bool
-	
+	blockChannel chan *blockData
+	xorChannel   chan *xorData
+	storeChannel chan *storeData
+	errors       chan error
+	done         chan bool
+
 	// Progress tracking
 	blocksProcessed int
 	bytesProcessed  int64
@@ -114,23 +114,23 @@ func NewStreamingBlockProcessor(client *noisefs.Client, storageManager *storage.
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU()
 	}
-	
+
 	pool := workers.NewPool(workers.Config{
 		WorkerCount:     workerCount,
 		BufferSize:      workerCount * 2,
 		ShutdownTimeout: 30 * time.Second,
 	})
-	
+
 	memoryLimit := cfg.Performance.MemoryLimit
 	if memoryLimit <= 0 {
 		memoryLimit = 512 // Default 512MB
 	}
-	
+
 	bufferSize := cfg.Performance.StreamBufferSize
 	if bufferSize <= 0 {
 		bufferSize = 10 // Default buffer size
 	}
-	
+
 	return &StreamingBlockProcessor{
 		client:         client,
 		descriptor:     descriptor,
@@ -161,16 +161,16 @@ func (p *StreamingBlockProcessor) ProcessBlock(blockIndex int, block *blocks.Blo
 			"block_size_kb":     blockSize / 1024,
 			"limit_mb":          p.memoryLimit / (1024 * 1024),
 		})
-		
+
 		// Apply backpressure - wait for pipeline to process blocks
 		time.Sleep(100 * time.Millisecond)
-		
+
 		// Retry
 		p.mu.Lock()
 	}
 	p.currentMemory += blockSize
 	p.mu.Unlock()
-	
+
 	// Send block for processing
 	select {
 	case p.blockChannel <- &blockData{index: blockIndex, block: block}:
@@ -185,17 +185,17 @@ func (p *StreamingBlockProcessor) Start() error {
 	if err := p.pool.Start(); err != nil {
 		return fmt.Errorf("failed to start worker pool: %w", err)
 	}
-	
+
 	// Start pipeline stages
 	go p.xorStage()
 	go p.storeStage()
 	go p.descriptorStage()
-	
+
 	// Start memory monitoring
 	if p.memMonitor.enabled {
 		go p.monitorMemory()
 	}
-	
+
 	return nil
 }
 
@@ -208,19 +208,19 @@ func (p *StreamingBlockProcessor) xorStage() {
 			p.errors <- fmt.Errorf("failed to select randomizers for block %d: %w", blockData.index, err)
 			return
 		}
-		
+
 		// Perform XOR
 		xorBlock, err := blockData.block.XOR(randBlock1, randBlock2)
 		if err != nil {
 			p.errors <- fmt.Errorf("failed to XOR block %d: %w", blockData.index, err)
 			return
 		}
-		
+
 		// Free original block memory
 		p.mu.Lock()
 		p.currentMemory -= int64(blockData.block.Size())
 		p.mu.Unlock()
-		
+
 		// Send to next stage
 		p.xorChannel <- &xorData{
 			index:           blockData.index,
@@ -228,7 +228,7 @@ func (p *StreamingBlockProcessor) xorStage() {
 			randomizer1CID:  cid1,
 			randomizer2CID:  cid2,
 		}
-		
+
 		// Update memory monitor
 		p.memMonitor.Update()
 	}
@@ -244,12 +244,12 @@ func (p *StreamingBlockProcessor) storeStage() {
 			p.errors <- fmt.Errorf("failed to store block %d: %w", xorData.index, err)
 			return
 		}
-		
+
 		// Free XOR block memory
 		p.mu.Lock()
 		p.currentMemory -= int64(xorData.anonymizedBlock.Size())
 		p.mu.Unlock()
-		
+
 		// Send to descriptor stage
 		p.storeChannel <- &storeData{
 			index:          xorData.index,
@@ -257,13 +257,13 @@ func (p *StreamingBlockProcessor) storeStage() {
 			randomizer1CID: xorData.randomizer1CID,
 			randomizer2CID: xorData.randomizer2CID,
 		}
-		
+
 		// Update progress
 		p.mu.Lock()
 		p.blocksProcessed++
 		p.bytesProcessed += int64(xorData.anonymizedBlock.Size())
 		p.mu.Unlock()
-		
+
 		// Update memory monitor
 		p.memMonitor.Update()
 	}
@@ -275,10 +275,10 @@ func (p *StreamingBlockProcessor) descriptorStage() {
 	// Buffer for out-of-order blocks
 	blockBuffer := make(map[int]*storeData)
 	nextIndex := 0
-	
+
 	for storeData := range p.storeChannel {
 		blockBuffer[storeData.index] = storeData
-		
+
 		// Process sequential blocks
 		for {
 			if data, exists := blockBuffer[nextIndex]; exists {
@@ -293,7 +293,7 @@ func (p *StreamingBlockProcessor) descriptorStage() {
 			}
 		}
 	}
-	
+
 	// Process any remaining blocks
 	for i := nextIndex; i < nextIndex+len(blockBuffer); i++ {
 		if data, exists := blockBuffer[i]; exists {
@@ -303,7 +303,7 @@ func (p *StreamingBlockProcessor) descriptorStage() {
 			}
 		}
 	}
-	
+
 	p.done <- true
 }
 
@@ -311,7 +311,7 @@ func (p *StreamingBlockProcessor) descriptorStage() {
 func (p *StreamingBlockProcessor) monitorMemory() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		select {
 		case <-p.done:
@@ -319,13 +319,13 @@ func (p *StreamingBlockProcessor) monitorMemory() {
 		default:
 			p.memMonitor.Update()
 			current, peak, start := p.memMonitor.GetStats()
-			
+
 			p.logger.Debug("Memory usage", map[string]interface{}{
-				"current_mb":        current / (1024 * 1024),
-				"peak_mb":           peak / (1024 * 1024),
-				"start_mb":          start / (1024 * 1024),
-				"increase_mb":       (current - start) / (1024 * 1024),
-				"blocks_processed":  p.blocksProcessed,
+				"current_mb":         current / (1024 * 1024),
+				"peak_mb":            peak / (1024 * 1024),
+				"start_mb":           start / (1024 * 1024),
+				"increase_mb":        (current - start) / (1024 * 1024),
+				"blocks_processed":   p.blocksProcessed,
 				"pipeline_memory_mb": p.currentMemory / (1024 * 1024),
 			})
 		}
@@ -335,7 +335,7 @@ func (p *StreamingBlockProcessor) monitorMemory() {
 // Wait waits for processing to complete
 func (p *StreamingBlockProcessor) Wait() error {
 	close(p.blockChannel)
-	
+
 	select {
 	case <-p.done:
 		p.pool.Shutdown()
@@ -357,20 +357,20 @@ func (p *StreamingBlockProcessor) GetStats() (blocksProcessed int, bytesProcesse
 func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Track overall upload time
 	uploadStartTime := time.Now()
-	
+
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
-	
+
 	// Get file info
 	fileInfo, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to get file info: %w", err)
 	}
-	
+
 	// Create descriptor
 	descriptor := descriptors.NewDescriptor(
 		filepath.Base(filePath),
@@ -378,34 +378,34 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 		fileInfo.Size(),
 		blockSize,
 	)
-	
+
 	// Create streaming processor
 	processor := NewStreamingBlockProcessor(client, storageManager, descriptor, cfg, logger)
-	
+
 	// Start processing pipeline
 	if err := processor.Start(); err != nil {
 		return fmt.Errorf("failed to start processor: %w", err)
 	}
-	
+
 	// Create streaming splitter
 	splitter, err := blocks.NewStreamingSplitter(blockSize)
 	if err != nil {
 		return fmt.Errorf("failed to create streaming splitter: %w", err)
 	}
-	
+
 	// Progress tracking
 	var progress *util.ProgressBar
 	if !quiet {
 		progress = util.NewProgressBar(fileInfo.Size(), "Streaming upload", os.Stdout)
 	}
-	
+
 	// Split and process file with progress
 	progressCallback := func(bytesProcessed int64, blocksProcessed int) {
 		if progress != nil {
 			progress.SetCurrent(bytesProcessed)
 		}
 	}
-	
+
 	logger.Info("Starting streaming upload", map[string]interface{}{
 		"file_size_mb":       fileInfo.Size() / (1024 * 1024),
 		"block_size_kb":      blockSize / 1024,
@@ -413,42 +413,42 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 		"buffer_size":        cfg.Performance.StreamBufferSize,
 		"concurrent_workers": cfg.Performance.MaxConcurrentOps,
 	})
-	
+
 	// Process file in streaming fashion
 	if err := splitter.SplitWithProgress(file, processor, progressCallback); err != nil {
 		return fmt.Errorf("failed to process file: %w", err)
 	}
-	
+
 	// Wait for processing to complete
 	if err := processor.Wait(); err != nil {
 		return fmt.Errorf("processing failed: %w", err)
 	}
-	
+
 	if progress != nil {
 		progress.Finish()
 	}
-	
+
 	// Update descriptor with final size (should match file size)
 	blocksProcessed, bytesProcessed := processor.GetStats()
 	logger.Info("Streaming processing complete", map[string]interface{}{
 		"blocks_processed": blocksProcessed,
 		"bytes_processed":  bytesProcessed,
 	})
-	
+
 	// Store descriptor
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	descriptorCID, err := store.Save(descriptor)
 	if err != nil {
 		return fmt.Errorf("failed to store descriptor: %w", err)
 	}
-	
+
 	// Calculate total upload time
 	totalUploadDuration := time.Since(uploadStartTime)
-	
+
 	// Get memory statistics
 	if processor.memMonitor.enabled {
 		current, peak, start := processor.memMonitor.GetStats()
@@ -459,7 +459,7 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 			"increase_mb": (peak - start) / (1024 * 1024),
 		})
 	}
-	
+
 	// Log upload completion with performance metrics
 	logger.Info("Streaming upload completed successfully", map[string]interface{}{
 		"descriptor_cid":      descriptorCID,
@@ -469,7 +469,7 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 		"total_duration_ms":   totalUploadDuration.Milliseconds(),
 		"throughput_mb_per_s": float64(fileInfo.Size()) / (1024 * 1024) / totalUploadDuration.Seconds(),
 	})
-	
+
 	// Display results
 	if jsonOutput {
 		result := util.UploadResult{
@@ -488,7 +488,7 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(fileInfo.Size())/(1024*1024)/totalUploadDuration.Seconds(),
 			totalUploadDuration.Seconds())
-		
+
 		if processor.memMonitor.enabled {
 			_, peak, start := processor.memMonitor.GetStats()
 			fmt.Printf("Memory usage: Peak %.2f MB (increase: %.2f MB)\n",
@@ -496,9 +496,9 @@ func streamingUploadFile(storageManager *storage.Manager, client *noisefs.Client
 				float64(peak-start)/(1024*1024))
 		}
 	}
-	
+
 	// Record upload metrics
 	client.RecordUpload(fileInfo.Size(), bytesProcessed*3) // *3 for data + 2 randomizer blocks
-	
+
 	return nil
 }

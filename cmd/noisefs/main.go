@@ -51,10 +51,10 @@ func main() {
 		disableAltruistic     = flag.Bool("disable-altruistic", false, "Disable altruistic caching")
 		altruisticBandwidthMB = flag.Int("altruistic-bandwidth", 0, "Bandwidth limit for altruistic operations in MB/s")
 		// Streaming flags
-		streaming            = flag.Bool("streaming", false, "Use streaming mode for upload/download with bounded memory")
-		memoryLimitMB        = flag.Int("memory-limit", 0, "Memory limit for streaming operations in MB (overrides config)")
-		streamBufferSize     = flag.Int("stream-buffer", 0, "Buffer size for streaming pipeline (overrides config)")
-		enableMemMonitoring  = flag.Bool("monitor-memory", false, "Enable memory monitoring during streaming operations")
+		streaming           = flag.Bool("streaming", false, "Use streaming mode for upload/download with bounded memory")
+		memoryLimitMB       = flag.Int("memory-limit", 0, "Memory limit for streaming operations in MB (overrides config)")
+		streamBufferSize    = flag.Int("stream-buffer", 0, "Buffer size for streaming pipeline (overrides config)")
+		enableMemMonitoring = flag.Bool("monitor-memory", false, "Enable memory monitoring during streaming operations")
 	)
 
 	// Check for subcommands first
@@ -251,7 +251,7 @@ func main() {
 				"streaming":  *streaming,
 				"recursive":  *recursive,
 			})
-			
+
 			var err error
 			if *streaming {
 				err = streamingUploadDirectory(storageManager, client, *upload, cfg.Performance.BlockSize, *exclude, *quiet, *jsonOutput, cfg, logger)
@@ -292,7 +292,7 @@ func main() {
 				os.Exit(1)
 			}
 		}
-		
+
 		if !*quiet {
 			showMetrics(client, logger)
 		}
@@ -307,7 +307,7 @@ func main() {
 			}
 			os.Exit(1)
 		}
-		
+
 		// Try to detect if the CID is a directory descriptor
 		isDirectory, err := detectDirectoryDescriptor(storageManager, *download)
 		if err != nil {
@@ -320,7 +320,7 @@ func main() {
 			}
 			os.Exit(1)
 		}
-		
+
 		if isDirectory {
 			// Directory download
 			logger.Info("Starting directory download", map[string]interface{}{
@@ -329,7 +329,7 @@ func main() {
 				"streaming":      *streaming,
 				"recursive":      *recursive,
 			})
-			
+
 			var err error
 			if *streaming {
 				err = streamingDownloadDirectory(storageManager, client, *download, *output, *quiet, *jsonOutput, cfg, logger)
@@ -372,7 +372,7 @@ func main() {
 				os.Exit(1)
 			}
 		}
-		
+
 		if !*quiet {
 			showMetrics(client, logger)
 		}
@@ -400,7 +400,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePath string, blockSize int, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Track overall upload time
 	uploadStartTime := time.Now()
-	
+
 	// Open the file
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -477,12 +477,12 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 		workerCount = 10 // Default to 10 workers
 	}
 	pool := workers.NewPool(workers.Config{
-		WorkerCount: workerCount,
-		BufferSize:  workerCount * 2,
+		WorkerCount:     workerCount,
+		BufferSize:      workerCount * 2,
 		ShutdownTimeout: 30 * time.Second,
 	})
 	defer pool.Shutdown()
-	
+
 	// Start the worker pool
 	if err := pool.Start(); err != nil {
 		return fmt.Errorf("failed to start worker pool: %w", err)
@@ -493,7 +493,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 
 	// Parallel XOR blocks with randomizers (3-tuple: data XOR randomizer1 XOR randomizer2)
 	logger.Info("Performing parallel XOR operations", map[string]interface{}{
-		"block_count": len(fileBlocks),
+		"block_count":  len(fileBlocks),
 		"worker_count": workerCount,
 	})
 
@@ -504,7 +504,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 
 	xorDuration := time.Since(xorStartTime)
 	logger.Info("XOR operations completed", map[string]interface{}{
-		"duration_ms": xorDuration.Milliseconds(),
+		"duration_ms":       xorDuration.Milliseconds(),
 		"blocks_per_second": float64(len(fileBlocks)) / xorDuration.Seconds(),
 	})
 
@@ -519,7 +519,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	// Progress will be updated manually after parallel storage completes
 
 	logger.Info("Storing blocks in parallel", map[string]interface{}{
-		"block_count": len(anonymizedBlocks),
+		"block_count":  len(anonymizedBlocks),
 		"worker_count": workerCount,
 	})
 
@@ -530,10 +530,10 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 
 	storageDuration := time.Since(storageStartTime)
 	logger.Info("Storage operations completed", map[string]interface{}{
-		"duration_ms": storageDuration.Milliseconds(),
+		"duration_ms":       storageDuration.Milliseconds(),
 		"blocks_per_second": float64(len(anonymizedBlocks)) / storageDuration.Seconds(),
 	})
-	
+
 	// Complete the progress bar
 	if uploadProgress != nil {
 		for i := 0; i < len(anonymizedBlocks); i++ {
@@ -565,16 +565,16 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 
 	// Calculate total upload time
 	totalUploadDuration := time.Since(uploadStartTime)
-	
+
 	// Log upload completion with performance metrics
 	logger.Info("Upload completed successfully", map[string]interface{}{
-		"descriptor_cid": descriptorCID,
-		"file_name":      filepath.Base(filePath),
-		"file_size":      fileInfo.Size(),
-		"block_count":    len(fileBlocks),
-		"total_duration_ms": totalUploadDuration.Milliseconds(),
+		"descriptor_cid":      descriptorCID,
+		"file_name":           filepath.Base(filePath),
+		"file_size":           fileInfo.Size(),
+		"block_count":         len(fileBlocks),
+		"total_duration_ms":   totalUploadDuration.Milliseconds(),
 		"throughput_mb_per_s": float64(fileInfo.Size()) / (1024 * 1024) / totalUploadDuration.Seconds(),
-		"xor_duration_ms": xorDuration.Milliseconds(),
+		"xor_duration_ms":     xorDuration.Milliseconds(),
 		"storage_duration_ms": storageDuration.Milliseconds(),
 	})
 
@@ -593,13 +593,13 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 	} else {
 		fmt.Println("\nUpload complete!")
 		fmt.Printf("Descriptor CID: %s\n", descriptorCID)
-		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(fileInfo.Size())/(1024*1024)/totalUploadDuration.Seconds(),
 			totalUploadDuration.Seconds())
-		fmt.Printf("  - XOR operations: %.2fs (%d blocks/s)\n", 
-			xorDuration.Seconds(), 
+		fmt.Printf("  - XOR operations: %.2fs (%d blocks/s)\n",
+			xorDuration.Seconds(),
 			int(float64(len(fileBlocks))/xorDuration.Seconds()))
-		fmt.Printf("  - Storage operations: %.2fs (%d blocks/s)\n", 
+		fmt.Printf("  - Storage operations: %.2fs (%d blocks/s)\n",
 			storageDuration.Seconds(),
 			int(float64(len(anonymizedBlocks))/storageDuration.Seconds()))
 	}
@@ -619,7 +619,7 @@ func uploadFile(storageManager *storage.Manager, client *noisefs.Client, filePat
 // uploadDirectory uploads a directory recursively to NoiseFS
 func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, dirPath string, blockSize int, excludePatterns string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	uploadStartTime := time.Now()
-	
+
 	// Parse exclude patterns
 	excludes := make([]string, 0)
 	if excludePatterns != "" {
@@ -628,13 +628,13 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 			excludes[i] = strings.TrimSpace(excludes[i])
 		}
 	}
-	
+
 	// Create encryption key for directory operations
 	encryptionKey, err := crypto.GenerateKey("directory-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate encryption key: %w", err)
 	}
-	
+
 	// Create directory processor
 	processorConfig := &blocks.ProcessorConfig{
 		BlockSize:         blockSize,
@@ -648,7 +648,7 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		AllowedExtensions: nil,
 		BlockedExtensions: excludes,
 	}
-	
+
 	var progressBar *util.ProgressBar
 	if !quiet {
 		// We'll update this once we know the total
@@ -661,12 +661,12 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 			}
 		}
 	}
-	
+
 	processor, err := blocks.NewDirectoryProcessor(processorConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create directory processor: %w", err)
 	}
-	
+
 	// Create a block processor to handle the blocks
 	blockProcessor := &DirectoryBlockProcessor{
 		storageManager: storageManager,
@@ -676,23 +676,23 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		manifests:      make(map[string]string),
 		mutex:          sync.RWMutex{},
 	}
-	
+
 	// Process the directory
 	logger.Info("Starting directory processing", map[string]interface{}{
 		"directory":   dirPath,
 		"block_size":  blockSize,
 		"max_workers": cfg.Performance.MaxConcurrentOps,
 	})
-	
+
 	results, err := processor.ProcessDirectory(dirPath, blockProcessor)
 	if err != nil {
 		return fmt.Errorf("failed to process directory: %w", err)
 	}
-	
+
 	if progressBar != nil {
 		progressBar.Finish()
 	}
-	
+
 	// Find the root directory result
 	var rootResult *blocks.ProcessResult
 	for _, result := range results {
@@ -701,13 +701,13 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 			break
 		}
 	}
-	
+
 	if rootResult == nil {
 		return fmt.Errorf("failed to find root directory result")
 	}
-	
+
 	totalDuration := time.Since(uploadStartTime)
-	
+
 	// Count files and calculate total size
 	var totalFiles int
 	var totalSize int64
@@ -717,7 +717,7 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 			totalSize += result.Size
 		}
 	}
-	
+
 	logger.Info("Directory upload completed", map[string]interface{}{
 		"directory_cid":     rootResult.CID,
 		"directory_path":    dirPath,
@@ -726,15 +726,15 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		"total_duration_ms": totalDuration.Milliseconds(),
 		"throughput_mb_s":   float64(totalSize) / (1024 * 1024) / totalDuration.Seconds(),
 	})
-	
+
 	// Display results
 	if jsonOutput {
 		result := util.DirectoryUploadResult{
-			DirectoryCID: rootResult.CID,
+			DirectoryCID:  rootResult.CID,
 			DirectoryPath: filepath.Base(dirPath),
-			TotalFiles:   totalFiles,
-			TotalSize:    totalSize,
-			BlockSize:    blockSize,
+			TotalFiles:    totalFiles,
+			TotalSize:     totalSize,
+			BlockSize:     blockSize,
 		}
 		util.PrintJSONSuccess(result)
 	} else if quiet {
@@ -744,11 +744,11 @@ func uploadDirectory(storageManager *storage.Manager, client *noisefs.Client, di
 		fmt.Printf("Directory CID: %s\n", rootResult.CID)
 		fmt.Printf("Files uploaded: %d\n", totalFiles)
 		fmt.Printf("Total size: %s\n", formatBytes(totalSize))
-		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(totalSize)/(1024*1024)/totalDuration.Seconds(),
 			totalDuration.Seconds())
 	}
-	
+
 	return nil
 }
 
@@ -772,16 +772,16 @@ type DirectoryBlockProcessor struct {
 func (dbp *DirectoryBlockProcessor) ProcessDirectoryBlock(blockIndex int, block *blocks.Block) error {
 	dbp.mutex.Lock()
 	defer dbp.mutex.Unlock()
-	
+
 	// Store the block
 	dbp.blocks[block.ID] = block
-	
+
 	// Store block in storage backend
 	_, err := dbp.storageManager.Put(context.Background(), block)
 	if err != nil {
 		return fmt.Errorf("failed to store block %s: %w", block.ID, err)
 	}
-	
+
 	return nil
 }
 
@@ -789,23 +789,23 @@ func (dbp *DirectoryBlockProcessor) ProcessDirectoryBlock(blockIndex int, block 
 func (dbp *DirectoryBlockProcessor) ProcessDirectoryManifest(dirPath string, manifestBlock *blocks.Block) error {
 	dbp.mutex.Lock()
 	defer dbp.mutex.Unlock()
-	
+
 	// Store manifest block
 	dbp.manifests[dirPath] = manifestBlock.ID
-	
+
 	// Store manifest in storage backend
 	_, err := dbp.storageManager.Put(context.Background(), manifestBlock)
 	if err != nil {
 		return fmt.Errorf("failed to store manifest block %s: %w", manifestBlock.ID, err)
 	}
-	
+
 	return nil
 }
 
 func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, logger *logging.Logger) error {
 	// Track download start time
 	downloadStartTime := time.Now()
-	
+
 	// Create descriptor store
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
@@ -828,54 +828,54 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 
 	// Create worker pool for parallel operations
 	poolConfig := workers.Config{
-		WorkerCount: runtime.NumCPU() * 2, // Double CPU count for I/O bound operations
-		BufferSize:  runtime.NumCPU() * 4,
+		WorkerCount:     runtime.NumCPU() * 2, // Double CPU count for I/O bound operations
+		BufferSize:      runtime.NumCPU() * 4,
 		ShutdownTimeout: 30 * time.Second,
 	}
-	
+
 	if !quiet {
 		// Add progress reporter
 		poolConfig.ProgressReporter = func(completed, total int64) {
 			// Progress is tracked via progress bars below
 		}
 	}
-	
+
 	pool := workers.NewPool(poolConfig)
 	if err := pool.Start(); err != nil {
 		return fmt.Errorf("failed to start worker pool: %w", err)
 	}
 	defer pool.Shutdown()
-	
+
 	// Create batch processor for block operations
 	batchProcessor := workers.NewBlockOperationBatch(pool)
-	
+
 	// Prepare addresses for parallel retrieval
 	dataAddresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
 	randomizer1Addresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
 	randomizer2Addresses := make([]*storage.BlockAddress, len(descriptor.Blocks))
-	
+
 	for i, block := range descriptor.Blocks {
 		dataAddresses[i] = &storage.BlockAddress{ID: block.DataCID}
 		randomizer1Addresses[i] = &storage.BlockAddress{ID: block.RandomizerCID1}
 		randomizer2Addresses[i] = &storage.BlockAddress{ID: block.RandomizerCID2}
 	}
-	
+
 	ctx := context.Background()
-	
+
 	// Track retrieval timings
 	retrievalStartTime := time.Now()
-	
+
 	// Parallel retrieval of all blocks
 	var dataBlocks, randomizer1Blocks, randomizer2Blocks []*blocks.Block
 	var retrievalErr error
-	
+
 	// Use wait group to retrieve all block types in parallel
 	var wg sync.WaitGroup
 	wg.Add(3)
-	
+
 	// Channel for collecting errors
 	errChan := make(chan error, 3)
-	
+
 	// Retrieve data blocks
 	go func() {
 		defer wg.Done()
@@ -889,7 +889,7 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		}
 		dataBlocks = blocks
 	}()
-	
+
 	// Retrieve randomizer1 blocks
 	go func() {
 		defer wg.Done()
@@ -903,7 +903,7 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		}
 		randomizer1Blocks = blocks
 	}()
-	
+
 	// Retrieve randomizer2 blocks
 	go func() {
 		defer wg.Done()
@@ -917,11 +917,11 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		}
 		randomizer2Blocks = blocks
 	}()
-	
+
 	// Wait for all retrievals to complete
 	wg.Wait()
 	close(errChan)
-	
+
 	// Check for errors
 	for err := range errChan {
 		if err != nil {
@@ -929,34 +929,34 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 			break
 		}
 	}
-	
+
 	if retrievalErr != nil {
 		return retrievalErr
 	}
-	
+
 	retrievalDuration := time.Since(retrievalStartTime)
-	
+
 	// Validate all blocks were retrieved
-	if len(dataBlocks) != len(descriptor.Blocks) || 
-	   len(randomizer1Blocks) != len(descriptor.Blocks) || 
-	   len(randomizer2Blocks) != len(descriptor.Blocks) {
+	if len(dataBlocks) != len(descriptor.Blocks) ||
+		len(randomizer1Blocks) != len(descriptor.Blocks) ||
+		len(randomizer2Blocks) != len(descriptor.Blocks) {
 		return fmt.Errorf("incomplete block retrieval: expected %d blocks, got data=%d, r1=%d, r2=%d",
 			len(descriptor.Blocks), len(dataBlocks), len(randomizer1Blocks), len(randomizer2Blocks))
 	}
-	
+
 	// Parallel XOR reconstruction
 	xorStartTime := time.Now()
 	if !quiet {
 		fmt.Println("Reconstructing original blocks in parallel...")
 	}
-	
+
 	originalBlocks, err := batchProcessor.ParallelXOR(ctx, dataBlocks, randomizer1Blocks, randomizer2Blocks)
 	if err != nil {
 		return fmt.Errorf("parallel XOR reconstruction failed: %w", err)
 	}
-	
+
 	xorDuration := time.Since(xorStartTime)
-	
+
 	// Create output file
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
@@ -971,31 +971,31 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		return fmt.Errorf("failed to assemble file: %w", err)
 	}
 	assembleDuration := time.Since(assembleStartTime)
-	
+
 	// Calculate total download duration
 	totalDownloadDuration := time.Since(downloadStartTime)
-	
+
 	// Log performance metrics
 	logger.Info("Download performance metrics", map[string]interface{}{
-		"descriptor_cid": descriptorCID,
-		"file_size": descriptor.FileSize,
-		"block_count": len(descriptor.Blocks),
-		"total_duration_ms": totalDownloadDuration.Milliseconds(),
+		"descriptor_cid":        descriptorCID,
+		"file_size":             descriptor.FileSize,
+		"block_count":           len(descriptor.Blocks),
+		"total_duration_ms":     totalDownloadDuration.Milliseconds(),
 		"retrieval_duration_ms": retrievalDuration.Milliseconds(),
-		"xor_duration_ms": xorDuration.Milliseconds(),
-		"assembly_duration_ms": assembleDuration.Milliseconds(),
-		"throughput_mb_per_s": float64(descriptor.FileSize) / (1024 * 1024) / totalDownloadDuration.Seconds(),
-		"blocks_per_second": float64(len(descriptor.Blocks)*3) / retrievalDuration.Seconds(), // *3 for all block types
-		"worker_count": poolConfig.WorkerCount,
+		"xor_duration_ms":       xorDuration.Milliseconds(),
+		"assembly_duration_ms":  assembleDuration.Milliseconds(),
+		"throughput_mb_per_s":   float64(descriptor.FileSize) / (1024 * 1024) / totalDownloadDuration.Seconds(),
+		"blocks_per_second":     float64(len(descriptor.Blocks)*3) / retrievalDuration.Seconds(), // *3 for all block types
+		"worker_count":          poolConfig.WorkerCount,
 	})
-	
+
 	// Display pool statistics
 	stats := pool.Stats()
 	logger.Debug("Worker pool statistics", map[string]interface{}{
 		"tasks_submitted": stats.Submitted,
 		"tasks_completed": stats.Completed,
-		"tasks_failed": stats.Failed,
-		"worker_count": stats.WorkerCount,
+		"tasks_failed":    stats.Failed,
+		"worker_count":    stats.WorkerCount,
 	})
 
 	if jsonOutput {
@@ -1008,13 +1008,13 @@ func downloadFile(storageManager *storage.Manager, client *noisefs.Client, descr
 		util.PrintJSONSuccess(result)
 	} else if !quiet {
 		fmt.Printf("\nDownload complete! File saved to: %s\n", outputPath)
-		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(descriptor.FileSize)/(1024*1024)/totalDownloadDuration.Seconds(),
 			totalDownloadDuration.Seconds())
-		fmt.Printf("  - Block retrieval: %.2fs (%d blocks/s)\n", 
-			retrievalDuration.Seconds(), 
+		fmt.Printf("  - Block retrieval: %.2fs (%d blocks/s)\n",
+			retrievalDuration.Seconds(),
 			int(float64(len(descriptor.Blocks)*3)/retrievalDuration.Seconds()))
-		fmt.Printf("  - XOR reconstruction: %.2fs (%d blocks/s)\n", 
+		fmt.Printf("  - XOR reconstruction: %.2fs (%d blocks/s)\n",
 			xorDuration.Seconds(),
 			int(float64(len(descriptor.Blocks))/xorDuration.Seconds()))
 		fmt.Printf("  - File assembly: %.2fs\n", assembleDuration.Seconds())
@@ -1495,26 +1495,26 @@ func lsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonO
 	if len(args) == 0 {
 		return fmt.Errorf("directory CID required")
 	}
-	
+
 	directoryCID := args[0]
-	
+
 	// Create directory manager
 	encryptionKey, err := crypto.GenerateKey("directory-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate encryption key: %w", err)
 	}
-	
+
 	directoryManager, err := storage.NewDirectoryManager(storageManager, encryptionKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create directory manager: %w", err)
 	}
-	
+
 	// Retrieve directory manifest
 	manifest, err := directoryManager.RetrieveDirectoryManifest(context.Background(), "", directoryCID)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve directory manifest: %w", err)
 	}
-	
+
 	// Process directory entries
 	entries := make([]DirectoryListEntry, 0, len(manifest.Entries))
 	for _, entry := range manifest.Entries {
@@ -1529,7 +1529,7 @@ func lsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonO
 		}
 		entries = append(entries, listEntry)
 	}
-	
+
 	// Output results
 	if jsonOutput {
 		result := DirectoryListResult{
@@ -1549,21 +1549,21 @@ func lsCommand(args []string, storageManager *storage.Manager, quiet bool, jsonO
 	} else {
 		fmt.Printf("Directory: %s\n", directoryCID)
 		fmt.Printf("Entries: %d\n\n", len(entries))
-		
+
 		for _, entry := range entries {
 			typeStr := "FILE"
 			if entry.Type == blocks.DirectoryType {
 				typeStr = "DIR"
 			}
-			
-			fmt.Printf("%-4s  %-8s  %s  %s\n", 
-				typeStr, 
-				formatBytes(entry.Size), 
+
+			fmt.Printf("%-4s  %-8s  %s  %s\n",
+				typeStr,
+				formatBytes(entry.Size),
 				entry.ModifiedAt.Format("2006-01-02 15:04:05"),
 				entry.Name)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1590,29 +1590,29 @@ func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (boo
 		ID:          cid,
 		BackendType: storageManager.GetConfig().DefaultBackend,
 	}
-	
+
 	block, err := storageManager.Get(context.Background(), address)
 	if err != nil {
 		return false, fmt.Errorf("failed to retrieve descriptor: %w", err)
 	}
-	
+
 	// Try to unmarshal as a regular file descriptor first
 	_, err = descriptors.FromJSON(block.Data)
 	if err == nil {
 		return false, nil // It's a file descriptor
 	}
-	
+
 	// Try to unmarshal as directory manifest
 	encryptionKey, err := crypto.GenerateKey("directory-key")
 	if err != nil {
 		return false, fmt.Errorf("failed to generate encryption key: %w", err)
 	}
-	
+
 	_, err = descriptors.DecryptManifest(block.Data, encryptionKey)
 	if err == nil {
 		return true, nil // It's a directory descriptor
 	}
-	
+
 	// If both fail, we can't determine the type
 	return false, fmt.Errorf("unable to determine descriptor type")
 }
@@ -1620,44 +1620,44 @@ func detectDirectoryDescriptor(storageManager *storage.Manager, cid string) (boo
 // downloadDirectory downloads a directory recursively
 func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, directoryCID string, outputDir string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	downloadStartTime := time.Now()
-	
+
 	// Create output directory
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
-	
+
 	// Create directory manager
 	encryptionKey, err := crypto.GenerateKey("directory-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate encryption key: %w", err)
 	}
-	
+
 	directoryManager, err := storage.NewDirectoryManager(storageManager, encryptionKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create directory manager: %w", err)
 	}
-	
+
 	// Reconstruct directory
 	result, err := directoryManager.ReconstructDirectory(context.Background(), directoryCID, outputDir)
 	if err != nil {
 		return fmt.Errorf("failed to reconstruct directory: %w", err)
 	}
-	
+
 	// Create progress bar
 	var progressBar *util.ProgressBar
 	if !quiet {
 		progressBar = util.NewProgressBar(int64(result.TotalEntries), "Downloading files", os.Stdout)
 	}
-	
+
 	// Download each file
 	downloadedFiles := 0
 	totalSize := int64(0)
-	
+
 	for _, entry := range result.Entries {
 		if entry.Type == blocks.FileType {
 			// Download file
 			filePath := filepath.Join(outputDir, entry.DecryptedName)
-			
+
 			if err := downloadFile(storageManager, client, entry.CID, filePath, true, false, logger); err != nil {
 				logger.Error("Failed to download file", map[string]interface{}{
 					"file_cid":  entry.CID,
@@ -1666,10 +1666,10 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 				})
 				continue
 			}
-			
+
 			downloadedFiles++
 			totalSize += entry.Size
-			
+
 			if progressBar != nil {
 				progressBar.Add(1)
 			}
@@ -1684,19 +1684,19 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 				})
 				continue
 			}
-			
+
 			if progressBar != nil {
 				progressBar.Add(1)
 			}
 		}
 	}
-	
+
 	if progressBar != nil {
 		progressBar.Finish()
 	}
-	
+
 	totalDuration := time.Since(downloadStartTime)
-	
+
 	logger.Info("Directory download completed", map[string]interface{}{
 		"directory_cid":     directoryCID,
 		"output_dir":        outputDir,
@@ -1705,7 +1705,7 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 		"total_duration_ms": totalDuration.Milliseconds(),
 		"throughput_mb_s":   float64(totalSize) / (1024 * 1024) / totalDuration.Seconds(),
 	})
-	
+
 	// Display results
 	if jsonOutput {
 		result := util.DirectoryDownloadResult{
@@ -1722,11 +1722,11 @@ func downloadDirectory(storageManager *storage.Manager, client *noisefs.Client, 
 		fmt.Printf("Directory: %s\n", outputDir)
 		fmt.Printf("Files downloaded: %d\n", downloadedFiles)
 		fmt.Printf("Total size: %s\n", formatBytes(totalSize))
-		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n", 
+		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(totalSize)/(1024*1024)/totalDuration.Seconds(),
 			totalDuration.Seconds())
 	}
-	
+
 	return nil
 }
 
@@ -1741,7 +1741,7 @@ func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet
 	if len(args) < 3 {
 		return fmt.Errorf("usage: share-directory <directory-cid> <directory-key> <snapshot-name> [description]")
 	}
-	
+
 	directoryCID := args[0]
 	directoryKeyStr := args[1]
 	snapshotName := args[2]
@@ -1749,24 +1749,24 @@ func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet
 	if len(args) > 3 {
 		description = args[3]
 	}
-	
+
 	// Parse the directory key
 	directoryKey, err := crypto.ParseKeyFromString(directoryKeyStr)
 	if err != nil {
 		return fmt.Errorf("failed to parse directory key: %w", err)
 	}
-	
+
 	// Create directory manager
 	tempKey, err := crypto.GenerateKey("temp-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate temp key: %w", err)
 	}
-	
+
 	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create directory manager: %w", err)
 	}
-	
+
 	// Create snapshot
 	snapshotCID, snapshotKey, err := directoryManager.CreateDirectorySnapshot(
 		context.Background(),
@@ -1778,7 +1778,7 @@ func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet
 	if err != nil {
 		return fmt.Errorf("failed to create directory snapshot: %w", err)
 	}
-	
+
 	// Prepare result
 	result := ShareDirectoryResult{
 		SnapshotCID:  snapshotCID,
@@ -1788,7 +1788,7 @@ func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet
 		OriginalCID:  directoryCID,
 		CreatedAt:    time.Now(),
 	}
-	
+
 	// Output result
 	if jsonOutput {
 		util.PrintJSONSuccess(result)
@@ -1805,7 +1805,7 @@ func shareDirectoryCommand(args []string, storageManager *storage.Manager, quiet
 		fmt.Printf("Original CID: %s\n", directoryCID)
 		fmt.Printf("\nShare this CID and key with others to give them read-only access to the directory snapshot.\n")
 	}
-	
+
 	return nil
 }
 
@@ -1814,27 +1814,27 @@ func receiveDirectoryCommand(args []string, storageManager *storage.Manager, qui
 	if len(args) < 2 {
 		return fmt.Errorf("usage: receive-directory <snapshot-cid> <snapshot-key>")
 	}
-	
+
 	snapshotCID := args[0]
 	snapshotKeyStr := args[1]
-	
+
 	// Parse the snapshot key
 	snapshotKey, err := crypto.ParseKeyFromString(snapshotKeyStr)
 	if err != nil {
 		return fmt.Errorf("failed to parse snapshot key: %w", err)
 	}
-	
+
 	// Create directory manager
 	tempKey, err := crypto.GenerateKey("temp-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate temp key: %w", err)
 	}
-	
+
 	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create directory manager: %w", err)
 	}
-	
+
 	// Retrieve snapshot manifest
 	manifest, err := directoryManager.RetrieveDirectoryManifestWithKey(
 		context.Background(),
@@ -1844,18 +1844,18 @@ func receiveDirectoryCommand(args []string, storageManager *storage.Manager, qui
 	if err != nil {
 		return fmt.Errorf("failed to retrieve directory snapshot: %w", err)
 	}
-	
+
 	// Verify this is a snapshot
 	if !manifest.IsSnapshot() {
 		return fmt.Errorf("CID does not point to a valid directory snapshot")
 	}
-	
+
 	// Get snapshot info
 	snapshotInfo := manifest.GetSnapshotInfo()
 	if snapshotInfo == nil {
 		return fmt.Errorf("snapshot missing metadata")
 	}
-	
+
 	// Process directory entries
 	entries := make([]DirectoryListEntry, 0, len(manifest.Entries))
 	for _, entry := range manifest.Entries {
@@ -1868,19 +1868,19 @@ func receiveDirectoryCommand(args []string, storageManager *storage.Manager, qui
 		}
 		entries = append(entries, listEntry)
 	}
-	
+
 	// Prepare result
 	result := ReceiveDirectoryResult{
-		SnapshotCID:    snapshotCID,
-		SnapshotName:   snapshotInfo.SnapshotName,
-		Description:    snapshotInfo.Description,
-		OriginalCID:    snapshotInfo.OriginalCID,
-		CreatedAt:      snapshotInfo.CreationTime,
-		Entries:        entries,
-		TotalEntries:   len(entries),
-		IsSnapshot:     true,
+		SnapshotCID:  snapshotCID,
+		SnapshotName: snapshotInfo.SnapshotName,
+		Description:  snapshotInfo.Description,
+		OriginalCID:  snapshotInfo.OriginalCID,
+		CreatedAt:    snapshotInfo.CreationTime,
+		Entries:      entries,
+		TotalEntries: len(entries),
+		IsSnapshot:   true,
 	}
-	
+
 	// Output result
 	if jsonOutput {
 		util.PrintJSONSuccess(result)
@@ -1901,21 +1901,21 @@ func receiveDirectoryCommand(args []string, storageManager *storage.Manager, qui
 		fmt.Printf("Original CID: %s\n", snapshotInfo.OriginalCID)
 		fmt.Printf("Created: %s\n", snapshotInfo.CreationTime.Format("2006-01-02 15:04:05"))
 		fmt.Printf("Entries: %d\n\n", len(entries))
-		
+
 		for _, entry := range entries {
 			typeStr := "FILE"
 			if entry.Type == blocks.DirectoryType {
 				typeStr = "DIR"
 			}
-			
-			fmt.Printf("%-4s  %-8s  %s  %s\n", 
-				typeStr, 
-				formatBytes(entry.Size), 
+
+			fmt.Printf("%-4s  %-8s  %s  %s\n",
+				typeStr,
+				formatBytes(entry.Size),
 				entry.ModifiedAt.Format("2006-01-02 15:04:05"),
 				entry.Name)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1924,10 +1924,10 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 	if len(args) < 1 {
 		return fmt.Errorf("usage: list-snapshots <directory-cid> [directory-key]")
 	}
-	
+
 	directoryCID := args[0]
 	var directoryKey *crypto.EncryptionKey
-	
+
 	if len(args) > 1 {
 		var err error
 		directoryKey, err = crypto.ParseKeyFromString(args[1])
@@ -1935,18 +1935,18 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 			return fmt.Errorf("failed to parse directory key: %w", err)
 		}
 	}
-	
+
 	// Create directory manager
 	tempKey, err := crypto.GenerateKey("temp-key")
 	if err != nil {
 		return fmt.Errorf("failed to generate temp key: %w", err)
 	}
-	
+
 	directoryManager, err := storage.NewDirectoryManager(storageManager, tempKey, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create directory manager: %w", err)
 	}
-	
+
 	// For now, we can only list the original directory info
 	// In a full implementation, we would need a snapshot index or registry
 	var manifest *blocks.DirectoryManifest
@@ -1964,14 +1964,14 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 			directoryCID,
 		)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to retrieve directory manifest: %w", err)
 	}
-	
+
 	// Prepare result
 	snapshots := make([]SnapshotInfo, 0)
-	
+
 	// If this is a snapshot, include it in the list
 	if manifest.IsSnapshot() {
 		snapshotInfo := manifest.GetSnapshotInfo()
@@ -1986,13 +1986,13 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 			})
 		}
 	}
-	
+
 	result := ListSnapshotsResult{
-		DirectoryCID: directoryCID,
-		Snapshots:    snapshots,
+		DirectoryCID:   directoryCID,
+		Snapshots:      snapshots,
 		TotalSnapshots: len(snapshots),
 	}
-	
+
 	// Output result
 	if jsonOutput {
 		util.PrintJSONSuccess(result)
@@ -2003,7 +2003,7 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 	} else {
 		fmt.Printf("Directory: %s\n", directoryCID)
 		fmt.Printf("Snapshots: %d\n\n", len(snapshots))
-		
+
 		if len(snapshots) == 0 {
 			fmt.Printf("No snapshots found.\n")
 			fmt.Printf("Note: This command currently only detects if the provided CID is itself a snapshot.\n")
@@ -2021,7 +2021,7 @@ func listSnapshotsCommand(args []string, storageManager *storage.Manager, quiet 
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -2036,14 +2036,14 @@ type ShareDirectoryResult struct {
 }
 
 type ReceiveDirectoryResult struct {
-	SnapshotCID    string               `json:"snapshot_cid"`
-	SnapshotName   string               `json:"snapshot_name"`
-	Description    string               `json:"description"`
-	OriginalCID    string               `json:"original_cid"`
-	CreatedAt      time.Time            `json:"created_at"`
-	Entries        []DirectoryListEntry `json:"entries"`
-	TotalEntries   int                  `json:"total_entries"`
-	IsSnapshot     bool                 `json:"is_snapshot"`
+	SnapshotCID  string               `json:"snapshot_cid"`
+	SnapshotName string               `json:"snapshot_name"`
+	Description  string               `json:"description"`
+	OriginalCID  string               `json:"original_cid"`
+	CreatedAt    time.Time            `json:"created_at"`
+	Entries      []DirectoryListEntry `json:"entries"`
+	TotalEntries int                  `json:"total_entries"`
+	IsSnapshot   bool                 `json:"is_snapshot"`
 }
 
 type SnapshotInfo struct {

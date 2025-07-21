@@ -12,51 +12,51 @@ import (
 	"strings"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
-	"github.com/TheEntropyCollective/noisefs/pkg/tools/bootstrap"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
-	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/config"
 	"github.com/TheEntropyCollective/noisefs/pkg/infrastructure/logging"
-	"github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage"
+	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
+	"github.com/TheEntropyCollective/noisefs/pkg/tools/bootstrap"
 )
 
 func main() {
 	var (
-		configFile   = flag.String("config", "", "Configuration file path")
-		mountPath    = flag.String("mount", "", "Mount point for the filesystem (overrides config)")
+		configFile = flag.String("config", "", "Configuration file path")
+		mountPath  = flag.String("mount", "", "Mount point for the filesystem (overrides config)")
 		// volumeName   = flag.String("volume", "", "Volume name (overrides config)") // Removed in simplified config
-		ipfsAPI      = flag.String("ipfs", "", "IPFS API endpoint (overrides config)")
-		cacheSize    = flag.Int("cache", 0, "Cache size (number of blocks, overrides config)")
-		readOnly     = flag.Bool("readonly", false, "Mount as read-only (overrides config)")
+		ipfsAPI   = flag.String("ipfs", "", "IPFS API endpoint (overrides config)")
+		cacheSize = flag.Int("cache", 0, "Cache size (number of blocks, overrides config)")
+		readOnly  = flag.Bool("readonly", false, "Mount as read-only (overrides config)")
 		// allowOther   = flag.Bool("allow-other", false, "Allow other users to access (overrides config)") // Removed in simplified config
-		debug        = flag.Bool("debug", false, "Enable debug output (overrides config)")
-		daemon       = flag.Bool("daemon", false, "Run as daemon")
-		pidFile      = flag.String("pidfile", "", "PID file for daemon mode")
-		unmount      = flag.Bool("unmount", false, "Unmount filesystem")
-		list         = flag.Bool("list", false, "List mounted filesystems")
-		help         = flag.Bool("help", false, "Show help message")
-		
+		debug   = flag.Bool("debug", false, "Enable debug output (overrides config)")
+		daemon  = flag.Bool("daemon", false, "Run as daemon")
+		pidFile = flag.String("pidfile", "", "PID file for daemon mode")
+		unmount = flag.Bool("unmount", false, "Unmount filesystem")
+		list    = flag.Bool("list", false, "List mounted filesystems")
+		help    = flag.Bool("help", false, "Show help message")
+
 		// Index management flags
-		indexFile    = flag.String("index", "", "Custom index file path (overrides config)")
-		addFile      = flag.String("add-file", "", "Add file to index: filename:descriptor_cid:size")
-		removeFile   = flag.String("remove-file", "", "Remove file from index")
-		listFiles    = flag.Bool("list-files", false, "List files in index")
-		showIndex    = flag.Bool("show-index", false, "Show index file path and stats")
-		
+		indexFile  = flag.String("index", "", "Custom index file path (overrides config)")
+		addFile    = flag.String("add-file", "", "Add file to index: filename:descriptor_cid:size")
+		removeFile = flag.String("remove-file", "", "Remove file from index")
+		listFiles  = flag.Bool("list-files", false, "List files in index")
+		showIndex  = flag.Bool("show-index", false, "Show index file path and stats")
+
 		// Bootstrap flags
-		bootstrapFlag   = flag.Bool("bootstrap", false, "Bootstrap filesystem with sample data")
-		bootstrapData   = flag.String("bootstrap-data", "mixed", "Bootstrap dataset (mixed, books, images, documents, code)")
-		bootstrapSize   = flag.Int64("bootstrap-size", 100*1024*1024, "Maximum bootstrap data size in bytes")
-		bootstrapDir    = flag.String("bootstrap-dir", "", "Directory to store bootstrap data before upload")
-		listBootstrap   = flag.Bool("list-bootstrap", false, "List available bootstrap datasets")
-		
+		bootstrapFlag = flag.Bool("bootstrap", false, "Bootstrap filesystem with sample data")
+		bootstrapData = flag.String("bootstrap-data", "mixed", "Bootstrap dataset (mixed, books, images, documents, code)")
+		bootstrapSize = flag.Int64("bootstrap-size", 100*1024*1024, "Maximum bootstrap data size in bytes")
+		bootstrapDir  = flag.String("bootstrap-dir", "", "Directory to store bootstrap data before upload")
+		listBootstrap = flag.Bool("list-bootstrap", false, "List available bootstrap datasets")
+
 		// Directory mounting flags
 		directoryDescriptor = flag.String("directory-descriptor", "", "Directory descriptor CID to mount")
-		directoryKey       = flag.String("directory-key", "", "Encryption key for directory descriptor")
-		subdir             = flag.String("subdir", "", "Subdirectory within directory descriptor to mount")
-		multiDirs          = flag.String("multi-dirs", "", "Mount multiple directories (format: name1:cid1:key1,name2:cid2:key2)")
+		directoryKey        = flag.String("directory-key", "", "Encryption key for directory descriptor")
+		subdir              = flag.String("subdir", "", "Subdirectory within directory descriptor to mount")
+		multiDirs           = flag.String("multi-dirs", "", "Mount multiple directories (format: name1:cid1:key1,name2:cid2:key2)")
 	)
 	flag.Parse()
 
@@ -99,7 +99,7 @@ func main() {
 	if err := logging.InitFromConfig(cfg.Logging.Level, cfg.Logging.Format, cfg.Logging.Output, cfg.Logging.File); err != nil {
 		log.Fatalf("Failed to initialize logging: %v", err)
 	}
-	
+
 	logger := logging.GetGlobalLogger().WithComponent("noisefs-mount")
 
 	// Apply command-line overrides
@@ -142,8 +142,8 @@ func main() {
 	}
 
 	// Mount filesystem
-	mountFS(cfg.FUSE.MountPath, "NoiseFS", cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize, 
-		cfg.FUSE.ReadOnly, false, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath, 
+	mountFS(cfg.FUSE.MountPath, "NoiseFS", cfg.IPFS.APIEndpoint, cfg.Cache.BlockCacheSize,
+		cfg.FUSE.ReadOnly, false, cfg.FUSE.Debug, *daemon, *pidFile, cfg.FUSE.IndexPath,
 		*directoryDescriptor, *directoryKey, *subdir, *multiDirs, logger)
 }
 
@@ -234,7 +234,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 			configPath = defaultPath
 		}
 	}
-	
+
 	return config.LoadConfig(configPath)
 }
 
@@ -250,7 +250,7 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
 		ipfsBackend.Connection.Endpoint = ipfsAPI
 	}
-	
+
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		logger.Error("Failed to create storage manager", map[string]interface{}{
@@ -259,7 +259,7 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 		})
 		os.Exit(1)
 	}
-	
+
 	err = storageManager.Start(context.Background())
 	if err != nil {
 		logger.Error("Failed to start storage manager", map[string]interface{}{
@@ -292,7 +292,7 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 			dirParts := strings.Split(part, ":")
 			if len(dirParts) != 3 {
 				logger.Error("Invalid multi-dirs format", map[string]interface{}{
-					"format": part,
+					"format":   part,
 					"expected": "name:cid:key",
 				})
 				os.Exit(1)
@@ -307,11 +307,11 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 
 	// Mount options
 	opts := fuse.MountOptions{
-		MountPath:  mountPath,
-		VolumeName: volumeName,
-		ReadOnly:   readOnly,
-		AllowOther: allowOther,
-		Debug:      debug,
+		MountPath:           mountPath,
+		VolumeName:          volumeName,
+		ReadOnly:            readOnly,
+		AllowOther:          allowOther,
+		Debug:               debug,
 		DirectoryDescriptor: directoryDescriptor,
 		DirectoryKey:        directoryKey,
 		Subdir:              subdir,
@@ -322,7 +322,7 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 	fmt.Printf("IPFS endpoint: %s\n", ipfsAPI)
 	fmt.Printf("Cache size: %d blocks\n", cacheSize)
 	fmt.Printf("Volume name: %s\n", volumeName)
-	
+
 	// Show directory mounting info
 	if directoryDescriptor != "" {
 		fmt.Printf("Directory descriptor: %s\n", directoryDescriptor)
@@ -357,31 +357,31 @@ func mountFS(mountPath, volumeName, ipfsAPI string, cacheSize int, readOnly, all
 
 func unmountFS(mountPath string) {
 	mountPath = filepath.Clean(mountPath)
-	
+
 	fmt.Printf("Unmounting filesystem at: %s\n", mountPath)
-	
+
 	err := fuse.Unmount(mountPath)
 	if err != nil {
 		log.Fatalf("Unmount failed: %v", err)
 	}
-	
+
 	fmt.Println("Filesystem unmounted successfully")
 }
 
 func listMounts() {
 	fmt.Println("Mounted NoiseFS filesystems:")
 	fmt.Println("============================")
-	
+
 	mounts, err := fuse.ListMounts()
 	if err != nil {
 		log.Fatalf("Failed to list mounts: %v", err)
 	}
-	
+
 	if len(mounts) == 0 {
 		fmt.Println("No NoiseFS filesystems currently mounted")
 		return
 	}
-	
+
 	for _, mount := range mounts {
 		fmt.Printf("Mount Path: %s\n", mount.MountPath)
 		fmt.Printf("Volume:     %s\n", mount.VolumeName)
@@ -395,7 +395,7 @@ func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile,
 	// Get index path
 	var indexPath string
 	var err error
-	
+
 	if indexFile != "" {
 		indexPath = indexFile
 	} else {
@@ -404,13 +404,13 @@ func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile,
 			log.Fatalf("Failed to get index path: %v", err)
 		}
 	}
-	
+
 	// Create and load index
 	index := fuse.NewFileIndex(indexPath)
 	if err := index.LoadIndex(); err != nil {
 		log.Fatalf("Failed to load index: %v", err)
 	}
-	
+
 	// Handle operations
 	if showIndex {
 		fmt.Printf("Index file: %s\n", indexPath)
@@ -421,7 +421,7 @@ func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile,
 			fmt.Println("Status: Saved")
 		}
 	}
-	
+
 	if listFiles {
 		files := index.ListFiles()
 		if len(files) == 0 {
@@ -429,32 +429,32 @@ func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile,
 		} else {
 			fmt.Printf("Files in index (%d):\n", len(files))
 			for path, entry := range files {
-				fmt.Printf("  %s -> %s (%d bytes, %s)\n", 
+				fmt.Printf("  %s -> %s (%d bytes, %s)\n",
 					path, entry.DescriptorCID, entry.FileSize, entry.CreatedAt.Format("2006-01-02 15:04:05"))
 			}
 		}
 	}
-	
+
 	if addFile != "" {
 		parts := strings.Split(addFile, ":")
 		if len(parts) != 3 {
 			log.Fatal("add-file format: filename:descriptor_cid:size")
 		}
-		
+
 		filename := parts[0]
 		descriptorCID := parts[1]
 		fileSize, err := strconv.ParseInt(parts[2], 10, 64)
 		if err != nil {
 			log.Fatalf("Invalid file size: %v", err)
 		}
-		
+
 		index.AddFile(filename, descriptorCID, fileSize)
 		if err := index.SaveIndex(); err != nil {
 			log.Fatalf("Failed to save index: %v", err)
 		}
 		fmt.Printf("Added file: %s\n", filename)
 	}
-	
+
 	if removeFile != "" {
 		if index.RemoveFile(removeFile) {
 			if err := index.SaveIndex(); err != nil {
@@ -470,7 +470,7 @@ func handleIndexOperations(indexFile string, showIndex, listFiles bool, addFile,
 func init() {
 	// Set up logging
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	
+
 	// Check if running as root (may be required for mounting)
 	if os.Geteuid() == 0 {
 		fmt.Println("Warning: Running as root")
@@ -480,16 +480,16 @@ func init() {
 // handleBootstrap downloads and uploads bootstrap data directly to NoiseFS
 func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstrapDir string, logger *logging.Logger) {
 	logger.Info("Starting bootstrap process", map[string]interface{}{
-		"dataset": dataset,
-		"max_size": maxSize,
+		"dataset":       dataset,
+		"max_size":      maxSize,
 		"bootstrap_dir": bootstrapDir,
 	})
-	
+
 	// Set default bootstrap directory if not provided
 	if bootstrapDir == "" {
 		bootstrapDir = filepath.Join(os.TempDir(), "noisefs_bootstrap")
 	}
-	
+
 	// Create bootstrap configuration
 	bootstrapConfig := &bootstrap.Config{
 		OutputDir:         bootstrapDir,
@@ -498,7 +498,7 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 		Verbose:           cfg.FUSE.Debug,
 		ParallelDownloads: 4,
 	}
-	
+
 	// Download bootstrap data
 	fmt.Printf("Downloading bootstrap dataset '%s'...\n", dataset)
 	generator := bootstrap.NewDatasetGenerator(bootstrapConfig)
@@ -508,7 +508,7 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 		})
 		return
 	}
-	
+
 	// Get summary
 	summary, err := generator.GetSummary()
 	if err != nil {
@@ -517,9 +517,9 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 		})
 		return
 	}
-	
+
 	fmt.Printf("Downloaded %d files (%.2f MB)\n", summary.TotalFiles, float64(summary.TotalSize)/(1024*1024))
-	
+
 	// Create IPFS client and NoiseFS client for direct upload
 	fmt.Printf("Uploading bootstrap data to NoiseFS...\n")
 	if err := uploadBootstrapDataDirectly(bootstrapDir, cfg, logger); err != nil {
@@ -528,15 +528,15 @@ func handleBootstrap(cfg *config.Config, dataset string, maxSize int64, bootstra
 		})
 		return
 	}
-	
+
 	fmt.Println("Bootstrap process completed successfully!")
 	fmt.Printf("Files will be available in the mounted filesystem at: %s\n", cfg.FUSE.MountPath)
-	
+
 	// Clean up bootstrap directory
 	if err := os.RemoveAll(bootstrapDir); err != nil {
 		logger.Warn("Failed to clean up bootstrap directory", map[string]interface{}{
 			"directory": bootstrapDir,
-			"error": err.Error(),
+			"error":     err.Error(),
 		})
 	}
 }
@@ -548,27 +548,27 @@ func uploadBootstrapDataDirectly(srcDir string, cfg *config.Config, logger *logg
 	if ipfsBackend, exists := storageConfig.Backends["ipfs"]; exists {
 		ipfsBackend.Connection.Endpoint = cfg.IPFS.APIEndpoint
 	}
-	
+
 	storageManager, err := storage.NewManager(storageConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create storage manager: %w", err)
 	}
-	
+
 	err = storageManager.Start(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to start storage manager: %w", err)
 	}
 	defer storageManager.Stop(context.Background())
-	
+
 	// Create cache
 	blockCache := cache.NewMemoryCache(cfg.Cache.BlockCacheSize)
-	
+
 	// Create NoiseFS client
 	client, err := noisefs.NewClient(storageManager, blockCache)
 	if err != nil {
 		return fmt.Errorf("failed to create NoiseFS client: %w", err)
 	}
-	
+
 	// Create or load index
 	indexPath := cfg.FUSE.IndexPath
 	if indexPath == "" {
@@ -577,69 +577,69 @@ func uploadBootstrapDataDirectly(srcDir string, cfg *config.Config, logger *logg
 			return fmt.Errorf("failed to get default index path: %w", err)
 		}
 	}
-	
+
 	index := fuse.NewFileIndex(indexPath)
 	if err := index.LoadIndex(); err != nil {
 		logger.Debug("Creating new index file", map[string]interface{}{
 			"path": indexPath,
 		})
 	}
-	
+
 	// Walk through bootstrap directory and upload files
 	fileCount := 0
 	err = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// Skip metadata files and directories
 		if info.IsDir() || strings.HasSuffix(path, ".meta") {
 			return nil
 		}
-		
+
 		// Calculate relative path
 		relPath, err := filepath.Rel(srcDir, path)
 		if err != nil {
 			return err
 		}
-		
+
 		// Read file content
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("failed to read %s: %w", path, err)
 		}
-		
+
 		// Upload to NoiseFS using block operations
 		logger.Debug("Uploading bootstrap file", map[string]interface{}{
 			"file": relPath,
 			"size": len(content),
 		})
-		
+
 		descriptorCID, err := storeFileInNoiseFS(client, relPath, content)
 		if err != nil {
 			return fmt.Errorf("failed to store file %s: %w", relPath, err)
 		}
-		
+
 		// Add to index
 		index.AddFile(relPath, descriptorCID, int64(len(content)))
 		fileCount++
-		
+
 		if fileCount%10 == 0 {
 			fmt.Printf("Uploaded %d files...\n", fileCount)
 		}
-		
+
 		return nil
 	})
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	// Save the index
 	if err := index.SaveIndex(); err != nil {
 		return fmt.Errorf("failed to save index: %w", err)
 	}
-	
+
 	fmt.Printf("Successfully uploaded %d files to NoiseFS\n", fileCount)
 	return nil
 }
@@ -651,16 +651,16 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 	if err != nil {
 		return "", fmt.Errorf("failed to create splitter: %w", err)
 	}
-	
+
 	// Split file into blocks
 	fileBlocks, err := splitter.SplitBytes(content)
 	if err != nil {
 		return "", fmt.Errorf("failed to split file: %w", err)
 	}
-	
+
 	// Create descriptor
 	descriptor := descriptors.NewDescriptor(filename, int64(len(content)), int64(len(content)), blocks.DefaultBlockSize)
-	
+
 	// Process each block
 	for _, dataBlock := range fileBlocks {
 		// Select randomizers for 3-tuple anonymization
@@ -668,41 +668,41 @@ func storeFileInNoiseFS(client *noisefs.Client, filename string, content []byte)
 		if err != nil {
 			return "", fmt.Errorf("failed to select randomizers: %w", err)
 		}
-		
+
 		// Anonymize block (XOR with two randomizers)
 		anonymizedBlock, err := dataBlock.XOR(rand1, rand2)
 		if err != nil {
 			return "", fmt.Errorf("failed to anonymize block: %w", err)
 		}
-		
+
 		// Store anonymized block
 		dataCID, err := client.StoreBlockWithCache(context.Background(), anonymizedBlock)
 		if err != nil {
 			return "", fmt.Errorf("failed to store block: %w", err)
 		}
-		
+
 		// Add to descriptor
 		descriptor.AddBlockTriple(dataCID, cid1, cid2)
 	}
-	
+
 	// Store descriptor
 	descriptorData, err := descriptor.ToJSON()
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize descriptor: %w", err)
 	}
-	
+
 	// Create block from descriptor data
 	descriptorBlock, err := blocks.NewBlock(descriptorData)
 	if err != nil {
 		return "", fmt.Errorf("failed to create descriptor block: %w", err)
 	}
-	
+
 	// Store descriptor in IPFS
 	descriptorCID, err := client.StoreBlockWithCache(context.Background(), descriptorBlock)
 	if err != nil {
 		return "", fmt.Errorf("failed to store descriptor: %w", err)
 	}
-	
+
 	return descriptorCID, nil
 }
 
@@ -713,13 +713,13 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer srcFile.Close()
-	
+
 	dstFile, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer dstFile.Close()
-	
+
 	_, err = io.Copy(dstFile, srcFile)
 	return err
 }
