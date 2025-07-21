@@ -4,8 +4,15 @@ title: Create comprehensive sync engine tests
 status: To Do
 assignee: []
 created_date: '2025-07-20'
+updated_date: '2025-07-21'
 labels: []
-dependencies: []
+dependencies:
+  - task-0009
+  - task-0010
+  - task-0011
+  - task-0012
+  - task-0013
+  - task-0014
 ---
 
 ## Description
