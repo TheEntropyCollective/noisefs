@@ -349,10 +349,10 @@ func TestSyncEngine_OperationTypeMapping(t *testing.T) {
 	}
 
 	testCases := []struct {
-		eventType        EventType
-		isLocal          bool
-		expectedOpType   OperationType
-		description      string
+		eventType      EventType
+		isLocal        bool
+		expectedOpType OperationType
+		description    string
 	}{
 		{EventTypeFileCreated, true, OpTypeUpload, "Local file creation should trigger upload"},
 		{EventTypeFileCreated, false, OpTypeDownload, "Remote file creation should trigger download"},

@@ -26,12 +26,12 @@ type RemoteChangeMonitor struct {
 
 // RemoteMonitorState tracks the state of a monitored remote path
 type RemoteMonitorState struct {
-	RemotePath    string
-	ManifestCID   string
-	LastSnapshot  map[string]RemoteMetadata
-	LastChecked   time.Time
-	LastModified  time.Time
-	SyncID        string
+	RemotePath   string
+	ManifestCID  string
+	LastSnapshot map[string]RemoteMetadata
+	LastChecked  time.Time
+	LastModified time.Time
+	SyncID       string
 }
 
 // NewRemoteChangeMonitor creates a new remote change monitor
@@ -229,7 +229,7 @@ func (rm *RemoteChangeMonitor) createSnapshot(remotePath, manifestCID string) (m
 		// For now, we'll use the encrypted name as the key
 		// In a real implementation, you might want to decrypt it
 		entryPath := fmt.Sprintf("%s/%s", remotePath, string(entry.EncryptedName))
-		
+
 		metadata := RemoteMetadata{
 			Path:          entryPath,
 			DescriptorCID: entry.CID,
@@ -286,11 +286,11 @@ func (rm *RemoteChangeMonitor) compareSnapshots(oldSnapshot, newSnapshot map[str
 				Path:      path,
 				Timestamp: now,
 				Metadata: map[string]interface{}{
-					"size":         newMeta.Size,
-					"cid":          newMeta.DescriptorCID,
-					"modtime":      newMeta.ModTime,
-					"is_dir":       newMeta.IsDir,
-					"change_type":  "created",
+					"size":        newMeta.Size,
+					"cid":         newMeta.DescriptorCID,
+					"modtime":     newMeta.ModTime,
+					"is_dir":      newMeta.IsDir,
+					"change_type": "created",
 				},
 			})
 		}
@@ -355,12 +355,12 @@ func (rm *RemoteChangeMonitor) GetMonitorState(remotePath string) (*RemoteMonito
 
 	// Return a copy to avoid race conditions
 	return &RemoteMonitorState{
-		RemotePath:    state.RemotePath,
-		ManifestCID:   state.ManifestCID,
-		LastSnapshot:  state.LastSnapshot,
-		LastChecked:   state.LastChecked,
-		LastModified:  state.LastModified,
-		SyncID:        state.SyncID,
+		RemotePath:   state.RemotePath,
+		ManifestCID:  state.ManifestCID,
+		LastSnapshot: state.LastSnapshot,
+		LastChecked:  state.LastChecked,
+		LastModified: state.LastModified,
+		SyncID:       state.SyncID,
 	}, nil
 }
 
@@ -398,12 +398,12 @@ func (rm *RemoteChangeMonitor) GetStats() *RemoteMonitorStats {
 	}
 
 	return &RemoteMonitorStats{
-		TotalPaths:    totalPaths,
-		ActivePaths:   activePaths,
-		PollInterval:  rm.pollInterval,
-		LastCheck:     lastCheck,
-		EventsQueued:  len(rm.eventChan),
-		ErrorsQueued:  len(rm.errorChan),
+		TotalPaths:   totalPaths,
+		ActivePaths:  activePaths,
+		PollInterval: rm.pollInterval,
+		LastCheck:    lastCheck,
+		EventsQueued: len(rm.eventChan),
+		ErrorsQueued: len(rm.errorChan),
 	}
 }
 

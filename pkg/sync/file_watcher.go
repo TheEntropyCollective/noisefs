@@ -209,7 +209,7 @@ func (fw *FileWatcher) handleFsEvent(event fsnotify.Event) {
 
 	fw.debounceTimer[event.Name] = time.AfterFunc(100*time.Millisecond, func() {
 		fw.processEvent(event)
-		
+
 		fw.debounceMu.Lock()
 		delete(fw.debounceTimer, event.Name)
 		fw.debounceMu.Unlock()
@@ -253,11 +253,11 @@ func (fw *FileWatcher) processEvent(event fsnotify.Event) {
 				Path:      event.Name,
 				Timestamp: time.Now(),
 				Metadata: map[string]interface{}{
-					"fs_event":    event.Op.String(),
-					"size":        fileInfo.Size(),
-					"mode":        fileInfo.Mode(),
-					"mod_time":    fileInfo.ModTime(),
-					"is_dir":      fileInfo.IsDir(),
+					"fs_event": event.Op.String(),
+					"size":     fileInfo.Size(),
+					"mode":     fileInfo.Mode(),
+					"mod_time": fileInfo.ModTime(),
+					"is_dir":   fileInfo.IsDir(),
 				},
 			}
 

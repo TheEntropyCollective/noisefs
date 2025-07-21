@@ -23,44 +23,44 @@ type SyncEngine struct {
 	directoryManager *storage.DirectoryManager
 	noisefsClient    *noisefs.Client
 	config           *SyncConfig
-	
+
 	// Channels for coordinating events
-	localEventChan   chan SyncEvent
-	remoteEventChan  chan SyncEvent
-	syncOpChan       chan SyncOperation
-	
+	localEventChan  chan SyncEvent
+	remoteEventChan chan SyncEvent
+	syncOpChan      chan SyncOperation
+
 	// Control and state
-	ctx              context.Context
-	cancel           context.CancelFunc
-	mu               sync.RWMutex
-	activeSyncs      map[string]*SyncSession
-	
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.RWMutex
+	activeSyncs map[string]*SyncSession
+
 	// Statistics
-	stats            *SyncEngineStats
-	statsMu          sync.RWMutex
+	stats   *SyncEngineStats
+	statsMu sync.RWMutex
 }
 
 // SyncSession represents an active sync session
 type SyncSession struct {
-	SyncID           string
-	LocalPath        string
-	RemotePath       string
-	State            *SyncState
-	LastSync         time.Time
-	Status           SyncStatus
-	Progress         *SyncProgress
-	mu               sync.RWMutex
+	SyncID     string
+	LocalPath  string
+	RemotePath string
+	State      *SyncState
+	LastSync   time.Time
+	Status     SyncStatus
+	Progress   *SyncProgress
+	mu         sync.RWMutex
 }
 
 // SyncStatus represents the current status of a sync session
 type SyncStatus string
 
 const (
-	StatusIdle        SyncStatus = "idle"
-	StatusSyncing     SyncStatus = "syncing"
-	StatusConflict    SyncStatus = "conflict"
-	StatusError       SyncStatus = "error"
-	StatusPaused      SyncStatus = "paused"
+	StatusIdle     SyncStatus = "idle"
+	StatusSyncing  SyncStatus = "syncing"
+	StatusConflict SyncStatus = "conflict"
+	StatusError    SyncStatus = "error"
+	StatusPaused   SyncStatus = "paused"
 )
 
 // SyncProgress tracks the progress of sync operations
@@ -123,7 +123,7 @@ func NewSyncEngine(
 		syncOpChan:       make(chan SyncOperation, 100),
 		stats:            &SyncEngineStats{},
 	}
-	
+
 	// Create NoiseFS client from directory manager's storage manager
 	// Use memory cache for sync operations
 	basicCache := cache.NewMemoryCache(1000) // 1000 blocks cache
@@ -595,7 +595,7 @@ func (se *SyncEngine) executeSyncOperation(op SyncOperation) {
 		op.Status = OpStatusFailed
 		op.Error = err.Error()
 		op.Retries++
-		
+
 		// Retry logic
 		if op.Retries < se.config.MaxRetries {
 			op.Status = OpStatusPending
@@ -628,8 +628,8 @@ func (se *SyncEngine) findSessionForOperation(op SyncOperation) *SyncSession {
 	defer se.mu.RUnlock()
 
 	for _, session := range se.activeSyncs {
-		if strings.HasPrefix(op.LocalPath, session.LocalPath) || 
-		   strings.HasPrefix(op.RemotePath, session.RemotePath) {
+		if strings.HasPrefix(op.LocalPath, session.LocalPath) ||
+			strings.HasPrefix(op.RemotePath, session.RemotePath) {
 			return session
 		}
 	}
@@ -644,7 +644,7 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 	if os.IsNotExist(err) {
 		return fmt.Errorf("local file does not exist: %s", op.LocalPath)
 	}
-	
+
 	// Handle directories differently than files
 	if fileInfo.IsDir() {
 		// For directories, we don't need to upload content, just ensure remote directory exists
@@ -652,29 +652,29 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 		fmt.Printf("Directory sync: %s -> %s\n", op.LocalPath, op.RemotePath)
 		return nil
 	}
-	
+
 	// Open the local file
 	file, err := os.Open(op.LocalPath)
 	if err != nil {
 		return fmt.Errorf("failed to open local file %s: %w", op.LocalPath, err)
 	}
 	defer file.Close()
-	
+
 	// Extract filename from path
 	filename := filepath.Base(op.LocalPath)
-	
+
 	// Upload file using NoiseFS client
 	ctx := context.Background()
 	descriptorCID, err := se.noisefsClient.Upload(ctx, file, filename)
 	if err != nil {
 		return fmt.Errorf("failed to upload file %s to NoiseFS: %w", op.LocalPath, err)
 	}
-	
+
 	fmt.Printf("Successfully uploaded: %s -> %s (CID: %s)\n", op.LocalPath, op.RemotePath, descriptorCID)
-	
+
 	// TODO: Store the mapping of remote path to descriptor CID in the sync state
 	// This would allow us to track which files exist remotely and their CIDs
-	
+
 	return nil
 }
 
@@ -683,7 +683,7 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 	// TODO: Get the descriptor CID for the remote path from sync state
 	// For now, we'll assume the remote path contains or maps to a CID
 	// In a real implementation, this would be stored in the sync state
-	
+
 	// Extract potential CID from remote path or get it from state
 	// This is a placeholder - in reality, you'd have a mapping table
 	descriptorCID := strings.TrimPrefix(op.RemotePath, "noisefs://")
@@ -691,33 +691,33 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 		// No noisefs:// prefix, might be a direct CID or need state lookup
 		return fmt.Errorf("cannot determine descriptor CID for remote path: %s", op.RemotePath)
 	}
-	
+
 	// Ensure local directory exists
 	if err := os.MkdirAll(filepath.Dir(op.LocalPath), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	// Download file using NoiseFS client
 	ctx := context.Background()
 	data, filename, err := se.noisefsClient.DownloadWithMetadata(ctx, descriptorCID)
 	if err != nil {
 		return fmt.Errorf("failed to download file with CID %s: %w", descriptorCID, err)
 	}
-	
+
 	// Use the original filename if available, otherwise use the local path basename
 	targetPath := op.LocalPath
 	if filename != "" && filepath.Base(op.LocalPath) != filename {
 		// Update target path to use the original filename
 		targetPath = filepath.Join(filepath.Dir(op.LocalPath), filename)
 	}
-	
+
 	// Write the downloaded data to local file
 	if err := os.WriteFile(targetPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write downloaded file to %s: %w", targetPath, err)
 	}
-	
+
 	fmt.Printf("Successfully downloaded: %s -> %s (filename: %s)\n", op.RemotePath, targetPath, filename)
-	
+
 	return nil
 }
 
