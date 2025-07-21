@@ -3,9 +3,9 @@ id: task-0002
 title: Decompose storage configuration god object
 status: In Progress
 assignee:
-  - '@claude'
+  - '@agent1'
 created_date: '2025-07-20'
-updated_date: '2025-07-20'
+updated_date: '2025-07-21'
 labels:
   - ipfs pkg cleanup
 dependencies: []
