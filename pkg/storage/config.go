@@ -103,10 +103,7 @@ type TimeoutConfig struct {
 // DistributionConfig represents block distribution configuration
 type DistributionConfig struct {
 	// Strategy for distributing blocks across backends
-	Strategy string `json:"strategy" yaml:"strategy"` // "single", "replicate", "stripe", "smart"
-
-	// Replication settings
-	Replication *ReplicationConfig `json:"replication,omitempty" yaml:"replication,omitempty"`
+	Strategy string `json:"strategy" yaml:"strategy"` // "single"
 
 	// Backend selection criteria
 	Selection *SelectionConfig `json:"selection,omitempty" yaml:"selection,omitempty"`
@@ -115,20 +112,6 @@ type DistributionConfig struct {
 	LoadBalancing *LoadBalancingConfig `json:"load_balancing,omitempty" yaml:"load_balancing,omitempty"`
 }
 
-// ReplicationConfig represents replication settings
-type ReplicationConfig struct {
-	// Minimum number of replicas
-	MinReplicas int `json:"min_replicas" yaml:"min_replicas"`
-
-	// Maximum number of replicas
-	MaxReplicas int `json:"max_replicas" yaml:"max_replicas"`
-
-	// Backend diversity requirements
-	RequireDiverseBackends bool `json:"require_diverse_backends" yaml:"require_diverse_backends"`
-
-	// Geographic diversity
-	RequireGeoDiversity bool `json:"require_geo_diversity" yaml:"require_geo_diversity"`
-}
 
 // SelectionConfig represents backend selection criteria
 type SelectionConfig struct {
@@ -156,13 +139,10 @@ type PerformanceCriteria struct {
 
 // LoadBalancingConfig represents load balancing configuration
 type LoadBalancingConfig struct {
-	Algorithm string `json:"algorithm" yaml:"algorithm"` // "round_robin", "weighted", "least_connections", "performance"
+	Algorithm string `json:"algorithm" yaml:"algorithm"` // "performance"
 
 	// Health check requirements
 	RequireHealthy bool `json:"require_healthy" yaml:"require_healthy"`
-
-	// Sticky sessions
-	StickyBlocks bool `json:"sticky_blocks" yaml:"sticky_blocks"`
 }
 
 // HealthCheckConfig represents health monitoring configuration
@@ -276,17 +256,10 @@ func DefaultConfig() *Config {
 			Strategy: "single",
 			Selection: &SelectionConfig{
 				RequiredCapabilities: []string{CapabilityContentAddress},
-				Performance: &PerformanceCriteria{
-					MaxLatency:        5 * time.Second,
-					MaxErrorRate:      0.1,
-					LatencyWeight:     0.6,
-					ReliabilityWeight: 0.4,
-				},
 			},
 			LoadBalancing: &LoadBalancingConfig{
 				Algorithm:      "performance",
 				RequireHealthy: true,
-				StickyBlocks:   false,
 			},
 		},
 		HealthCheck: &HealthCheckConfig{
@@ -609,18 +582,8 @@ func (tc *TimeoutConfig) Validate() error {
 
 // Validate validates distribution configuration
 func (dc *DistributionConfig) Validate() error {
-	validStrategies := map[string]bool{
-		"single": true, "replicate": true, "stripe": true, "smart": true,
-	}
-	if !validStrategies[dc.Strategy] {
-		return NewConfigError("distribution", fmt.Sprintf("unsupported strategy '%s'", dc.Strategy), nil)
-	}
-
-	// Validate replication config if present
-	if dc.Replication != nil {
-		if err := dc.Replication.Validate(); err != nil {
-			return NewConfigError("distribution", "replication configuration invalid", err)
-		}
+	if dc.Strategy != "single" {
+		return NewConfigError("distribution", fmt.Sprintf("unsupported strategy '%s', only 'single' is supported", dc.Strategy), nil)
 	}
 
 	// Validate selection config if present
@@ -640,18 +603,6 @@ func (dc *DistributionConfig) Validate() error {
 	return nil
 }
 
-// Validate validates replication configuration
-func (rc *ReplicationConfig) Validate() error {
-	if rc.MinReplicas < 1 {
-		return NewConfigError("replication", "min_replicas must be at least 1", nil)
-	}
-
-	if rc.MaxReplicas < rc.MinReplicas {
-		return NewConfigError("replication", "max_replicas cannot be less than min_replicas", nil)
-	}
-
-	return nil
-}
 
 // Validate validates selection configuration
 func (sc *SelectionConfig) Validate() error {
@@ -696,11 +647,8 @@ func (pc *PerformanceCriteria) Validate() error {
 
 // Validate validates load balancing configuration
 func (lbc *LoadBalancingConfig) Validate() error {
-	validAlgorithms := map[string]bool{
-		"round_robin": true, "weighted": true, "least_connections": true, "performance": true,
-	}
-	if !validAlgorithms[lbc.Algorithm] {
-		return NewConfigError("load_balancing", fmt.Sprintf("unsupported algorithm '%s'", lbc.Algorithm), nil)
+	if lbc.Algorithm != "performance" {
+		return NewConfigError("load_balancing", fmt.Sprintf("unsupported algorithm '%s', only 'performance' is supported", lbc.Algorithm), nil)
 	}
 
 	return nil
