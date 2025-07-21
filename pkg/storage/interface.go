@@ -15,19 +15,19 @@ type Backend interface {
 	Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error)
 	Has(ctx context.Context, address *BlockAddress) (bool, error)
 	Delete(ctx context.Context, address *BlockAddress) error
-	
+
 	// Batch operations for efficiency
 	PutMany(ctx context.Context, blocks []*blocks.Block) ([]*BlockAddress, error)
 	GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error)
-	
+
 	// Pinning operations (for backends that support it)
 	Pin(ctx context.Context, address *BlockAddress) error
 	Unpin(ctx context.Context, address *BlockAddress) error
-	
+
 	// Metadata and health
 	GetBackendInfo() *BackendInfo
 	HealthCheck(ctx context.Context) *HealthStatus
-	
+
 	// Connection management
 	Connect(ctx context.Context) error
 	Disconnect(ctx context.Context) error
@@ -37,7 +37,7 @@ type Backend interface {
 // StreamingBackend extends Backend with streaming capabilities
 type StreamingBackend interface {
 	Backend
-	
+
 	// Stream operations for large data
 	PutStream(ctx context.Context, reader io.Reader, size int64) (*BlockAddress, error)
 	GetStream(ctx context.Context, address *BlockAddress) (io.ReadCloser, error)
@@ -46,12 +46,12 @@ type StreamingBackend interface {
 // PeerAwareBackend extends Backend with peer-aware operations
 type PeerAwareBackend interface {
 	Backend
-	
+
 	// Peer operations
 	GetWithPeerHint(ctx context.Context, address *BlockAddress, peers []string) (*blocks.Block, error)
 	BroadcastToNetwork(ctx context.Context, address *BlockAddress, block *blocks.Block) error
 	GetConnectedPeers() []string
-	
+
 	// Peer manager integration
 	SetPeerManager(manager interface{}) error
 }
@@ -60,39 +60,39 @@ type PeerAwareBackend interface {
 type BlockAddress struct {
 	// Unique identifier for the block (CID, hash, etc.)
 	ID string `json:"id"`
-	
+
 	// Backend-specific addressing information
 	BackendType string                 `json:"backend_type"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	
+
 	// Size and verification info
 	Size     int64  `json:"size,omitempty"`
 	Checksum string `json:"checksum,omitempty"`
-	
+
 	// Storage location hints
 	Providers []string `json:"providers,omitempty"`
-	
+
 	// Storage tracking for metrics
 	WasNewlyStored bool `json:"was_newly_stored,omitempty"` // true if this was a new storage operation, false if block already existed
-	
+
 	// Timestamps
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt  time.Time `json:"created_at"`
 	AccessedAt time.Time `json:"accessed_at,omitempty"`
 }
 
 // BackendInfo provides information about a storage backend
 type BackendInfo struct {
 	// Backend identification
-	Name        string `json:"name"`
-	Type        string `json:"type"`
-	Version     string `json:"version"`
-	
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Version string `json:"version"`
+
 	// Capabilities
 	Capabilities []string `json:"capabilities"`
-	
+
 	// Configuration
 	Config map[string]interface{} `json:"config,omitempty"`
-	
+
 	// Network information
 	NetworkID string   `json:"network_id,omitempty"`
 	Peers     []string `json:"peers,omitempty"`
@@ -103,33 +103,33 @@ type HealthStatus struct {
 	// Overall health
 	Healthy bool   `json:"healthy"`
 	Status  string `json:"status"` // "healthy", "degraded", "unhealthy", "offline"
-	
+
 	// Performance metrics
 	Latency    time.Duration `json:"latency"`
 	Throughput float64       `json:"throughput"` // bytes per second
-	ErrorRate  float64       `json:"error_rate"`  // percentage
-	
+	ErrorRate  float64       `json:"error_rate"` // percentage
+
 	// Capacity information
 	UsedStorage      int64 `json:"used_storage"`
 	AvailableStorage int64 `json:"available_storage"`
-	
+
 	// Network status
 	ConnectedPeers int    `json:"connected_peers"`
 	NetworkHealth  string `json:"network_health"`
-	
+
 	// Last check
 	LastCheck time.Time `json:"last_check"`
-	
+
 	// Issues
 	Issues []HealthIssue `json:"issues,omitempty"`
 }
 
 // HealthIssue represents a specific health issue
 type HealthIssue struct {
-	Severity    string    `json:"severity"` // "warning", "error", "critical"
-	Code        string    `json:"code"`
-	Description string    `json:"description"`
-	Timestamp   time.Time `json:"timestamp"`
+	Severity    string                 `json:"severity"` // "warning", "error", "critical"
+	Code        string                 `json:"code"`
+	Description string                 `json:"description"`
+	Timestamp   time.Time              `json:"timestamp"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -156,20 +156,20 @@ func (e *StorageError) Unwrap() error {
 
 // Common error codes
 const (
-	ErrCodeNotFound        = "NOT_FOUND"
-	ErrCodeAlreadyExists   = "ALREADY_EXISTS"
-	ErrCodeInvalidAddress  = "INVALID_ADDRESS"
-	ErrCodeConnectionFailed = "CONNECTION_FAILED"
-	ErrCodeTimeout         = "TIMEOUT"
-	ErrCodeQuotaExceeded   = "QUOTA_EXCEEDED"
-	ErrCodeIntegrityFailure = "INTEGRITY_FAILURE"
-	ErrCodeUnauthorized    = "UNAUTHORIZED"
-	ErrCodeBackendOffline  = "BACKEND_OFFLINE"
-	ErrCodeInvalidConfig   = "INVALID_CONFIG"
-	ErrCodeBackendInit     = "BACKEND_INIT_FAILED"
+	ErrCodeNotFound          = "NOT_FOUND"
+	ErrCodeAlreadyExists     = "ALREADY_EXISTS"
+	ErrCodeInvalidAddress    = "INVALID_ADDRESS"
+	ErrCodeConnectionFailed  = "CONNECTION_FAILED"
+	ErrCodeTimeout           = "TIMEOUT"
+	ErrCodeQuotaExceeded     = "QUOTA_EXCEEDED"
+	ErrCodeIntegrityFailure  = "INTEGRITY_FAILURE"
+	ErrCodeUnauthorized      = "UNAUTHORIZED"
+	ErrCodeBackendOffline    = "BACKEND_OFFLINE"
+	ErrCodeInvalidConfig     = "INVALID_CONFIG"
+	ErrCodeBackendInit       = "BACKEND_INIT_FAILED"
 	ErrCodeManagerNotStarted = "MANAGER_NOT_STARTED"
-	ErrCodeNoBackends      = "NO_BACKENDS_AVAILABLE"
-	ErrCodeValidationFailed = "VALIDATION_FAILED"
+	ErrCodeNoBackends        = "NO_BACKENDS_AVAILABLE"
+	ErrCodeValidationFailed  = "VALIDATION_FAILED"
 )
 
 // Helper functions for creating storage errors
@@ -237,16 +237,16 @@ func NewNoBackendsError() *StorageError {
 
 // Capability constants
 const (
-	CapabilityPinning         = "pinning"
-	CapabilityStreaming       = "streaming"
-	CapabilityPeerAware       = "peer_aware"
-	CapabilityBatch           = "batch"
-	CapabilityContentAddress  = "content_addressing"
-	CapabilityEncryption      = "encryption"
-	CapabilityDeduplication   = "deduplication"
-	CapabilityVersioning      = "versioning"
-	CapabilityReplication     = "replication"
-	CapabilityDistributed     = "distributed"
+	CapabilityPinning        = "pinning"
+	CapabilityStreaming      = "streaming"
+	CapabilityPeerAware      = "peer_aware"
+	CapabilityBatch          = "batch"
+	CapabilityContentAddress = "content_addressing"
+	CapabilityEncryption     = "encryption"
+	CapabilityDeduplication  = "deduplication"
+	CapabilityVersioning     = "versioning"
+	CapabilityReplication    = "replication"
+	CapabilityDistributed    = "distributed"
 )
 
 // Backend type constants

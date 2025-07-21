@@ -9,14 +9,14 @@ import (
 
 // HealthMonitor continuously monitors the health of storage backends
 type HealthMonitor struct {
-	manager    *Manager
-	config     *HealthCheckConfig
-	
+	manager *Manager
+	config  *HealthCheckConfig
+
 	// State management
-	running    bool
-	stopChan   chan struct{}
-	mutex      sync.RWMutex
-	
+	running  bool
+	stopChan chan struct{}
+	mutex    sync.RWMutex
+
 	// Health tracking
 	healthHistory map[string][]*HealthStatus
 	alerts        []HealthAlert
@@ -38,20 +38,20 @@ func NewHealthMonitor(manager *Manager, config *HealthCheckConfig) *HealthMonito
 func (hm *HealthMonitor) Start(ctx context.Context) error {
 	hm.mutex.Lock()
 	defer hm.mutex.Unlock()
-	
+
 	if hm.running {
 		return fmt.Errorf("health monitor already running")
 	}
-	
+
 	if !hm.config.Enabled {
 		return nil // Health monitoring disabled
 	}
-	
+
 	hm.running = true
-	
+
 	// Start monitoring goroutine
 	go hm.monitorLoop(ctx)
-	
+
 	return nil
 }
 
@@ -59,11 +59,11 @@ func (hm *HealthMonitor) Start(ctx context.Context) error {
 func (hm *HealthMonitor) Stop() {
 	hm.mutex.Lock()
 	defer hm.mutex.Unlock()
-	
+
 	if !hm.running {
 		return
 	}
-	
+
 	hm.running = false
 	close(hm.stopChan)
 }
@@ -72,12 +72,12 @@ func (hm *HealthMonitor) Stop() {
 func (hm *HealthMonitor) GetHealthHistory(backendName string) []*HealthStatus {
 	hm.mutex.RLock()
 	defer hm.mutex.RUnlock()
-	
+
 	history, exists := hm.healthHistory[backendName]
 	if !exists {
 		return []*HealthStatus{}
 	}
-	
+
 	// Return a copy to prevent concurrent access issues
 	result := make([]*HealthStatus, len(history))
 	copy(result, history)
@@ -88,7 +88,7 @@ func (hm *HealthMonitor) GetHealthHistory(backendName string) []*HealthStatus {
 func (hm *HealthMonitor) GetAlerts() []HealthAlert {
 	hm.mutex.RLock()
 	defer hm.mutex.RUnlock()
-	
+
 	// Return a copy
 	result := make([]HealthAlert, len(hm.alerts))
 	copy(result, hm.alerts)
@@ -99,7 +99,7 @@ func (hm *HealthMonitor) GetAlerts() []HealthAlert {
 func (hm *HealthMonitor) GetActiveAlerts() []HealthAlert {
 	hm.mutex.RLock()
 	defer hm.mutex.RUnlock()
-	
+
 	var active []HealthAlert
 	for _, alert := range hm.alerts {
 		if !alert.Resolved {
@@ -113,10 +113,10 @@ func (hm *HealthMonitor) GetActiveAlerts() []HealthAlert {
 func (hm *HealthMonitor) monitorLoop(ctx context.Context) {
 	ticker := time.NewTicker(hm.config.Interval)
 	defer ticker.Stop()
-	
+
 	// Perform initial health check
 	hm.performHealthCheck(ctx)
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -133,27 +133,27 @@ func (hm *HealthMonitor) monitorLoop(ctx context.Context) {
 func (hm *HealthMonitor) performHealthCheck(ctx context.Context) {
 	hm.mutex.Lock()
 	defer hm.mutex.Unlock()
-	
+
 	hm.lastCheck = time.Now()
 	backends := hm.manager.GetAvailableBackends()
-	
+
 	for name, backend := range backends {
 		// Create context with timeout for health check
 		checkCtx, cancel := context.WithTimeout(ctx, hm.config.Timeout)
-		
+
 		status := backend.HealthCheck(checkCtx)
 		cancel()
-		
+
 		// Store health status in history
 		hm.recordHealthStatus(name, status)
-		
+
 		// Check for health state changes and generate alerts
 		hm.checkHealthAlerts(name, status)
-		
+
 		// Take actions based on health status
 		hm.takeHealthActions(name, backend, status)
 	}
-	
+
 	// Clean up old health records
 	hm.cleanupHealthHistory()
 }
@@ -164,15 +164,15 @@ func (hm *HealthMonitor) recordHealthStatus(backendName string, status *HealthSt
 	if !exists {
 		history = make([]*HealthStatus, 0)
 	}
-	
+
 	// Add new status
 	history = append(history, status)
-	
+
 	// Keep only last 100 records
 	if len(history) > 100 {
 		history = history[1:]
 	}
-	
+
 	hm.healthHistory[backendName] = history
 }
 
@@ -184,7 +184,7 @@ func (hm *HealthMonitor) checkHealthAlerts(backendName string, status *HealthSta
 	if len(history) > 1 {
 		previousStatus = history[len(history)-2]
 	}
-	
+
 	// Check for health state changes
 	if previousStatus != nil {
 		if previousStatus.Healthy && !status.Healthy {
@@ -221,12 +221,12 @@ func (hm *HealthMonitor) checkHealthAlerts(backendName string, status *HealthSta
 				},
 			}
 			hm.alerts = append(hm.alerts, alert)
-			
+
 			// Resolve previous unhealthy alerts for this backend
 			hm.resolveAlertsForBackend(backendName, "backend_unhealthy")
 		}
 	}
-	
+
 	// Check specific thresholds
 	if hm.config.Thresholds != nil {
 		hm.checkLatencyThreshold(backendName, status)
@@ -245,10 +245,10 @@ func (hm *HealthMonitor) checkLatencyThreshold(backendName string, status *Healt
 				BackendName: backendName,
 				Type:        "high_latency",
 				Severity:    "warning",
-				Message:     fmt.Sprintf("Backend '%s' latency exceeds threshold: %v > %v", 
+				Message: fmt.Sprintf("Backend '%s' latency exceeds threshold: %v > %v",
 					backendName, status.Latency, hm.config.Thresholds.MaxLatency),
-				Timestamp:   time.Now(),
-				Resolved:    false,
+				Timestamp: time.Now(),
+				Resolved:  false,
 				Metadata: map[string]interface{}{
 					"current_latency": status.Latency,
 					"threshold":       hm.config.Thresholds.MaxLatency,
@@ -271,10 +271,10 @@ func (hm *HealthMonitor) checkErrorRateThreshold(backendName string, status *Hea
 				BackendName: backendName,
 				Type:        "high_error_rate",
 				Severity:    "warning",
-				Message:     fmt.Sprintf("Backend '%s' error rate exceeds threshold: %.2f%% > %.2f%%", 
+				Message: fmt.Sprintf("Backend '%s' error rate exceeds threshold: %.2f%% > %.2f%%",
 					backendName, status.ErrorRate*100, hm.config.Thresholds.MaxErrorRate*100),
-				Timestamp:   time.Now(),
-				Resolved:    false,
+				Timestamp: time.Now(),
+				Resolved:  false,
 				Metadata: map[string]interface{}{
 					"current_error_rate": status.ErrorRate,
 					"threshold":          hm.config.Thresholds.MaxErrorRate,
@@ -292,12 +292,12 @@ func (hm *HealthMonitor) checkConsecutiveFailures(backendName string, status *He
 	if hm.config.Thresholds.ConsecutiveFailures <= 0 {
 		return
 	}
-	
+
 	history := hm.healthHistory[backendName]
 	if len(history) < hm.config.Thresholds.ConsecutiveFailures {
 		return
 	}
-	
+
 	// Check last N statuses for consecutive failures
 	consecutiveFailures := 0
 	for i := len(history) - 1; i >= 0 && consecutiveFailures < hm.config.Thresholds.ConsecutiveFailures; i-- {
@@ -307,7 +307,7 @@ func (hm *HealthMonitor) checkConsecutiveFailures(backendName string, status *He
 			break
 		}
 	}
-	
+
 	if consecutiveFailures >= hm.config.Thresholds.ConsecutiveFailures {
 		if !hm.hasActiveAlert(backendName, "consecutive_failures") {
 			alert := HealthAlert{
@@ -315,13 +315,13 @@ func (hm *HealthMonitor) checkConsecutiveFailures(backendName string, status *He
 				BackendName: backendName,
 				Type:        "consecutive_failures",
 				Severity:    "error",
-				Message:     fmt.Sprintf("Backend '%s' has %d consecutive health check failures", 
+				Message: fmt.Sprintf("Backend '%s' has %d consecutive health check failures",
 					backendName, consecutiveFailures),
-				Timestamp:   time.Now(),
-				Resolved:    false,
+				Timestamp: time.Now(),
+				Resolved:  false,
 				Metadata: map[string]interface{}{
 					"consecutive_failures": consecutiveFailures,
-					"threshold":           hm.config.Thresholds.ConsecutiveFailures,
+					"threshold":            hm.config.Thresholds.ConsecutiveFailures,
 				},
 			}
 			hm.alerts = append(hm.alerts, alert)
@@ -336,7 +336,7 @@ func (hm *HealthMonitor) takeHealthActions(backendName string, backend Backend, 
 	if hm.config.Actions == nil {
 		return
 	}
-	
+
 	if !status.Healthy {
 		switch hm.config.Actions.OnUnhealthy {
 		case "disable":
@@ -386,7 +386,7 @@ func (hm *HealthMonitor) generateAlertID() string {
 func (hm *HealthMonitor) cleanupHealthHistory() {
 	// Clean up health history older than retention period
 	retentionCutoff := time.Now().Add(-24 * time.Hour) // Keep 24 hours of history
-	
+
 	for backendName, history := range hm.healthHistory {
 		var cleaned []*HealthStatus
 		for _, status := range history {
@@ -396,7 +396,7 @@ func (hm *HealthMonitor) cleanupHealthHistory() {
 		}
 		hm.healthHistory[backendName] = cleaned
 	}
-	
+
 	// Clean up old alerts (keep last 1000)
 	if len(hm.alerts) > 1000 {
 		hm.alerts = hm.alerts[len(hm.alerts)-1000:]
@@ -418,24 +418,24 @@ type HealthAlert struct {
 
 // HealthSummary provides a summary of overall system health
 type HealthSummary struct {
-	OverallHealth   string                    `json:"overall_health"`
-	TotalBackends   int                       `json:"total_backends"`
-	HealthyBackends int                       `json:"healthy_backends"`
-	ActiveAlerts    int                       `json:"active_alerts"`
-	LastCheck       time.Time                 `json:"last_check"`
-	BackendHealth   map[string]string         `json:"backend_health"`
-	RecentAlerts    []HealthAlert             `json:"recent_alerts"`
+	OverallHealth   string            `json:"overall_health"`
+	TotalBackends   int               `json:"total_backends"`
+	HealthyBackends int               `json:"healthy_backends"`
+	ActiveAlerts    int               `json:"active_alerts"`
+	LastCheck       time.Time         `json:"last_check"`
+	BackendHealth   map[string]string `json:"backend_health"`
+	RecentAlerts    []HealthAlert     `json:"recent_alerts"`
 }
 
 // GetHealthSummary returns a summary of overall system health
 func (hm *HealthMonitor) GetHealthSummary() *HealthSummary {
 	hm.mutex.RLock()
 	defer hm.mutex.RUnlock()
-	
+
 	backends := hm.manager.GetAvailableBackends()
 	healthyCount := 0
 	backendHealth := make(map[string]string)
-	
+
 	for name, backend := range backends {
 		status := backend.HealthCheck(context.Background())
 		backendHealth[name] = status.Status
@@ -443,7 +443,7 @@ func (hm *HealthMonitor) GetHealthSummary() *HealthSummary {
 			healthyCount++
 		}
 	}
-	
+
 	// Determine overall health
 	overallHealth := "healthy"
 	if healthyCount == 0 {
@@ -451,7 +451,7 @@ func (hm *HealthMonitor) GetHealthSummary() *HealthSummary {
 	} else if healthyCount < len(backends) {
 		overallHealth = "degraded"
 	}
-	
+
 	// Get recent alerts (last 10)
 	var recentAlerts []HealthAlert
 	startIdx := len(hm.alerts) - 10
@@ -461,7 +461,7 @@ func (hm *HealthMonitor) GetHealthSummary() *HealthSummary {
 	for i := startIdx; i < len(hm.alerts); i++ {
 		recentAlerts = append(recentAlerts, hm.alerts[i])
 	}
-	
+
 	return &HealthSummary{
 		OverallHealth:   overallHealth,
 		TotalBackends:   len(backends),
@@ -477,31 +477,31 @@ func (hm *HealthMonitor) GetHealthSummary() *HealthSummary {
 func (hm *HealthMonitor) GetHealthTrends(backendName string, duration time.Duration) *HealthTrends {
 	hm.mutex.RLock()
 	defer hm.mutex.RUnlock()
-	
+
 	history := hm.healthHistory[backendName]
 	if len(history) == 0 {
 		return &HealthTrends{}
 	}
-	
+
 	cutoff := time.Now().Add(-duration)
 	var recentHistory []*HealthStatus
-	
+
 	for _, status := range history {
 		if status.LastCheck.After(cutoff) {
 			recentHistory = append(recentHistory, status)
 		}
 	}
-	
+
 	if len(recentHistory) == 0 {
 		return &HealthTrends{}
 	}
-	
+
 	// Calculate trends
 	healthyCount := 0
 	var totalLatency time.Duration
 	var maxLatency time.Duration
 	var totalErrorRate float64
-	
+
 	for _, status := range recentHistory {
 		if status.Healthy {
 			healthyCount++
@@ -512,20 +512,20 @@ func (hm *HealthMonitor) GetHealthTrends(backendName string, duration time.Durat
 		}
 		totalErrorRate += status.ErrorRate
 	}
-	
+
 	trends := &HealthTrends{
-		BackendName:    backendName,
-		Period:         duration,
-		SampleCount:    len(recentHistory),
-		HealthyPercent: float64(healthyCount) / float64(len(recentHistory)) * 100,
-		AverageLatency: totalLatency / time.Duration(len(recentHistory)),
-		MaxLatency:     maxLatency,
+		BackendName:      backendName,
+		Period:           duration,
+		SampleCount:      len(recentHistory),
+		HealthyPercent:   float64(healthyCount) / float64(len(recentHistory)) * 100,
+		AverageLatency:   totalLatency / time.Duration(len(recentHistory)),
+		MaxLatency:       maxLatency,
 		AverageErrorRate: totalErrorRate / float64(len(recentHistory)),
 	}
-	
+
 	// Calculate availability (uptime percentage)
 	trends.Availability = trends.HealthyPercent
-	
+
 	return trends
 }
 

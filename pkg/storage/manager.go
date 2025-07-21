@@ -12,15 +12,15 @@ import (
 
 // Manager orchestrates operations across multiple storage backends
 type Manager struct {
-	config    *Config
-	backends  map[string]Backend
-	factory   *BackendFactory
-	router    *Router
-	monitor   *HealthMonitor
-	
+	config   *Config
+	backends map[string]Backend
+	factory  *BackendFactory
+	router   *Router
+	monitor  *HealthMonitor
+
 	// State management
-	mutex      sync.RWMutex
-	started    bool
+	mutex         sync.RWMutex
+	started       bool
 	errorReporter ErrorReporter
 }
 
@@ -29,22 +29,22 @@ func NewManager(config *Config) (*Manager, error) {
 	if err := config.Validate(); err != nil {
 		return nil, NewConfigError("manager", "invalid configuration", err)
 	}
-	
+
 	factory := NewBackendFactory(config)
-	
+
 	manager := &Manager{
 		config:        config,
 		backends:      make(map[string]Backend),
 		factory:       factory,
 		errorReporter: NewDefaultErrorReporter(),
 	}
-	
+
 	// Initialize router
 	manager.router = NewRouter(manager, config.Distribution)
-	
+
 	// Initialize health monitor
 	manager.monitor = NewHealthMonitor(manager, config.HealthCheck)
-	
+
 	return manager, nil
 }
 
@@ -52,17 +52,17 @@ func NewManager(config *Config) (*Manager, error) {
 func (m *Manager) Start(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if m.started {
 		return NewStorageError(ErrCodeAlreadyExists, "manager already started", "manager", nil)
 	}
-	
+
 	// Create all enabled backends
 	backends, err := m.factory.CreateAllBackends()
 	if err != nil {
 		return NewBackendInitError("manager", err)
 	}
-	
+
 	// Connect to all backends
 	var errors ErrorAggregator
 	for name, backend := range backends {
@@ -73,23 +73,23 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 		m.backends[name] = backend
 	}
-	
+
 	if len(m.backends) == 0 {
 		if errors.HasErrors() {
 			return errors.CreateAggregateError()
 		}
 		return NewNoBackendsError()
 	}
-	
+
 	// Start health monitoring
 	if m.config.HealthCheck.Enabled {
 		if err := m.monitor.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start health monitor: %w", err)
 		}
 	}
-	
+
 	m.started = true
-	
+
 	// Report any connection errors but don't fail startup if some backends are available
 	if errors.HasErrors() {
 		// Log the errors but continue
@@ -99,7 +99,7 @@ func (m *Manager) Start(ctx context.Context) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -107,16 +107,16 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if !m.started {
 		return nil
 	}
-	
+
 	// Stop health monitoring
 	if m.monitor != nil {
 		m.monitor.Stop()
 	}
-	
+
 	// Disconnect from all backends
 	var errors ErrorAggregator
 	for name, backend := range m.backends {
@@ -124,14 +124,14 @@ func (m *Manager) Stop(ctx context.Context) error {
 			errors.Add(fmt.Errorf("failed to disconnect from backend '%s': %w", name, err))
 		}
 	}
-	
+
 	m.backends = make(map[string]Backend)
 	m.started = false
-	
+
 	if errors.HasErrors() {
 		return errors.CreateAggregateError()
 	}
-	
+
 	return nil
 }
 
@@ -140,7 +140,7 @@ func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, 
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	// Use router to determine storage strategy
 	return m.router.Put(ctx, block)
 }
@@ -150,7 +150,7 @@ func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Get(ctx, address)
 }
 
@@ -159,7 +159,7 @@ func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) 
 	if !m.started {
 		return false, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Has(ctx, address)
 }
 
@@ -168,7 +168,7 @@ func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Delete(ctx, address)
 }
 
@@ -177,7 +177,7 @@ func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*Block
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.PutMany(ctx, blocks)
 }
 
@@ -186,7 +186,7 @@ func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*bl
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.GetMany(ctx, addresses)
 }
 
@@ -195,7 +195,7 @@ func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Pin(ctx, address)
 }
 
@@ -204,7 +204,7 @@ func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Unpin(ctx, address)
 }
 
@@ -212,7 +212,7 @@ func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 func (m *Manager) GetBackend(name string) (Backend, bool) {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	backend, exists := m.backends[name]
 	return backend, exists
 }
@@ -221,7 +221,7 @@ func (m *Manager) GetBackend(name string) (Backend, bool) {
 func (m *Manager) GetAvailableBackends() map[string]Backend {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	// Return a copy to prevent concurrent access issues
 	available := make(map[string]Backend)
 	for name, backend := range m.backends {
@@ -229,7 +229,7 @@ func (m *Manager) GetAvailableBackends() map[string]Backend {
 			available[name] = backend
 		}
 	}
-	
+
 	return available
 }
 
@@ -237,7 +237,7 @@ func (m *Manager) GetAvailableBackends() map[string]Backend {
 func (m *Manager) GetHealthyBackends() map[string]Backend {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	healthy := make(map[string]Backend)
 	for name, backend := range m.backends {
 		if backend.IsConnected() {
@@ -247,7 +247,7 @@ func (m *Manager) GetHealthyBackends() map[string]Backend {
 			}
 		}
 	}
-	
+
 	return healthy
 }
 
@@ -255,27 +255,27 @@ func (m *Manager) GetHealthyBackends() map[string]Backend {
 func (m *Manager) GetBackendsByPriority() []Backend {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	type backendInfo struct {
 		backend  Backend
 		name     string
 		priority int
 		healthy  bool
 	}
-	
+
 	var infos []backendInfo
 	for name, backend := range m.backends {
 		if !backend.IsConnected() {
 			continue
 		}
-		
+
 		config, exists := m.config.Backends[name]
 		if !exists {
 			continue
 		}
-		
+
 		status := backend.HealthCheck(context.Background())
-		
+
 		infos = append(infos, backendInfo{
 			backend:  backend,
 			name:     name,
@@ -283,7 +283,7 @@ func (m *Manager) GetBackendsByPriority() []Backend {
 			healthy:  status.Healthy,
 		})
 	}
-	
+
 	// Sort by health first, then priority
 	sort.Slice(infos, func(i, j int) bool {
 		if infos[i].healthy != infos[j].healthy {
@@ -291,12 +291,12 @@ func (m *Manager) GetBackendsByPriority() []Backend {
 		}
 		return infos[i].priority > infos[j].priority // Higher priority first
 	})
-	
+
 	backends := make([]Backend, len(infos))
 	for i, info := range infos {
 		backends[i] = info.backend
 	}
-	
+
 	return backends
 }
 
@@ -304,20 +304,20 @@ func (m *Manager) GetBackendsByPriority() []Backend {
 func (m *Manager) GetManagerStatus() *ManagerStatus {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	status := &ManagerStatus{
-		Started:        m.started,
-		TotalBackends:  len(m.config.Backends),
-		ActiveBackends: len(m.backends),
+		Started:         m.started,
+		TotalBackends:   len(m.config.Backends),
+		ActiveBackends:  len(m.backends),
 		HealthyBackends: 0,
-		BackendStatus:  make(map[string]*BackendStatus),
-		LastCheck:     time.Now(),
+		BackendStatus:   make(map[string]*BackendStatus),
+		LastCheck:       time.Now(),
 	}
-	
+
 	for name, backend := range m.backends {
 		backendHealth := backend.HealthCheck(context.Background())
 		backendInfo := backend.GetBackendInfo()
-		
+
 		backendStatus := &BackendStatus{
 			Name:         name,
 			Type:         backendInfo.Type,
@@ -329,14 +329,14 @@ func (m *Manager) GetManagerStatus() *ManagerStatus {
 			LastCheck:    backendHealth.LastCheck,
 			Capabilities: backendInfo.Capabilities,
 		}
-		
+
 		if backendStatus.Healthy {
 			status.HealthyBackends++
 		}
-		
+
 		status.BackendStatus[name] = backendStatus
 	}
-	
+
 	return status
 }
 
@@ -364,49 +364,49 @@ func (m *Manager) GetErrorMetrics() *ErrorMetrics {
 func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	// Validate new configuration
 	if err := newConfig.Validate(); err != nil {
 		return NewConfigError(name, "invalid backend configuration", err)
 	}
-	
+
 	// Check if backend exists
 	oldBackend, exists := m.backends[name]
 	if !exists {
 		return NewStorageError(ErrCodeNotFound, fmt.Sprintf("backend '%s' not found", name), name, nil)
 	}
-	
+
 	// Disconnect old backend
 	ctx := context.Background()
 	if err := oldBackend.Disconnect(ctx); err != nil {
 		return NewConnectionError(name, err)
 	}
-	
+
 	// Update configuration
 	m.config.Backends[name] = newConfig
-	
+
 	// Create new backend if enabled
 	if newConfig.Enabled {
 		newBackend, err := m.factory.CreateBackend(name)
 		if err != nil {
 			return NewBackendInitError(name, err)
 		}
-		
+
 		// Connect new backend
 		if err := newBackend.Connect(ctx); err != nil {
 			return NewConnectionError(name, err)
 		}
-		
+
 		m.backends[name] = newBackend
 	} else {
 		// Remove from active backends if disabled
 		delete(m.backends, name)
 	}
-	
+
 	return nil
 }
 
@@ -414,12 +414,12 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 
 // ManagerStatus represents the overall status of the storage manager
 type ManagerStatus struct {
-	Started         bool                     `json:"started"`
-	TotalBackends   int                      `json:"total_backends"`
-	ActiveBackends  int                      `json:"active_backends"`
-	HealthyBackends int                      `json:"healthy_backends"`
+	Started         bool                      `json:"started"`
+	TotalBackends   int                       `json:"total_backends"`
+	ActiveBackends  int                       `json:"active_backends"`
+	HealthyBackends int                       `json:"healthy_backends"`
 	BackendStatus   map[string]*BackendStatus `json:"backend_status"`
-	LastCheck       time.Time                `json:"last_check"`
+	LastCheck       time.Time                 `json:"last_check"`
 }
 
 // BackendStatus represents the status of a single backend
@@ -455,7 +455,7 @@ func (m *Manager) SelectBestBackend(ctx context.Context, criteria SelectionCrite
 // GetBackendsWithCapability returns backends that support a specific capability
 func (m *Manager) GetBackendsWithCapability(capability string) []Backend {
 	var result []Backend
-	
+
 	for _, backend := range m.GetAvailableBackends() {
 		info := backend.GetBackendInfo()
 		for _, cap := range info.Capabilities {
@@ -465,7 +465,7 @@ func (m *Manager) GetBackendsWithCapability(capability string) []Backend {
 			}
 		}
 	}
-	
+
 	return result
 }
 
@@ -488,11 +488,11 @@ func (m *Manager) IsConnected() bool {
 
 func (m *Manager) GetBackendInfo() *BackendInfo {
 	backends := m.GetAvailableBackends()
-	
+
 	// Collect capabilities from all backends
 	capabilitySet := make(map[string]bool)
 	var backendNames []string
-	
+
 	for name, backend := range backends {
 		backendNames = append(backendNames, name)
 		info := backend.GetBackendInfo()
@@ -500,12 +500,12 @@ func (m *Manager) GetBackendInfo() *BackendInfo {
 			capabilitySet[cap] = true
 		}
 	}
-	
+
 	var capabilities []string
 	for cap := range capabilitySet {
 		capabilities = append(capabilities, cap)
 	}
-	
+
 	return &BackendInfo{
 		Name:         "NoiseFS Storage Manager",
 		Type:         "manager",
@@ -520,11 +520,11 @@ func (m *Manager) GetBackendInfo() *BackendInfo {
 
 func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
 	status := m.GetManagerStatus()
-	
+
 	healthy := status.HealthyBackends > 0
 	healthStr := "healthy"
 	var issues []HealthIssue
-	
+
 	if status.HealthyBackends == 0 {
 		healthy = false
 		healthStr = "critical"
@@ -537,14 +537,14 @@ func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
 	} else if status.HealthyBackends < status.ActiveBackends {
 		healthStr = "degraded"
 		issues = append(issues, HealthIssue{
-			Severity:    "warning",
-			Code:        "SOME_BACKENDS_UNHEALTHY",
-			Description: fmt.Sprintf("%d of %d backends unhealthy", 
+			Severity: "warning",
+			Code:     "SOME_BACKENDS_UNHEALTHY",
+			Description: fmt.Sprintf("%d of %d backends unhealthy",
 				status.ActiveBackends-status.HealthyBackends, status.ActiveBackends),
-			Timestamp:   time.Now(),
+			Timestamp: time.Now(),
 		})
 	}
-	
+
 	return &HealthStatus{
 		Healthy:   healthy,
 		Status:    healthStr,
@@ -589,7 +589,7 @@ func (m *Manager) HasBlock(cid string) (bool, error) {
 func (m *Manager) GetConnectedPeerCount() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	totalPeers := 0
 	for _, backend := range m.backends {
 		if peerAware, ok := backend.(PeerAwareBackend); ok {
@@ -597,6 +597,6 @@ func (m *Manager) GetConnectedPeerCount() int {
 			totalPeers += len(peers)
 		}
 	}
-	
+
 	return totalPeers
 }
