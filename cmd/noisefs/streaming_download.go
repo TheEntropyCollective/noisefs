@@ -32,18 +32,18 @@ type StreamingDownloadProcessor struct {
 	mu             sync.Mutex
 	logger         *logging.Logger
 	memMonitor     *MemoryMonitor
-	
+
 	// Channels for pipelined processing
-	fetchChannel     chan *fetchRequest
-	xorChannel       chan *xorRequest
-	writeChannel     chan *writeRequest
-	errors           chan error
-	done             chan bool
-	
+	fetchChannel chan *fetchRequest
+	xorChannel   chan *xorRequest
+	writeChannel chan *writeRequest
+	errors       chan error
+	done         chan bool
+
 	// Progress tracking
-	blocksProcessed  int
-	bytesWritten     int64
-	totalBlocks      int
+	blocksProcessed int
+	bytesWritten    int64
+	totalBlocks     int
 }
 
 type fetchRequest struct {
@@ -54,10 +54,10 @@ type fetchRequest struct {
 }
 
 type xorRequest struct {
-	index           int
-	dataBlock       *blocks.Block
-	randomizer1     *blocks.Block
-	randomizer2     *blocks.Block
+	index       int
+	dataBlock   *blocks.Block
+	randomizer1 *blocks.Block
+	randomizer2 *blocks.Block
 }
 
 type writeRequest struct {
@@ -71,23 +71,23 @@ func NewStreamingDownloadProcessor(client *noisefs.Client, storageManager *stora
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU()
 	}
-	
+
 	pool := workers.NewPool(workers.Config{
 		WorkerCount:     workerCount,
 		BufferSize:      workerCount * 2,
 		ShutdownTimeout: 30 * time.Second,
 	})
-	
+
 	memoryLimit := cfg.Performance.MemoryLimit
 	if memoryLimit <= 0 {
 		memoryLimit = 512 // Default 512MB
 	}
-	
+
 	bufferSize := cfg.Performance.StreamBufferSize
 	if bufferSize <= 0 {
 		bufferSize = 10 // Default buffer size
 	}
-	
+
 	return &StreamingDownloadProcessor{
 		client:         client,
 		storageManager: storageManager,
@@ -112,20 +112,20 @@ func (p *StreamingDownloadProcessor) Start() error {
 	if err := p.pool.Start(); err != nil {
 		return fmt.Errorf("failed to start worker pool: %w", err)
 	}
-	
+
 	// Start pipeline stages
 	go p.fetchStage()
 	go p.xorStage()
 	go p.writeStage()
-	
+
 	// Start memory monitoring
 	if p.memMonitor.enabled {
 		go p.monitorMemory()
 	}
-	
+
 	// Queue all blocks for fetching
 	go p.queueBlocks()
-	
+
 	return nil
 }
 
@@ -146,11 +146,11 @@ func (p *StreamingDownloadProcessor) queueBlocks() {
 func (p *StreamingDownloadProcessor) fetchStage() {
 	// Use worker pool for parallel fetching
 	var wg sync.WaitGroup
-	
+
 	for req := range p.fetchChannel {
 		// Check memory limit before fetching
 		estimatedSize := int64(p.descriptor.BlockSize * 3) // data + 2 randomizers
-		
+
 		p.mu.Lock()
 		for p.currentMemory+estimatedSize > p.memoryLimit {
 			p.mu.Unlock()
@@ -165,37 +165,37 @@ func (p *StreamingDownloadProcessor) fetchStage() {
 		}
 		p.currentMemory += estimatedSize
 		p.mu.Unlock()
-		
+
 		wg.Add(1)
 		req := req // Capture loop variable
 		go func() {
 			defer wg.Done()
-			
+
 			// Fetch blocks in parallel
 			var dataBlock, randomizer1, randomizer2 *blocks.Block
 			var err error
-			
+
 			// Create error channel for parallel fetches
 			fetchErrors := make(chan error, 3)
-			
+
 			// Fetch data block
 			go func() {
 				dataBlock, err = p.client.RetrieveBlockWithCache(context.Background(), req.dataCID)
 				fetchErrors <- err
 			}()
-			
+
 			// Fetch randomizer 1
 			go func() {
 				randomizer1, err = p.client.RetrieveBlockWithCache(context.Background(), req.randomizer1CID)
 				fetchErrors <- err
 			}()
-			
+
 			// Fetch randomizer 2
 			go func() {
 				randomizer2, err = p.client.RetrieveBlockWithCache(context.Background(), req.randomizer2CID)
 				fetchErrors <- err
 			}()
-			
+
 			// Wait for all fetches
 			for i := 0; i < 3; i++ {
 				if err := <-fetchErrors; err != nil {
@@ -203,13 +203,13 @@ func (p *StreamingDownloadProcessor) fetchStage() {
 					return
 				}
 			}
-			
+
 			// Update actual memory usage
 			actualSize := int64(dataBlock.Size() + randomizer1.Size() + randomizer2.Size())
 			p.mu.Lock()
 			p.currentMemory = p.currentMemory - estimatedSize + actualSize
 			p.mu.Unlock()
-			
+
 			// Send to XOR stage
 			p.xorChannel <- &xorRequest{
 				index:       req.index,
@@ -217,12 +217,12 @@ func (p *StreamingDownloadProcessor) fetchStage() {
 				randomizer1: randomizer1,
 				randomizer2: randomizer2,
 			}
-			
+
 			// Update memory monitor
 			p.memMonitor.Update()
 		}()
 	}
-	
+
 	wg.Wait()
 	close(p.xorChannel)
 }
@@ -236,19 +236,19 @@ func (p *StreamingDownloadProcessor) xorStage() {
 			p.errors <- fmt.Errorf("failed to XOR block %d: %w", req.index, err)
 			return
 		}
-		
+
 		// Free memory from anonymized blocks
 		blockMemory := int64(req.dataBlock.Size() + req.randomizer1.Size() + req.randomizer2.Size())
 		p.mu.Lock()
 		p.currentMemory -= blockMemory
 		p.mu.Unlock()
-		
+
 		// Send to write stage
 		p.writeChannel <- &writeRequest{
 			index: req.index,
 			block: originalBlock,
 		}
-		
+
 		// Update memory monitor
 		p.memMonitor.Update()
 	}
@@ -263,33 +263,33 @@ func (p *StreamingDownloadProcessor) writeStage() {
 		p.errors <- fmt.Errorf("failed to create assembler: %w", err)
 		return
 	}
-	
+
 	assembler.SetTotalBlocks(p.totalBlocks)
-	
+
 	for req := range p.writeChannel {
 		// Add block to assembler
 		if err := assembler.AddBlock(req.index, req.block); err != nil {
 			p.errors <- fmt.Errorf("failed to write block %d: %w", req.index, err)
 			return
 		}
-		
+
 		// Free block memory after writing
 		p.mu.Lock()
 		p.currentMemory -= int64(req.block.Size())
 		p.blocksProcessed++
 		p.bytesWritten += int64(req.block.Size())
 		p.mu.Unlock()
-		
+
 		// Update memory monitor
 		p.memMonitor.Update()
 	}
-	
+
 	// Finalize assembly
 	if err := assembler.Finalize(); err != nil {
 		p.errors <- fmt.Errorf("failed to finalize assembly: %w", err)
 		return
 	}
-	
+
 	p.done <- true
 }
 
@@ -297,7 +297,7 @@ func (p *StreamingDownloadProcessor) writeStage() {
 func (p *StreamingDownloadProcessor) monitorMemory() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		select {
 		case <-p.done:
@@ -305,15 +305,15 @@ func (p *StreamingDownloadProcessor) monitorMemory() {
 		default:
 			p.memMonitor.Update()
 			current, peak, start := p.memMonitor.GetStats()
-			
+
 			p.logger.Debug("Download memory usage", map[string]interface{}{
-				"current_mb":        current / (1024 * 1024),
-				"peak_mb":           peak / (1024 * 1024),
-				"start_mb":          start / (1024 * 1024),
-				"increase_mb":       (current - start) / (1024 * 1024),
-				"blocks_processed":  p.blocksProcessed,
+				"current_mb":         current / (1024 * 1024),
+				"peak_mb":            peak / (1024 * 1024),
+				"start_mb":           start / (1024 * 1024),
+				"increase_mb":        (current - start) / (1024 * 1024),
+				"blocks_processed":   p.blocksProcessed,
 				"pipeline_memory_mb": p.currentMemory / (1024 * 1024),
-				"progress_percent":  float64(p.blocksProcessed) / float64(p.totalBlocks) * 100,
+				"progress_percent":   float64(p.blocksProcessed) / float64(p.totalBlocks) * 100,
 			})
 		}
 	}
@@ -342,13 +342,13 @@ func (p *StreamingDownloadProcessor) GetStats() (blocksProcessed int, bytesWritt
 func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Client, descriptorCID string, outputPath string, quiet bool, jsonOutput bool, cfg *config.Config, logger *logging.Logger) error {
 	// Track download start time
 	downloadStartTime := time.Now()
-	
+
 	// Create descriptor store
 	store, err := descriptors.NewStoreWithManager(storageManager)
 	if err != nil {
 		return fmt.Errorf("failed to create descriptor store: %w", err)
 	}
-	
+
 	// Load descriptor
 	if !quiet {
 		fmt.Printf("Loading descriptor from CID: %s\n", descriptorCID)
@@ -357,48 +357,48 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 	if err != nil {
 		return fmt.Errorf("failed to load descriptor: %w", err)
 	}
-	
+
 	if !quiet {
 		fmt.Printf("Downloading file: %s (%d bytes)\n", descriptor.Filename, descriptor.FileSize)
 		fmt.Printf("Blocks to retrieve: %d\n", len(descriptor.Blocks))
 	}
-	
+
 	// Create output file
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
 	defer outputFile.Close()
-	
+
 	// Create streaming processor
 	processor := NewStreamingDownloadProcessor(client, storageManager, outputFile, descriptor, cfg, logger)
-	
+
 	// Start processing pipeline
 	if err := processor.Start(); err != nil {
 		return fmt.Errorf("failed to start processor: %w", err)
 	}
-	
+
 	// Progress tracking
 	var progress *util.ProgressBar
 	if !quiet {
 		progress = util.NewProgressBar(descriptor.FileSize, "Streaming download", os.Stdout)
-		
+
 		// Update progress periodically
 		go func() {
 			ticker := time.NewTicker(100 * time.Millisecond)
 			defer ticker.Stop()
-			
+
 			for range ticker.C {
 				_, bytesWritten := processor.GetStats()
 				progress.SetCurrent(bytesWritten)
-				
+
 				if bytesWritten >= descriptor.FileSize {
 					break
 				}
 			}
 		}()
 	}
-	
+
 	logger.Info("Starting streaming download", map[string]interface{}{
 		"file_size_mb":       descriptor.FileSize / (1024 * 1024),
 		"block_count":        len(descriptor.Blocks),
@@ -407,22 +407,22 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 		"buffer_size":        cfg.Performance.StreamBufferSize,
 		"concurrent_workers": cfg.Performance.MaxConcurrentOps,
 	})
-	
+
 	// Wait for download to complete
 	if err := processor.Wait(); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	
+
 	if progress != nil {
 		progress.Finish()
 	}
-	
+
 	// Get final statistics
 	blocksProcessed, bytesWritten := processor.GetStats()
-	
+
 	// Calculate total download time
 	totalDownloadDuration := time.Since(downloadStartTime)
-	
+
 	// Get memory statistics
 	if processor.memMonitor.enabled {
 		current, peak, start := processor.memMonitor.GetStats()
@@ -433,7 +433,7 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 			"increase_mb": (peak - start) / (1024 * 1024),
 		})
 	}
-	
+
 	// Log download completion
 	logger.Info("Streaming download completed successfully", map[string]interface{}{
 		"descriptor_cid":      descriptorCID,
@@ -444,7 +444,7 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 		"total_duration_ms":   totalDownloadDuration.Milliseconds(),
 		"throughput_mb_per_s": float64(descriptor.FileSize) / (1024 * 1024) / totalDownloadDuration.Seconds(),
 	})
-	
+
 	// Display results
 	if jsonOutput {
 		result := map[string]interface{}{
@@ -462,7 +462,7 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 		fmt.Printf("Performance: %.2f MB/s (total time: %.2fs)\n",
 			float64(descriptor.FileSize)/(1024*1024)/totalDownloadDuration.Seconds(),
 			totalDownloadDuration.Seconds())
-		
+
 		if processor.memMonitor.enabled {
 			_, peak, start := processor.memMonitor.GetStats()
 			fmt.Printf("Memory usage: Peak %.2f MB (increase: %.2f MB)\n",
@@ -470,9 +470,9 @@ func streamingDownloadFile(storageManager *storage.Manager, client *noisefs.Clie
 				float64(peak-start)/(1024*1024))
 		}
 	}
-	
+
 	// Record download metrics
 	client.RecordDownload()
-	
+
 	return nil
 }

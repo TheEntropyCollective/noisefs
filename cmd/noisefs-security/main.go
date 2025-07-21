@@ -121,54 +121,54 @@ func migrateIndex(indexPath string, interactive bool) error {
 
 func secureDeleteFile(filePath string) error {
 	fmt.Printf("Securely deleting file: %s\n", filePath)
-	
+
 	config := security.SecurityConfig{
 		AntiForensics: true,
 		SecureMemory:  true,
 	}
-	
+
 	securityManager := security.NewSecurityManager(config)
 	defer securityManager.Shutdown()
-	
+
 	if err := securityManager.FileDeleter.SecureDelete(filePath); err != nil {
 		return fmt.Errorf("secure deletion failed: %w", err)
 	}
-	
+
 	fmt.Printf("File securely deleted: %s\n", filePath)
 	return nil
 }
 
 func memoryTest() {
 	fmt.Println("Testing secure memory handling...")
-	
+
 	config := security.SecurityConfig{
 		SecureMemory:  true,
 		AntiForensics: true,
 	}
-	
+
 	mp := security.NewMemoryProtection(config.SecureMemory)
-	
+
 	// Create test data
 	sensitiveData := []byte("This is sensitive data that should be securely cleared")
 	fmt.Printf("Original data: %s\n", string(sensitiveData))
-	
+
 	// Create secure buffer
 	buffer := security.NewSecureBuffer(len(sensitiveData), mp)
 	copy(buffer.Data(), sensitiveData)
-	
+
 	fmt.Printf("Buffer data: %s\n", string(buffer.Data()))
-	
+
 	// Clear the buffer
 	fmt.Println("Clearing buffer...")
 	buffer.Clear()
-	
+
 	fmt.Printf("Buffer after clear: %v\n", buffer.Data())
-	
+
 	// Clear original data
 	fmt.Println("Clearing original data...")
 	mp.ClearSensitiveData(sensitiveData)
-	
+
 	fmt.Printf("Original data after clear: %v\n", sensitiveData)
-	
+
 	fmt.Println("Memory test completed successfully!")
 }

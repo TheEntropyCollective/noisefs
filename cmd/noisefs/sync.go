@@ -70,7 +70,7 @@ func handleSyncStart(args []string, storageManager *storage.Manager, quiet bool,
 	localPath := args[1]
 	remotePath := args[2]
 	manifestCID := ""
-	
+
 	if len(args) > 3 {
 		manifestCID = args[3]
 	}
@@ -199,7 +199,7 @@ func handleSyncStatus(args []string, storageManager *storage.Manager, quiet bool
 			fmt.Printf("Remote Path: %s\n", session.RemotePath)
 			fmt.Printf("Status: %s\n", session.Status)
 			fmt.Printf("Last Sync: %s\n", session.LastSync.Format(time.RFC3339))
-			
+
 			if session.Progress != nil {
 				fmt.Printf("\nProgress:\n")
 				fmt.Printf("  Total Operations: %d\n", session.Progress.TotalOperations)
@@ -214,7 +214,7 @@ func handleSyncStatus(args []string, storageManager *storage.Manager, quiet bool
 	} else {
 		// Show all active syncs
 		sessions := syncEngine.ListActiveSyncs()
-		
+
 		if jsonOutput {
 			results := make([]SyncStatusResult, len(sessions))
 			for i, session := range sessions {
@@ -263,7 +263,7 @@ func handleSyncList(args []string, storageManager *storage.Manager, quiet bool, 
 
 	// Get all active syncs
 	sessions := syncEngine.ListActiveSyncs()
-	
+
 	// Get engine stats
 	stats := syncEngine.GetStats()
 
@@ -278,7 +278,7 @@ func handleSyncList(args []string, storageManager *storage.Manager, quiet bool, 
 				LastSync:   session.LastSync,
 			}
 		}
-		
+
 		result := SyncListResponse{
 			Sessions: results,
 			Stats:    stats,
@@ -484,8 +484,8 @@ type SyncListResult struct {
 }
 
 type SyncListResponse struct {
-	Sessions []SyncListResult       `json:"sessions"`
-	Stats    *sync.SyncEngineStats  `json:"stats"`
+	Sessions []SyncListResult      `json:"sessions"`
+	Stats    *sync.SyncEngineStats `json:"stats"`
 }
 
 type SyncActionResult struct {

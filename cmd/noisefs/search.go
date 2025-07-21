@@ -76,21 +76,21 @@ func (a *fileIndexAdapter) GetDirectory(path string) ([]interface{}, bool) {
 // handleSearchCommand handles the search subcommand
 func handleSearchCommand(args []string) {
 	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
-	
+
 	// Search options
 	query := searchCmd.String("q", "", "Search query")
 	namePattern := searchCmd.String("name", "", "Search by filename pattern (supports wildcards)")
 	pathPattern := searchCmd.String("path", "", "Search by path pattern")
 	directory := searchCmd.String("dir", "", "Search within specific directory")
 	recursive := searchCmd.Bool("r", true, "Search recursively in directories")
-	
+
 	// Filter options
 	fileTypes := searchCmd.String("type", "", "File types to search (comma-separated)")
 	minSize := searchCmd.String("min-size", "", "Minimum file size (e.g., 1MB, 500KB)")
 	maxSize := searchCmd.String("max-size", "", "Maximum file size")
 	modifiedAfter := searchCmd.String("modified-after", "", "Files modified after date (YYYY-MM-DD)")
 	modifiedBefore := searchCmd.String("modified-before", "", "Files modified before date (YYYY-MM-DD)")
-	
+
 	// Output options
 	maxResults := searchCmd.Int("max", 20, "Maximum number of results")
 	offset := searchCmd.Int("offset", 0, "Result offset for pagination")
@@ -99,15 +99,15 @@ func handleSearchCommand(args []string) {
 	jsonOutput := searchCmd.Bool("json", false, "Output results in JSON format")
 	showScore := searchCmd.Bool("show-score", false, "Show relevance score")
 	highlight := searchCmd.Bool("highlight", true, "Highlight matching terms")
-	
+
 	// Index management
 	rebuildIndex := searchCmd.Bool("rebuild", false, "Rebuild search index")
 	indexStats := searchCmd.Bool("stats", false, "Show search index statistics")
-	
+
 	// Configuration
 	indexPath := searchCmd.String("index", "", "Custom file index path")
 	searchIndexPath := searchCmd.String("search-index", "", "Custom search index path")
-	
+
 	searchCmd.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: noisefs search [options] [query]\n\n")
 		fmt.Fprintf(os.Stderr, "Search for files in NoiseFS using full-text search and metadata filters.\n\n")
@@ -120,17 +120,17 @@ func handleSearchCommand(args []string) {
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		searchCmd.PrintDefaults()
 	}
-	
+
 	if err := searchCmd.Parse(args); err != nil {
 		return
 	}
-	
+
 	// Get query from remaining args if not specified with -q
 	remainingArgs := searchCmd.Args()
 	if *query == "" && len(remainingArgs) > 0 {
 		*query = strings.Join(remainingArgs, " ")
 	}
-	
+
 	// Initialize file index
 	if *indexPath == "" {
 		var err error
@@ -140,38 +140,38 @@ func handleSearchCommand(args []string) {
 			os.Exit(1)
 		}
 	}
-	
+
 	fileIndex := fuse.NewFileIndex(*indexPath)
 	if err := fileIndex.LoadIndex(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading file index: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// For search operations that only use indexed metadata, we don't need a real storage manager
 	// This avoids IPFS dependencies and health check issues
 	var storageManager *storage.Manager = nil
-	
+
 	// Initialize search manager
 	searchConfig := search.DefaultSearchConfig()
 	if *searchIndexPath != "" {
 		searchConfig.IndexPath = *searchIndexPath
 	}
-	
+
 	// Create adapter for file index
 	indexAdapter := &fileIndexAdapter{fileIndex: fileIndex}
-	
+
 	searchManager, err := search.NewSearchManager(searchConfig, indexAdapter, storageManager)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating search manager: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	if err := searchManager.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting search manager: %v\n", err)
 		os.Exit(1)
 	}
 	defer searchManager.Stop()
-	
+
 	// Handle special operations
 	if *rebuildIndex {
 		fmt.Println("Rebuilding search index...")
@@ -182,12 +182,12 @@ func handleSearchCommand(args []string) {
 		fmt.Println("Index rebuild queued successfully")
 		return
 	}
-	
+
 	if *indexStats {
 		showIndexStats(searchManager, *jsonOutput)
 		return
 	}
-	
+
 	// Build search options
 	options := search.SearchOptions{
 		MaxResults: *maxResults,
@@ -196,7 +196,7 @@ func handleSearchCommand(args []string) {
 		Directory:  *directory,
 		Recursive:  *recursive,
 	}
-	
+
 	// Parse sort options
 	switch *sortBy {
 	case "name":
@@ -210,13 +210,13 @@ func handleSearchCommand(args []string) {
 	default:
 		options.SortBy = search.SortByScore
 	}
-	
+
 	if *sortOrder == "asc" {
 		options.SortOrder = search.SortAsc
 	} else {
 		options.SortOrder = search.SortDesc
 	}
-	
+
 	// Parse file types
 	if *fileTypes != "" {
 		options.FileTypes = strings.Split(*fileTypes, ",")
@@ -224,7 +224,7 @@ func handleSearchCommand(args []string) {
 			options.FileTypes[i] = strings.TrimSpace(options.FileTypes[i])
 		}
 	}
-	
+
 	// Parse size ranges
 	if *minSize != "" || *maxSize != "" {
 		options.SizeRange = &search.SizeRange{}
@@ -245,7 +245,7 @@ func handleSearchCommand(args []string) {
 			options.SizeRange.Max = max
 		}
 	}
-	
+
 	// Parse time ranges
 	if *modifiedAfter != "" || *modifiedBefore != "" {
 		options.TimeRange = &search.TimeRange{}
@@ -266,7 +266,7 @@ func handleSearchCommand(args []string) {
 			options.TimeRange.End = end.Add(24 * time.Hour) // Include the entire day
 		}
 	}
-	
+
 	// Perform search
 	var results *search.SearchResults
 	if *query != "" {
@@ -289,12 +289,12 @@ func handleSearchCommand(args []string) {
 		searchCmd.Usage()
 		os.Exit(1)
 	}
-	
+
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Search failed: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// Display results
 	if *jsonOutput {
 		displayJSONResults(results)
@@ -309,7 +309,7 @@ func showIndexStats(searchManager *search.SearchManager, jsonOutput bool) {
 		fmt.Fprintf(os.Stderr, "Error getting index stats: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	if jsonOutput {
 		data, _ := json.MarshalIndent(stats, "", "  ")
 		fmt.Println(string(data))
@@ -342,29 +342,29 @@ func displayTextResults(results *search.SearchResults, showScore bool) {
 		fmt.Println("No results found")
 		return
 	}
-	
-	fmt.Printf("Found %d results (showing %d-%d):\n\n", 
-		results.Total, 
-		results.Offset+1, 
+
+	fmt.Printf("Found %d results (showing %d-%d):\n\n",
+		results.Total,
+		results.Offset+1,
 		min(results.Offset+len(results.Results), results.Total))
-	
+
 	for i, result := range results.Results {
 		fmt.Printf("%d. %s\n", results.Offset+i+1, result.Path)
-		
+
 		if showScore {
 			fmt.Printf("   Score: %.4f\n", result.Score)
 		}
-		
-		fmt.Printf("   Size: %s | Modified: %s", 
+
+		fmt.Printf("   Size: %s | Modified: %s",
 			util.FormatSize(result.Size),
 			result.ModifiedAt.Format("2006-01-02 15:04"))
-		
+
 		if result.MimeType != "" && result.MimeType != "application/octet-stream" {
 			fmt.Printf(" | Type: %s", result.MimeType)
 		}
-		
+
 		fmt.Println()
-		
+
 		if result.Preview != "" {
 			preview := result.Preview
 			if len(preview) > 200 {
@@ -372,20 +372,20 @@ func displayTextResults(results *search.SearchResults, showScore bool) {
 			}
 			fmt.Printf("   %s\n", preview)
 		}
-		
+
 		if len(result.Highlights) > 0 {
 			fmt.Printf("   Matches: %s\n", strings.Join(result.Highlights[:min(3, len(result.Highlights))], " ... "))
 		}
-		
+
 		fmt.Println()
 	}
-	
+
 	// Show pagination info
 	if results.HasMore {
-		fmt.Printf("More results available. Use --offset %d to see next page.\n", 
+		fmt.Printf("More results available. Use --offset %d to see next page.\n",
 			results.Offset+len(results.Results))
 	}
-	
+
 	fmt.Printf("\nSearch completed in %v\n", results.TimeTaken)
 }
 

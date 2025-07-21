@@ -155,30 +155,8 @@ type HealthCheckConfig struct {
 
 	// Health check timeout
 	Timeout time.Duration `json:"timeout" yaml:"timeout"`
-
-	// Thresholds for marking backends unhealthy
-	Thresholds *HealthThresholds `json:"thresholds" yaml:"thresholds"`
-
-	// Actions to take when backends become unhealthy
-	Actions *HealthActions `json:"actions" yaml:"actions"`
 }
 
-// HealthThresholds represents health check thresholds
-type HealthThresholds struct {
-	MaxLatency          time.Duration `json:"max_latency" yaml:"max_latency"`
-	MaxErrorRate        float64       `json:"max_error_rate" yaml:"max_error_rate"`
-	MinSuccessRate      float64       `json:"min_success_rate" yaml:"min_success_rate"`
-	ConsecutiveFailures int           `json:"consecutive_failures" yaml:"consecutive_failures"`
-}
-
-// HealthActions represents actions to take on health events
-type HealthActions struct {
-	OnUnhealthy string `json:"on_unhealthy" yaml:"on_unhealthy"` // "disable", "deprioritize", "quarantine"
-	OnRecovered string `json:"on_recovered" yaml:"on_recovered"` // "enable", "restore_priority"
-
-	// Notification settings
-	NotifyOnStateChange bool `json:"notify_on_state_change" yaml:"notify_on_state_change"`
-}
 
 // PerformanceConfig represents performance tuning configuration
 type PerformanceConfig struct {
@@ -266,17 +244,6 @@ func DefaultConfig() *Config {
 			Enabled:  true,
 			Interval: 30 * time.Second,
 			Timeout:  10 * time.Second,
-			Thresholds: &HealthThresholds{
-				MaxLatency:          10 * time.Second,
-				MaxErrorRate:        0.2,
-				MinSuccessRate:      0.8,
-				ConsecutiveFailures: 3,
-			},
-			Actions: &HealthActions{
-				OnUnhealthy:         "deprioritize",
-				OnRecovered:         "restore_priority",
-				NotifyOnStateChange: true,
-			},
 		},
 		Performance: &PerformanceConfig{
 			MaxConcurrentOperations: 100,
@@ -672,62 +639,10 @@ func (hcc *HealthCheckConfig) Validate() error {
 		return NewConfigError("health_check", "timeout must be less than interval", nil)
 	}
 
-	// Validate thresholds if present
-	if hcc.Thresholds != nil {
-		if err := hcc.Thresholds.Validate(); err != nil {
-			return NewConfigError("health_check", "thresholds configuration invalid", err)
-		}
-	}
-
-	// Validate actions if present
-	if hcc.Actions != nil {
-		if err := hcc.Actions.Validate(); err != nil {
-			return NewConfigError("health_check", "actions configuration invalid", err)
-		}
-	}
 
 	return nil
 }
 
-// Validate validates health thresholds
-func (ht *HealthThresholds) Validate() error {
-	if ht.MaxLatency < 0 {
-		return NewConfigError("health_thresholds", "max_latency cannot be negative", nil)
-	}
-
-	if ht.MaxErrorRate < 0 || ht.MaxErrorRate > 1 {
-		return NewConfigError("health_thresholds", "max_error_rate must be between 0 and 1", nil)
-	}
-
-	if ht.MinSuccessRate < 0 || ht.MinSuccessRate > 1 {
-		return NewConfigError("health_thresholds", "min_success_rate must be between 0 and 1", nil)
-	}
-
-	if ht.ConsecutiveFailures < 0 {
-		return NewConfigError("health_thresholds", "consecutive_failures cannot be negative", nil)
-	}
-
-	return nil
-}
-
-// Validate validates health actions
-func (ha *HealthActions) Validate() error {
-	validUnhealthyActions := map[string]bool{
-		"disable": true, "deprioritize": true, "quarantine": true,
-	}
-	if ha.OnUnhealthy != "" && !validUnhealthyActions[ha.OnUnhealthy] {
-		return NewConfigError("health_actions", fmt.Sprintf("unsupported on_unhealthy action '%s'", ha.OnUnhealthy), nil)
-	}
-
-	validRecoveredActions := map[string]bool{
-		"enable": true, "restore_priority": true,
-	}
-	if ha.OnRecovered != "" && !validRecoveredActions[ha.OnRecovered] {
-		return NewConfigError("health_actions", fmt.Sprintf("unsupported on_recovered action '%s'", ha.OnRecovered), nil)
-	}
-
-	return nil
-}
 
 // Validate validates performance configuration
 func (pc *PerformanceConfig) Validate() error {

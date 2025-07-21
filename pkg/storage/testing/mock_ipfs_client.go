@@ -390,32 +390,12 @@ func (m *MockIPFSClient) HealthCheck(ctx context.Context) *storage.HealthStatus 
 	status := "healthy"
 	if !m.isConnected {
 		status = "offline"
-	} else if len(m.getConnectedPeersList()) < 2 {
-		status = "degraded"
-	}
-
-	var issues []storage.HealthIssue
-	if m.currentStorage > m.storageQuota*8/10 { // 80% threshold
-		issues = append(issues, storage.HealthIssue{
-			Severity:    "warning",
-			Code:        "HIGH_STORAGE_USAGE",
-			Description: "Storage usage exceeds 80% of quota",
-			Timestamp:   time.Now(),
-		})
 	}
 
 	return &storage.HealthStatus{
-		Healthy:          healthy,
-		Status:           status,
-		Latency:          m.latency,
-		Throughput:       float64(m.bandwidthLimit),
-		ErrorRate:        m.calculateErrorRate(),
-		UsedStorage:      m.currentStorage,
-		AvailableStorage: m.storageQuota - m.currentStorage,
-		ConnectedPeers:   len(m.getConnectedPeersList()),
-		NetworkHealth:    m.networkHealth,
-		LastCheck:        time.Now(),
-		Issues:           issues,
+		Healthy:   healthy,
+		Status:    status,
+		LastCheck: time.Now(),
 	}
 }
 

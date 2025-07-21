@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	
+
 	"github.com/TheEntropyCollective/noisefs/pkg/fuse"
 )
 
@@ -45,9 +45,9 @@ func TestParseMultiDirs(t *testing.T) {
 			shouldErr: true,
 		},
 		{
-			name:     "Empty input",
-			input:    "",
-			expected: []fuse.DirectoryMount{},
+			name:      "Empty input",
+			input:     "",
+			expected:  []fuse.DirectoryMount{},
 			shouldErr: false,
 		},
 	}
@@ -57,7 +57,7 @@ func TestParseMultiDirs(t *testing.T) {
 			// Parse multi-directory mounts
 			var multiDirMounts []fuse.DirectoryMount
 			var err error
-			
+
 			if tt.input != "" {
 				parts := strings.Split(tt.input, ",")
 				for _, part := range parts {
@@ -76,18 +76,18 @@ func TestParseMultiDirs(t *testing.T) {
 					})
 				}
 			}
-			
+
 			if tt.shouldErr && err == nil {
 				t.Errorf("Expected error but got none")
 			}
 			if !tt.shouldErr && err != nil {
 				t.Errorf("Expected no error but got: %v", err)
 			}
-			
+
 			if !tt.shouldErr && len(multiDirMounts) != len(tt.expected) {
 				t.Errorf("Expected %d mounts, got %d", len(tt.expected), len(multiDirMounts))
 			}
-			
+
 			for i, mount := range multiDirMounts {
 				if i >= len(tt.expected) {
 					break

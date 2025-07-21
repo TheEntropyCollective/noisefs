@@ -154,16 +154,9 @@ func (m *MockBackend) HealthCheck(ctx context.Context) *storage.HealthStatus {
 	}
 
 	return &storage.HealthStatus{
-		Healthy:          m.connected,
-		Status:           status,
-		Latency:          time.Millisecond,
-		Throughput:       1000000, // 1MB/s
-		ErrorRate:        0,
-		UsedStorage:      int64(len(m.data) * 1024),
-		AvailableStorage: 1024 * 1024 * 1024, // 1GB
-		ConnectedPeers:   1,
-		NetworkHealth:    "good",
-		LastCheck:        time.Now(),
+		Healthy:   m.connected,
+		Status:    status,
+		LastCheck: time.Now(),
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 // discoverCommand handles the discover subcommand
 func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 	flagSet := flag.NewFlagSet("discover", flag.ExitOnError)
-	
+
 	var (
 		tags     = flagSet.String("tags", "", "Filter by tags (comma-separated)")
 		since    = flagSet.Duration("since", 24*time.Hour, "Show announcements from this duration ago")
@@ -29,7 +29,7 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		ranked   = flagSet.Bool("ranked", false, "Rank results by tag match score")
 		help     = flagSet.Bool("help", false, "Show help for discover command")
 	)
-	
+
 	flagSet.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: noisefs discover [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Discover announcements from subscribed topics.\n\n")
@@ -42,16 +42,16 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		fmt.Fprintf(os.Stderr, "  noisefs discover --category video         # Show only videos\n")
 		fmt.Fprintf(os.Stderr, "  noisefs discover --since 1h               # Last hour only\n")
 	}
-	
+
 	if err := flagSet.Parse(args); err != nil {
 		return err
 	}
-	
+
 	if *help {
 		flagSet.Usage()
 		return nil
 	}
-	
+
 	// Load announcement store
 	storeConfig := store.DefaultStoreConfig(filepath.Join(config.GetConfigDir(), "announcements"))
 	annStore, err := store.NewStore(storeConfig)
@@ -59,24 +59,24 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		return fmt.Errorf("failed to open announcement store: %w", err)
 	}
 	defer annStore.Close()
-	
+
 	// Get announcements based on filters
 	var announcements []*store.StoredAnnouncement
-	
+
 	if *tags != "" {
 		// Search by tags
 		tagList := strings.Split(*tags, ",")
 		for i, tag := range tagList {
 			tagList[i] = strings.TrimSpace(tag)
 		}
-		
+
 		// Expand tags if requested
 		if *expand {
 			// Import the tags package for expansion
 			expandedTags := expandQueryTags(tagList)
 			tagList = expandedTags
 		}
-		
+
 		// Use ranked search if requested
 		if *ranked {
 			announcements, err = annStore.SearchWithScore(tagList, *limit)
@@ -92,11 +92,11 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		sinceTime := time.Now().Add(-*since)
 		announcements, err = annStore.GetRecent(sinceTime, *limit)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to retrieve announcements: %w", err)
 	}
-	
+
 	// Filter by category if specified
 	if *category != "" {
 		filtered := []*store.StoredAnnouncement{}
@@ -107,11 +107,11 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		}
 		announcements = filtered
 	}
-	
+
 	// Load subscriptions to show topic names
 	configPath := filepath.Join(config.GetConfigDir(), "subscriptions.json")
 	subConfig, _ := config.LoadSubscriptions(configPath)
-	
+
 	// Create topic map
 	topicMap := make(map[string]string)
 	if subConfig != nil {
@@ -119,19 +119,19 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 			topicMap[sub.TopicHash] = sub.Topic
 		}
 	}
-	
+
 	// Output results
 	if jsonOutput {
 		results := []map[string]interface{}{}
 		for _, ann := range announcements {
 			result := map[string]interface{}{
-				"descriptor":   ann.Descriptor,
-				"topic_hash":   ann.TopicHash,
-				"category":     ann.Category,
-				"size_class":   ann.SizeClass,
-				"timestamp":    ann.Timestamp,
-				"received_at":  ann.ReceivedAt,
-				"source":       ann.Source,
+				"descriptor":  ann.Descriptor,
+				"topic_hash":  ann.TopicHash,
+				"category":    ann.Category,
+				"size_class":  ann.SizeClass,
+				"timestamp":   ann.Timestamp,
+				"received_at": ann.ReceivedAt,
+				"source":      ann.Source,
 			}
 			if topic, ok := topicMap[ann.TopicHash]; ok {
 				result["topic"] = topic
@@ -144,37 +144,37 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 		})
 		return nil
 	}
-	
+
 	// Text output
 	if len(announcements) == 0 {
 		fmt.Println("No announcements found")
 		return nil
 	}
-	
+
 	fmt.Printf("Found %d announcements:\n\n", len(announcements))
-	
+
 	for i, ann := range announcements {
 		fmt.Printf("%d. Descriptor: %s\n", i+1, ann.Descriptor)
-		
+
 		// Show topic if known
 		if topic, ok := topicMap[ann.TopicHash]; ok {
 			fmt.Printf("   Topic: %s\n", topic)
 		} else {
 			fmt.Printf("   Topic hash: %s...\n", ann.TopicHash[:16])
 		}
-		
+
 		fmt.Printf("   Category: %s, Size: %s\n", ann.Category, ann.SizeClass)
-		
+
 		// Show age
 		age := time.Since(ann.ReceivedAt)
 		fmt.Printf("   Received: %s ago", formatDuration(age))
-		
+
 		// Show source
 		if ann.Source != "" {
 			fmt.Printf(" (via %s)", ann.Source)
 		}
 		fmt.Println()
-		
+
 		// Check if expired
 		if ann.IsExpired() {
 			fmt.Println("   Status: Expired")
@@ -184,16 +184,16 @@ func discoverCommand(args []string, quiet bool, jsonOutput bool) error {
 			remaining := time.Until(expiryTime)
 			fmt.Printf("   Expires in: %s\n", formatDuration(remaining))
 		}
-		
+
 		fmt.Println()
 	}
-	
+
 	// Show stats if not quiet
 	if !quiet {
 		total, byTopic, expired := annStore.GetStats()
 		fmt.Printf("Store stats: %d total, %d expired, %d topics\n", total, expired, len(byTopic))
 	}
-	
+
 	return nil
 }
 
@@ -202,7 +202,7 @@ func formatDuration(d time.Duration) string {
 	if d < 0 {
 		return "0s"
 	}
-	
+
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
 	} else if d < time.Hour {

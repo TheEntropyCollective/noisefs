@@ -102,36 +102,12 @@ type BackendInfo struct {
 type HealthStatus struct {
 	// Overall health
 	Healthy bool   `json:"healthy"`
-	Status  string `json:"status"` // "healthy", "degraded", "unhealthy", "offline"
-	
-	// Performance metrics
-	Latency    time.Duration `json:"latency"`
-	Throughput float64       `json:"throughput"` // bytes per second
-	ErrorRate  float64       `json:"error_rate"`  // percentage
-	
-	// Capacity information
-	UsedStorage      int64 `json:"used_storage"`
-	AvailableStorage int64 `json:"available_storage"`
-	
-	// Network status
-	ConnectedPeers int    `json:"connected_peers"`
-	NetworkHealth  string `json:"network_health"`
+	Status  string `json:"status"` // "healthy", "offline"
 	
 	// Last check
 	LastCheck time.Time `json:"last_check"`
-	
-	// Issues
-	Issues []HealthIssue `json:"issues,omitempty"`
 }
 
-// HealthIssue represents a specific health issue
-type HealthIssue struct {
-	Severity    string    `json:"severity"` // "warning", "error", "critical"
-	Code        string    `json:"code"`
-	Description string    `json:"description"`
-	Timestamp   time.Time `json:"timestamp"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-}
 
 // StorageError represents errors from storage operations
 type StorageError struct {
