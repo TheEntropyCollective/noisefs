@@ -1,7 +1,7 @@
 ---
 id: task-0004
 title: Simplify storage health monitoring
-status: In Progress
+status: Done
 assignee:
   - '@jconnuck'
 created_date: '2025-07-20'
