@@ -20,26 +20,26 @@ type ConflictStrategy interface {
 
 // ConflictResult represents the result of conflict resolution
 type ConflictResult struct {
-	Resolution      ConflictResolution `json:"resolution"`
-	Action          ConflictAction     `json:"action"`
-	LocalPath       string             `json:"local_path,omitempty"`
-	RemotePath      string             `json:"remote_path,omitempty"`
-	RenamedPath     string             `json:"renamed_path,omitempty"`
-	Message         string             `json:"message"`
-	RequiresInput   bool               `json:"requires_input"`
-	UserPrompt      string             `json:"user_prompt,omitempty"`
+	Resolution    ConflictResolution `json:"resolution"`
+	Action        ConflictAction     `json:"action"`
+	LocalPath     string             `json:"local_path,omitempty"`
+	RemotePath    string             `json:"remote_path,omitempty"`
+	RenamedPath   string             `json:"renamed_path,omitempty"`
+	Message       string             `json:"message"`
+	RequiresInput bool               `json:"requires_input"`
+	UserPrompt    string             `json:"user_prompt,omitempty"`
 }
 
 // ConflictAction represents the action to take for conflict resolution
 type ConflictAction string
 
 const (
-	ActionUseLocal     ConflictAction = "use_local"
-	ActionUseRemote    ConflictAction = "use_remote"
-	ActionMerge        ConflictAction = "merge"
-	ActionRename       ConflictAction = "rename"
-	ActionPromptUser   ConflictAction = "prompt_user"
-	ActionSkip         ConflictAction = "skip"
+	ActionUseLocal   ConflictAction = "use_local"
+	ActionUseRemote  ConflictAction = "use_remote"
+	ActionMerge      ConflictAction = "merge"
+	ActionRename     ConflictAction = "rename"
+	ActionPromptUser ConflictAction = "prompt_user"
+	ActionSkip       ConflictAction = "skip"
 )
 
 // NewConflictResolver creates a new conflict resolver with the specified default strategy
@@ -191,7 +191,7 @@ type PromptStrategy struct{}
 
 func (s *PromptStrategy) ResolveConflict(conflict *Conflict) (*ConflictResult, error) {
 	prompt := s.buildPrompt(conflict)
-	
+
 	return &ConflictResult{
 		Resolution:    ConflictResolvePrompt,
 		Action:        ActionPromptUser,
@@ -207,26 +207,26 @@ func (s *PromptStrategy) buildPrompt(conflict *Conflict) string {
 	prompt := fmt.Sprintf("Conflict detected for: %s\n", conflict.LocalPath)
 	prompt += fmt.Sprintf("Conflict type: %s\n", conflict.ConflictType)
 	prompt += fmt.Sprintf("Conflict ID: %s\n\n", conflict.ID)
-	
+
 	prompt += "Local version:\n"
 	prompt += fmt.Sprintf("  Size: %d bytes\n", conflict.LocalMetadata.Size)
 	prompt += fmt.Sprintf("  Modified: %v\n", conflict.LocalMetadata.ModTime)
 	if conflict.LocalMetadata.Checksum != "" {
 		prompt += fmt.Sprintf("  Checksum: %s\n", conflict.LocalMetadata.Checksum)
 	}
-	
+
 	prompt += "\nRemote version:\n"
 	prompt += fmt.Sprintf("  Size: %d bytes\n", conflict.RemoteMetadata.Size)
 	prompt += fmt.Sprintf("  Modified: %v\n", conflict.RemoteMetadata.ModTime)
 	prompt += fmt.Sprintf("  CID: %s\n", conflict.RemoteMetadata.DescriptorCID)
-	
+
 	prompt += "\nChoose resolution:\n"
 	prompt += "1. Use local version\n"
 	prompt += "2. Use remote version\n"
 	prompt += "3. Rename both (create copies)\n"
 	prompt += "4. Skip this conflict\n"
 	prompt += "\nEnter your choice (1-4): "
-	
+
 	return prompt
 }
 
@@ -239,11 +239,11 @@ type RenameStrategy struct{}
 
 func (s *RenameStrategy) ResolveConflict(conflict *Conflict) (*ConflictResult, error) {
 	timestamp := time.Now().Format("20060102_150405")
-	
+
 	// Generate unique names for both versions
 	localRename := fmt.Sprintf("%s.local.%s", conflict.LocalPath, timestamp)
 	remoteRename := fmt.Sprintf("%s.remote.%s", conflict.LocalPath, timestamp)
-	
+
 	return &ConflictResult{
 		Resolution:    ConflictResolveLocal, // Arbitrary choice
 		Action:        ActionRename,
@@ -267,7 +267,7 @@ func (cd *ConflictDetector) DetectConflict(localPath, remotePath string, localMe
 	// Check if both versions exist and are different
 	if cd.hasMetadataConflict(localMeta, remoteMeta) {
 		conflictType := cd.determineConflictType(localMeta, remoteMeta)
-		
+
 		return &Conflict{
 			ID:             fmt.Sprintf("conflict_%d", time.Now().UnixNano()),
 			LocalPath:      localPath,
@@ -278,16 +278,16 @@ func (cd *ConflictDetector) DetectConflict(localPath, remotePath string, localMe
 			Timestamp:      time.Now(),
 		}
 	}
-	
+
 	return nil
 }
 
 // hasMetadataConflict checks if metadata indicates a conflict
 func (cd *ConflictDetector) hasMetadataConflict(localMeta FileMetadata, remoteMeta RemoteMetadata) bool {
 	// Different sizes or modification times suggest conflict
-	return localMeta.Size != remoteMeta.Size || 
-		   !localMeta.ModTime.Equal(remoteMeta.ModTime) ||
-		   localMeta.IsDir != remoteMeta.IsDir
+	return localMeta.Size != remoteMeta.Size ||
+		!localMeta.ModTime.Equal(remoteMeta.ModTime) ||
+		localMeta.IsDir != remoteMeta.IsDir
 }
 
 // determineConflictType determines the type of conflict
@@ -296,7 +296,7 @@ func (cd *ConflictDetector) determineConflictType(localMeta FileMetadata, remote
 	if localMeta.IsDir != remoteMeta.IsDir {
 		return ConflictTypeTypeChanged
 	}
-	
+
 	// Check if one was deleted (size 0 could indicate deletion)
 	if localMeta.Size == 0 && remoteMeta.Size > 0 {
 		return ConflictTypeDeletedLocal
@@ -304,7 +304,7 @@ func (cd *ConflictDetector) determineConflictType(localMeta FileMetadata, remote
 	if remoteMeta.Size == 0 && localMeta.Size > 0 {
 		return ConflictTypeDeletedRemote
 	}
-	
+
 	// Default to both modified
 	return ConflictTypeBothModified
 }
@@ -317,10 +317,10 @@ type ConflictHistory struct {
 
 // ResolvedConflict represents a conflict that has been resolved
 type ResolvedConflict struct {
-	Conflict     *Conflict       `json:"conflict"`
-	Resolution   *ConflictResult `json:"resolution"`
-	ResolvedAt   time.Time       `json:"resolved_at"`
-	ResolvedBy   string          `json:"resolved_by"`
+	Conflict   *Conflict       `json:"conflict"`
+	Resolution *ConflictResult `json:"resolution"`
+	ResolvedAt time.Time       `json:"resolved_at"`
+	ResolvedBy string          `json:"resolved_by"`
 }
 
 // NewConflictHistory creates a new conflict history tracker
@@ -334,16 +334,16 @@ func NewConflictHistory() *ConflictHistory {
 func (ch *ConflictHistory) AddResolvedConflict(conflict *Conflict, result *ConflictResult, resolvedBy string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
-	
+
 	resolved := ResolvedConflict{
 		Conflict:   conflict,
 		Resolution: result,
 		ResolvedAt: time.Now(),
 		ResolvedBy: resolvedBy,
 	}
-	
+
 	ch.conflicts = append(ch.conflicts, resolved)
-	
+
 	// Keep only last 1000 conflicts
 	if len(ch.conflicts) > 1000 {
 		ch.conflicts = ch.conflicts[len(ch.conflicts)-1000:]
@@ -354,16 +354,16 @@ func (ch *ConflictHistory) AddResolvedConflict(conflict *Conflict, result *Confl
 func (ch *ConflictHistory) GetRecentConflicts(limit int) []ResolvedConflict {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()
-	
+
 	if limit <= 0 || limit > len(ch.conflicts) {
 		limit = len(ch.conflicts)
 	}
-	
+
 	// Return the last 'limit' conflicts
 	start := len(ch.conflicts) - limit
 	result := make([]ResolvedConflict, limit)
 	copy(result, ch.conflicts[start:])
-	
+
 	return result
 }
 
@@ -371,24 +371,24 @@ func (ch *ConflictHistory) GetRecentConflicts(limit int) []ResolvedConflict {
 func (ch *ConflictHistory) GetConflictStats() ConflictStats {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()
-	
+
 	stats := ConflictStats{
 		TotalConflicts: len(ch.conflicts),
 		ByType:         make(map[ConflictType]int),
 		ByResolution:   make(map[ConflictResolution]int),
 	}
-	
+
 	for _, resolved := range ch.conflicts {
 		stats.ByType[resolved.Conflict.ConflictType]++
 		stats.ByResolution[resolved.Resolution.Resolution]++
 	}
-	
+
 	return stats
 }
 
 // ConflictStats represents statistics about conflicts
 type ConflictStats struct {
-	TotalConflicts int                              `json:"total_conflicts"`
-	ByType         map[ConflictType]int             `json:"by_type"`
-	ByResolution   map[ConflictResolution]int       `json:"by_resolution"`
+	TotalConflicts int                        `json:"total_conflicts"`
+	ByType         map[ConflictType]int       `json:"by_type"`
+	ByResolution   map[ConflictResolution]int `json:"by_resolution"`
 }

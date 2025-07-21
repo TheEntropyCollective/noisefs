@@ -11,9 +11,10 @@ import (
 
 // SyncStateStore manages persistent storage of sync state
 type SyncStateStore struct {
-	stateDir string
-	mu       sync.RWMutex
-	cache    map[string]*SyncState
+	stateDir  string
+	mu        sync.RWMutex
+	cache     map[string]*SyncState
+	txManager *TransactionManager
 }
 
 // NewSyncStateStore creates a new SyncStateStore
@@ -22,10 +23,20 @@ func NewSyncStateStore(stateDir string) (*SyncStateStore, error) {
 		return nil, fmt.Errorf("failed to create state directory: %w", err)
 	}
 
-	return &SyncStateStore{
+	store := &SyncStateStore{
 		stateDir: stateDir,
 		cache:    make(map[string]*SyncState),
-	}, nil
+	}
+
+	// Initialize transaction manager
+	txDir := filepath.Join(stateDir, "transactions")
+	txManager, err := NewTransactionManager(store, txDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create transaction manager: %w", err)
+	}
+	store.txManager = txManager
+
+	return store, nil
 }
 
 // SaveState saves sync state to persistent storage
@@ -53,7 +64,7 @@ func (s *SyncStateStore) SaveState(syncID string, state *SyncState) error {
 // LoadState loads sync state from persistent storage
 func (s *SyncStateStore) LoadState(syncID string) (*SyncState, error) {
 	s.mu.RLock()
-	
+
 	// Check cache first
 	if state, exists := s.cache[syncID]; exists {
 		s.mu.RUnlock()
@@ -168,7 +179,7 @@ func (s *SyncStateStore) AddToHistory(syncID string, op SyncOperation) error {
 	}
 
 	state.SyncHistory = append(state.SyncHistory, op)
-	
+
 	// Keep only recent history (last 1000 operations)
 	if len(state.SyncHistory) > 1000 {
 		state.SyncHistory = state.SyncHistory[len(state.SyncHistory)-1000:]
@@ -230,4 +241,107 @@ func (s *SyncStateStore) CreateInitialState(syncID, localPath, remotePath string
 // getStateFile returns the file path for a sync state
 func (s *SyncStateStore) getStateFile(syncID string) string {
 	return filepath.Join(s.stateDir, syncID+".json")
+}
+
+// AtomicUpdateSnapshot atomically updates either local or remote snapshot
+func (s *SyncStateStore) AtomicUpdateSnapshot(syncID string, isLocal bool, updates map[string]interface{}) error {
+	tx, err := s.txManager.BeginTransaction(syncID)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	for path, metadata := range updates {
+		var opType TransactionOpType
+		if isLocal {
+			opType = TxOpUpdateLocalSnapshot
+		} else {
+			opType = TxOpUpdateRemoteSnapshot
+		}
+
+		if err := s.txManager.AddOperation(tx, opType, path, nil, metadata); err != nil {
+			s.txManager.RollbackTransaction(tx)
+			return fmt.Errorf("failed to add operation: %w", err)
+		}
+	}
+
+	if err := s.txManager.CommitTransaction(tx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// AtomicBatchUpdate performs multiple atomic updates in a single transaction
+func (s *SyncStateStore) AtomicBatchUpdate(syncID string, operations []BatchOperation) error {
+	tx, err := s.txManager.BeginTransaction(syncID)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	for _, op := range operations {
+		if err := s.txManager.AddOperation(tx, op.Type, op.Path, op.OldData, op.NewData); err != nil {
+			s.txManager.RollbackTransaction(tx)
+			return fmt.Errorf("failed to add operation: %w", err)
+		}
+	}
+
+	if err := s.txManager.CommitTransaction(tx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// BatchOperation represents a single operation in a batch update
+type BatchOperation struct {
+	Type    TransactionOpType
+	Path    string
+	OldData interface{}
+	NewData interface{}
+}
+
+// ValidateState validates the integrity of a sync state
+func (s *SyncStateStore) ValidateState(syncID string) error {
+	state, err := s.LoadState(syncID)
+	if err != nil {
+		return fmt.Errorf("failed to load state: %w", err)
+	}
+
+	// Validate local snapshots
+	for path, metadata := range state.LocalSnapshot {
+		if path == "" {
+			return fmt.Errorf("empty path in local snapshot")
+		}
+		if metadata.Size < 0 {
+			return fmt.Errorf("negative size for %s: %d", path, metadata.Size)
+		}
+		if !metadata.IsDir && metadata.Checksum == "" {
+			return fmt.Errorf("missing checksum for file %s", path)
+		}
+	}
+
+	// Validate remote snapshots
+	for path, metadata := range state.RemoteSnapshot {
+		if path == "" {
+			return fmt.Errorf("empty path in remote snapshot")
+		}
+		if metadata.DescriptorCID == "" {
+			return fmt.Errorf("missing descriptor CID for %s", path)
+		}
+		if metadata.Size < 0 {
+			return fmt.Errorf("negative size for %s: %d", path, metadata.Size)
+		}
+	}
+
+	// Validate pending operations
+	for _, op := range state.PendingOps {
+		if op.ID == "" {
+			return fmt.Errorf("pending operation missing ID")
+		}
+		if op.LocalPath == "" && op.RemotePath == "" {
+			return fmt.Errorf("pending operation missing paths")
+		}
+	}
+
+	return nil
 }

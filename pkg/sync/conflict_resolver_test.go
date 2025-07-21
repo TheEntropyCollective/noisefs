@@ -52,7 +52,7 @@ func TestConflictResolver_Creation(t *testing.T) {
 
 func TestLocalWinsStrategy(t *testing.T) {
 	strategy := &LocalWinsStrategy{}
-	
+
 	if strategy.GetStrategyName() != "local_wins" {
 		t.Errorf("Expected strategy name 'local_wins', got '%s'", strategy.GetStrategyName())
 	}
@@ -104,7 +104,7 @@ func TestLocalWinsStrategy(t *testing.T) {
 
 func TestRemoteWinsStrategy(t *testing.T) {
 	strategy := &RemoteWinsStrategy{}
-	
+
 	if strategy.GetStrategyName() != "remote_wins" {
 		t.Errorf("Expected strategy name 'remote_wins', got '%s'", strategy.GetStrategyName())
 	}
@@ -148,7 +148,7 @@ func TestRemoteWinsStrategy(t *testing.T) {
 
 func TestTimestampStrategy(t *testing.T) {
 	strategy := &TimestampStrategy{}
-	
+
 	if strategy.GetStrategyName() != "timestamp" {
 		t.Errorf("Expected strategy name 'timestamp', got '%s'", strategy.GetStrategyName())
 	}
@@ -270,7 +270,7 @@ func TestTimestampStrategy(t *testing.T) {
 
 func TestPromptStrategy(t *testing.T) {
 	strategy := &PromptStrategy{}
-	
+
 	if strategy.GetStrategyName() != "prompt" {
 		t.Errorf("Expected strategy name 'prompt', got '%s'", strategy.GetStrategyName())
 	}
@@ -355,7 +355,7 @@ func TestPromptStrategy(t *testing.T) {
 
 func TestRenameStrategy(t *testing.T) {
 	strategy := &RenameStrategy{}
-	
+
 	if strategy.GetStrategyName() != "rename" {
 		t.Errorf("Expected strategy name 'rename', got '%s'", strategy.GetStrategyName())
 	}
@@ -571,9 +571,9 @@ func TestConflictHistory(t *testing.T) {
 
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr || 
-		   len(s) > len(substr) && (s[:len(substr)] == substr || 
-		   findInString(s, substr))
+	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr ||
+		len(s) > len(substr) && (s[:len(substr)] == substr ||
+			findInString(s, substr))
 }
 
 func findInString(s, substr string) bool {
