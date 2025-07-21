@@ -4,8 +4,10 @@ title: Implement directory manifest updates after file changes
 status: To Do
 assignee: []
 created_date: '2025-07-20'
+updated_date: '2025-07-21'
 labels: []
-dependencies: []
+dependencies:
+  - task-0010
 ---
 
 ## Description
