@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -26,11 +25,8 @@ func NewRouter(manager *Manager, config *DistributionConfig) *Router {
 		strategies: make(map[string]DistributionStrategy),
 	}
 	
-	// Register built-in distribution strategies
+	// Register built-in distribution strategy
 	router.RegisterStrategy("single", &SingleBackendStrategy{})
-	router.RegisterStrategy("replicate", &ReplicationStrategy{})
-	router.RegisterStrategy("stripe", &StripingStrategy{})
-	router.RegisterStrategy("smart", &SmartDistributionStrategy{})
 	
 	// Initialize load balancer
 	router.loadBalancer = NewLoadBalancer(config.LoadBalancing)
@@ -387,106 +383,8 @@ func (s *SingleBackendStrategy) Put(ctx context.Context, router *Router, block *
 	return backend.Put(ctx, block)
 }
 
-// ReplicationStrategy replicates blocks across multiple backends
-type ReplicationStrategy struct{}
 
-func (s *ReplicationStrategy) Put(ctx context.Context, router *Router, block *blocks.Block) (*BlockAddress, error) {
-	config := router.config.Replication
-	if config == nil {
-		return nil, fmt.Errorf("replication configuration not found")
-	}
-	
-	backends := router.manager.GetHealthyBackends()
-	if len(backends) < config.MinReplicas {
-		return nil, fmt.Errorf("insufficient healthy backends for replication: need %d, have %d", 
-			config.MinReplicas, len(backends))
-	}
-	
-	// Select backends for replication
-	selectedBackends := s.selectBackendsForReplication(backends, config)
-	
-	var primaryAddress *BlockAddress
-	var errors ErrorAggregator
-	successCount := 0
-	
-	for _, backend := range selectedBackends {
-		address, err := backend.Put(ctx, block)
-		if err != nil {
-			errors.Add(err)
-			continue
-		}
-		
-		if primaryAddress == nil {
-			primaryAddress = address
-		}
-		successCount++
-		
-		if successCount >= config.MinReplicas {
-			break
-		}
-	}
-	
-	if successCount < config.MinReplicas {
-		return nil, fmt.Errorf("failed to achieve minimum replication: succeeded %d, required %d", 
-			successCount, config.MinReplicas)
-	}
-	
-	return primaryAddress, nil
-}
 
-func (s *ReplicationStrategy) selectBackendsForReplication(backends map[string]Backend, config *ReplicationConfig) []Backend {
-	var result []Backend
-	
-	// Convert map to slice
-	backendList := make([]Backend, 0, len(backends))
-	for _, backend := range backends {
-		backendList = append(backendList, backend)
-	}
-	
-	// Shuffle for random selection
-	rand.Shuffle(len(backendList), func(i, j int) {
-		backendList[i], backendList[j] = backendList[j], backendList[i]
-	})
-	
-	// Select up to MaxReplicas
-	maxSelect := config.MaxReplicas
-	if maxSelect > len(backendList) {
-		maxSelect = len(backendList)
-	}
-	
-	for i := 0; i < maxSelect; i++ {
-		result = append(result, backendList[i])
-	}
-	
-	return result
-}
-
-// StripingStrategy stripes blocks across backends (not implemented for security reasons)
-type StripingStrategy struct{}
-
-func (s *StripingStrategy) Put(ctx context.Context, router *Router, block *blocks.Block) (*BlockAddress, error) {
-	// Note: Striping is not recommended for NoiseFS as it reduces privacy
-	// This is a placeholder implementation that falls back to single backend
-	single := &SingleBackendStrategy{}
-	return single.Put(ctx, router, block)
-}
-
-// SmartDistributionStrategy uses intelligent backend selection
-type SmartDistributionStrategy struct{}
-
-func (s *SmartDistributionStrategy) Put(ctx context.Context, router *Router, block *blocks.Block) (*BlockAddress, error) {
-	// Use replication if multiple backends are available
-	backends := router.manager.GetHealthyBackends()
-	
-	if len(backends) >= 2 {
-		replication := &ReplicationStrategy{}
-		return replication.Put(ctx, router, block)
-	}
-	
-	// Fall back to single backend
-	single := &SingleBackendStrategy{}
-	return single.Put(ctx, router, block)
-}
 
 // LoadBalancer handles backend selection for optimal performance
 type LoadBalancer struct {
