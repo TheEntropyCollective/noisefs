@@ -1,10 +1,11 @@
 ---
 id: task-0007
 title: Remove unused distribution and replication strategies
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@jconnuck'
 created_date: '2025-07-20'
-updated_date: '2025-07-20'
+updated_date: '2025-07-21'
 labels:
   - ipfs pkg cleanup
 dependencies: []
