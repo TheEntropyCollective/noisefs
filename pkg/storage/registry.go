@@ -94,30 +94,3 @@ func (factory *BackendFactory) CreateAllBackends() (map[string]Backend, error) {
 	
 	return backends, nil
 }
-
-// SelectionCriteria defines criteria for backend selection
-type SelectionCriteria struct {
-	// Required capabilities
-	RequiredCapabilities []string
-	
-	// Preferred capabilities (nice to have)
-	PreferredCapabilities []string
-	
-	// Performance requirements
-	MaxLatency   float64 // milliseconds
-	MinThroughput float64 // bytes per second
-	MaxErrorRate  float64 // percentage (0.0-1.0)
-	
-	// Backend type restrictions
-	AllowedTypes    []string
-	DisallowedTypes []string
-	
-	// Health requirements
-	RequireHealthy bool
-	
-	// Priority weighting
-	PreferHighPriority bool
-	
-	// Load balancing
-	LoadBalance bool
-}

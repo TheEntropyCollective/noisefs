@@ -191,6 +191,8 @@ func (m *MockBackend) HealthCheck(ctx context.Context) *HealthStatus {
 	return &HealthStatus{
 		Healthy:   m.healthy,
 		Status:    status,
+		Latency:   m.latency,
+		ErrorRate: m.errorRate,
 		LastCheck: time.Now(),
 	}
 }
@@ -482,13 +484,17 @@ func TestHealthMonitoring(t *testing.T) {
 	backend2 := NewMockBackend("test2")
 	backend2.healthy = false // Make second backend unhealthy
 	
-	manager.backends = map[string]Backend{
-		"test1": backend1,
-		"test2": backend2,
-	}
+	// Connect the backends so they're available in the registry
+	ctx := context.Background()
+	backend1.Connect(ctx)
+	backend2.Connect(ctx)
+	
+	// Add backends to the manager's registry
+	registry := manager.GetRegistry()
+	registry.AddBackend("test1", backend1)
+	registry.AddBackend("test2", backend2)
 	
 	// Start health monitoring
-	ctx := context.Background()
 	monitor := manager.GetHealthMonitor()
 	err = monitor.Start(ctx)
 	if err != nil {
@@ -517,6 +523,11 @@ func TestHealthMonitoring(t *testing.T) {
 		t.Fatalf("Expected degraded health, got %s", summary.OverallHealth)
 	}
 	
+	// Check alerts
+	alerts := monitor.GetActiveAlerts()
+	if len(alerts) == 0 {
+		t.Fatal("Expected at least one alert for unhealthy backend")
+	}
 }
 
 // MockBackendFactory for testing - create a wrapper around the real factory

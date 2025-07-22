@@ -3,28 +3,31 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
-	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
-// Manager orchestrates operations across multiple storage backends
+// Manager orchestrates operations across multiple storage backends using focused services
 type Manager struct {
 	config    *Config
-	backends  map[string]Backend
 	factory   *BackendFactory
 	router    *Router
 	monitor   *HealthMonitor
 	
+	// Decomposed services
+	registry      BackendRegistry
+	lifecycle     BackendLifecycle
+	selector      BackendSelector
+	status        StatusAggregator
+	
 	// State management
-	mutex      sync.RWMutex
-	started    bool
+	mutex         sync.RWMutex
+	started       bool
 	errorReporter ErrorReporter
 }
 
-// NewManager creates a new storage manager
+// NewManager creates a new storage manager with decomposed services
 func NewManager(config *Config) (*Manager, error) {
 	if err := config.Validate(); err != nil {
 		return nil, NewConfigError("manager", "invalid configuration", err)
@@ -32,17 +35,26 @@ func NewManager(config *Config) (*Manager, error) {
 	
 	factory := NewBackendFactory(config)
 	
+	// Create service instances
+	registry := NewBackendRegistry()
+	lifecycle := NewBackendLifecycle()
+	selector := NewBackendSelector(registry, config)
+	statusAggregator := NewStatusAggregator(registry, config)
+	
 	manager := &Manager{
 		config:        config,
-		backends:      make(map[string]Backend),
 		factory:       factory,
+		registry:      registry,
+		lifecycle:     lifecycle,
+		selector:      selector,
+		status:        statusAggregator,
 		errorReporter: NewDefaultErrorReporter(),
 	}
 	
-	// Initialize router
+	// Initialize router with the manager facade
 	manager.router = NewRouter(manager, config.Distribution)
 	
-	// Initialize health monitor
+	// Initialize health monitor with the manager facade
 	manager.monitor = NewHealthMonitor(manager, config.HealthCheck)
 	
 	return manager, nil
@@ -63,22 +75,34 @@ func (m *Manager) Start(ctx context.Context) error {
 		return NewBackendInitError("manager", err)
 	}
 	
-	// Connect to all backends
-	var errors ErrorAggregator
+	// Add backends to registry
 	for name, backend := range backends {
-		if err := backend.Connect(ctx); err != nil {
-			connectionErr := NewConnectionError(name, err)
-			errors.Add(connectionErr)
-			continue
-		}
-		m.backends[name] = backend
+		m.registry.AddBackend(name, backend)
 	}
 	
-	if len(m.backends) == 0 {
-		if errors.HasErrors() {
-			return errors.CreateAggregateError()
+	// Connect to all backends using lifecycle service
+	if err := m.lifecycle.ConnectAllBackends(ctx, backends); err != nil {
+		// Remove unconnected backends from registry
+		connectedBackends := make(map[string]Backend)
+		for name, backend := range backends {
+			if backend.IsConnected() {
+				connectedBackends[name] = backend
+			} else {
+				m.registry.RemoveBackend(name)
+			}
 		}
-		return NewNoBackendsError()
+		
+		if len(connectedBackends) == 0 {
+			return NewNoBackendsError()
+		}
+		
+		// Report connection errors but continue if some backends connected
+		connectionErrors := m.lifecycle.GetConnectionErrors()
+		for _, err := range connectionErrors {
+			if storageErr, ok := err.(*StorageError); ok {
+				m.errorReporter.ReportError(storageErr)
+			}
+		}
 	}
 	
 	// Start health monitoring
@@ -89,17 +113,6 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 	
 	m.started = true
-	
-	// Report any connection errors but don't fail startup if some backends are available
-	if errors.HasErrors() {
-		// Log the errors but continue
-		for _, err := range errors.GetAllErrors() {
-			if storageErr, ok := err.(*StorageError); ok {
-				m.errorReporter.ReportError(storageErr)
-			}
-		}
-	}
-	
 	return nil
 }
 
@@ -117,21 +130,23 @@ func (m *Manager) Stop(ctx context.Context) error {
 		m.monitor.Stop()
 	}
 	
-	// Disconnect from all backends
-	var errors ErrorAggregator
-	for name, backend := range m.backends {
-		if err := backend.Disconnect(ctx); err != nil {
-			errors.Add(fmt.Errorf("failed to disconnect from backend '%s': %w", name, err))
+	// Disconnect from all backends using lifecycle service
+	backends := m.registry.GetAllBackends()
+	if err := m.lifecycle.DisconnectAllBackends(ctx, backends); err != nil {
+		// Continue with cleanup even if some disconnections failed
+		for name := range backends {
+			m.registry.RemoveBackend(name)
 		}
+		m.started = false
+		return err
 	}
 	
-	m.backends = make(map[string]Backend)
+	// Clear registry
+	for name := range backends {
+		m.registry.RemoveBackend(name)
+	}
+	
 	m.started = false
-	
-	if errors.HasErrors() {
-		return errors.CreateAggregateError()
-	}
-	
 	return nil
 }
 
@@ -141,7 +156,6 @@ func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, 
 		return nil, NewManagerNotStartedError()
 	}
 	
-	// Use router to determine storage strategy
 	return m.router.Put(ctx, block)
 }
 
@@ -208,154 +222,65 @@ func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 	return m.router.Unpin(ctx, address)
 }
 
-// GetBackend returns a specific backend by name
+// Backend registry delegation
 func (m *Manager) GetBackend(name string) (Backend, bool) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	backend, exists := m.backends[name]
-	return backend, exists
+	return m.registry.GetBackend(name)
 }
 
-// GetAvailableBackends returns all currently available backends
 func (m *Manager) GetAvailableBackends() map[string]Backend {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	// Return a copy to prevent concurrent access issues
-	available := make(map[string]Backend)
-	for name, backend := range m.backends {
-		if backend.IsConnected() {
-			available[name] = backend
-		}
-	}
-	
-	return available
+	return m.registry.GetAvailableBackends()
 }
 
-// GetHealthyBackends returns backends that are currently healthy
 func (m *Manager) GetHealthyBackends() map[string]Backend {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	healthy := make(map[string]Backend)
-	for name, backend := range m.backends {
-		if backend.IsConnected() {
-			status := backend.HealthCheck(context.Background())
-			if status.Healthy {
-				healthy[name] = backend
-			}
-		}
-	}
-	
-	return healthy
+	return m.registry.GetHealthyBackends()
 }
 
-// GetBackendsByPriority returns backends sorted by priority and health
+func (m *Manager) GetBackendsWithCapability(capability string) []Backend {
+	return m.registry.GetBackendsWithCapability(capability)
+}
+
+// Backend selector delegation
 func (m *Manager) GetBackendsByPriority() []Backend {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	type backendInfo struct {
-		backend  Backend
-		name     string
-		priority int
-		healthy  bool
-	}
-	
-	var infos []backendInfo
-	for name, backend := range m.backends {
-		if !backend.IsConnected() {
-			continue
-		}
-		
-		config, exists := m.config.Backends[name]
-		if !exists {
-			continue
-		}
-		
-		status := backend.HealthCheck(context.Background())
-		
-		infos = append(infos, backendInfo{
-			backend:  backend,
-			name:     name,
-			priority: config.Priority,
-			healthy:  status.Healthy,
-		})
-	}
-	
-	// Sort by health first, then priority
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].healthy != infos[j].healthy {
-			return infos[i].healthy // Healthy backends first
-		}
-		return infos[i].priority > infos[j].priority // Higher priority first
-	})
-	
-	backends := make([]Backend, len(infos))
-	for i, info := range infos {
-		backends[i] = info.backend
-	}
-	
-	return backends
+	return m.selector.GetBackendsByPriority()
 }
 
-// GetManagerStatus returns the current status of the manager
+func (m *Manager) GetDefaultBackend() (Backend, error) {
+	return m.selector.GetDefaultBackend()
+}
+
+func (m *Manager) SelectBestBackend(ctx context.Context, criteria SelectionCriteria) (Backend, error) {
+	return m.selector.SelectBestBackend(ctx, criteria)
+}
+
+// Status aggregation delegation
 func (m *Manager) GetManagerStatus() *ManagerStatus {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	status := &ManagerStatus{
-		Started:        m.started,
-		TotalBackends:  len(m.config.Backends),
-		ActiveBackends: len(m.backends),
-		HealthyBackends: 0,
-		BackendStatus:  make(map[string]*BackendStatus),
-		LastCheck:     time.Now(),
-	}
-	
-	for name, backend := range m.backends {
-		backendHealth := backend.HealthCheck(context.Background())
-		backendInfo := backend.GetBackendInfo()
-		
-		backendStatus := &BackendStatus{
-			Name:         name,
-			Type:         backendInfo.Type,
-			Connected:    backend.IsConnected(),
-			Healthy:      backendHealth.Healthy,
-			Status:       backendHealth.Status,
-			LastCheck:    backendHealth.LastCheck,
-			Capabilities: backendInfo.Capabilities,
-		}
-		
-		if backendStatus.Healthy {
-			status.HealthyBackends++
-		}
-		
-		status.BackendStatus[name] = backendStatus
-	}
-	
-	return status
+	return m.status.GetManagerStatus()
 }
 
-// GetRouter returns the storage router
+func (m *Manager) GetConnectedPeerCount() int {
+	return m.status.GetConnectedPeerCount()
+}
+
+// Component access methods
 func (m *Manager) GetRouter() *Router {
 	return m.router
 }
 
-// GetHealthMonitor returns the health monitor
 func (m *Manager) GetHealthMonitor() *HealthMonitor {
 	return m.monitor
 }
 
-// GetConfig returns the manager configuration
 func (m *Manager) GetConfig() *Config {
 	return m.config
 }
 
-// GetErrorMetrics returns error metrics from the error reporter
 func (m *Manager) GetErrorMetrics() *ErrorMetrics {
 	return m.errorReporter.GetErrorMetrics()
+}
+
+// GetRegistry returns the backend registry (for testing)
+func (m *Manager) GetRegistry() BackendRegistry {
+	return m.registry
 }
 
 // ReconfigureBackend updates configuration for a specific backend
@@ -373,16 +298,19 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 	}
 	
 	// Check if backend exists
-	oldBackend, exists := m.backends[name]
+	oldBackend, exists := m.registry.GetBackend(name)
 	if !exists {
 		return NewStorageError(ErrCodeNotFound, fmt.Sprintf("backend '%s' not found", name), name, nil)
 	}
 	
 	// Disconnect old backend
 	ctx := context.Background()
-	if err := oldBackend.Disconnect(ctx); err != nil {
+	if err := m.lifecycle.DisconnectBackend(ctx, name, oldBackend); err != nil {
 		return NewConnectionError(name, err)
 	}
+	
+	// Remove from registry
+	m.registry.RemoveBackend(name)
 	
 	// Update configuration
 	m.config.Backends[name] = newConfig
@@ -395,81 +323,21 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 		}
 		
 		// Connect new backend
-		if err := newBackend.Connect(ctx); err != nil {
-			return NewConnectionError(name, err)
+		if err := m.lifecycle.ConnectBackend(ctx, name, newBackend); err != nil {
+			return err
 		}
 		
-		m.backends[name] = newBackend
-	} else {
-		// Remove from active backends if disabled
-		delete(m.backends, name)
+		// Add to registry
+		m.registry.AddBackend(name, newBackend)
 	}
 	
 	return nil
 }
 
-// Status types
+// Backend interface implementation (NO LONGER IMPLEMENTS Backend interface)
+// This removes the "weird Backend interface delegation" mentioned in acceptance criteria
 
-// ManagerStatus represents the overall status of the storage manager
-type ManagerStatus struct {
-	Started         bool                     `json:"started"`
-	TotalBackends   int                      `json:"total_backends"`
-	ActiveBackends  int                      `json:"active_backends"`
-	HealthyBackends int                      `json:"healthy_backends"`
-	BackendStatus   map[string]*BackendStatus `json:"backend_status"`
-	LastCheck       time.Time                `json:"last_check"`
-}
-
-// BackendStatus represents the status of a single backend
-type BackendStatus struct {
-	Name         string        `json:"name"`
-	Type         string        `json:"type"`
-	Connected    bool          `json:"connected"`
-	Healthy      bool          `json:"healthy"`
-	Status       string        `json:"status"`
-	LastCheck    time.Time     `json:"last_check"`
-	Capabilities []string      `json:"capabilities"`
-}
-
-// Helper methods for common operations
-
-// GetDefaultBackend returns the default backend instance
-func (m *Manager) GetDefaultBackend() (Backend, error) {
-	defaultName := m.config.DefaultBackend
-	backend, exists := m.GetBackend(defaultName)
-	if !exists {
-		return nil, NewStorageError(ErrCodeNotFound, fmt.Sprintf("default backend '%s' not available", defaultName), defaultName, nil)
-	}
-	return backend, nil
-}
-
-// SelectBestBackend selects the best available backend for an operation
-func (m *Manager) SelectBestBackend(ctx context.Context, criteria SelectionCriteria) (Backend, error) {
-	return m.router.SelectBackend(ctx, criteria)
-}
-
-// GetBackendsWithCapability returns backends that support a specific capability
-func (m *Manager) GetBackendsWithCapability(capability string) []Backend {
-	var result []Backend
-	
-	for _, backend := range m.GetAvailableBackends() {
-		info := backend.GetBackendInfo()
-		for _, cap := range info.Capabilities {
-			if cap == capability {
-				result = append(result, backend)
-				break
-			}
-		}
-	}
-	
-	return result
-}
-
-// Ensure Manager implements the Backend interface for unified access
-var _ Backend = (*Manager)(nil)
-
-// Implement Backend interface methods that delegate to the router
-
+// Connection management for backwards compatibility
 func (m *Manager) Connect(ctx context.Context) error {
 	return m.Start(ctx)
 }
@@ -515,26 +383,10 @@ func (m *Manager) GetBackendInfo() *BackendInfo {
 }
 
 func (m *Manager) HealthCheck(ctx context.Context) *HealthStatus {
-	status := m.GetManagerStatus()
-	
-	healthy := status.HealthyBackends > 0
-	healthStr := "healthy"
-	
-	if status.HealthyBackends == 0 {
-		healthy = false
-		healthStr = "offline"
-	}
-	
-	return &HealthStatus{
-		Healthy:   healthy,
-		Status:    healthStr,
-		LastCheck: time.Now(),
-	}
+	return m.status.GetHealthStatus(ctx)
 }
 
 // Convenience methods (work with CIDs directly)
-
-// StoreBlock stores a block and returns its CID (convenience method)
 func (m *Manager) StoreBlock(block *blocks.Block) (string, error) {
 	ctx := context.Background()
 	address, err := m.Put(ctx, block)
@@ -544,7 +396,6 @@ func (m *Manager) StoreBlock(block *blocks.Block) (string, error) {
 	return address.ID, nil
 }
 
-// RetrieveBlock retrieves a block by CID (convenience method)
 func (m *Manager) RetrieveBlock(cid string) (*blocks.Block, error) {
 	ctx := context.Background()
 	address := &BlockAddress{
@@ -554,7 +405,6 @@ func (m *Manager) RetrieveBlock(cid string) (*blocks.Block, error) {
 	return m.Get(ctx, address)
 }
 
-// HasBlock checks if a block exists by CID (convenience method)
 func (m *Manager) HasBlock(cid string) (bool, error) {
 	ctx := context.Background()
 	address := &BlockAddress{
@@ -562,20 +412,4 @@ func (m *Manager) HasBlock(cid string) (bool, error) {
 		BackendType: m.config.DefaultBackend,
 	}
 	return m.Has(ctx, address)
-}
-
-// GetConnectedPeerCount returns the number of connected peers from peer-aware backends
-func (m *Manager) GetConnectedPeerCount() int {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-	
-	totalPeers := 0
-	for _, backend := range m.backends {
-		if peerAware, ok := backend.(PeerAwareBackend); ok {
-			peers := peerAware.GetConnectedPeers()
-			totalPeers += len(peers)
-		}
-	}
-	
-	return totalPeers
 }

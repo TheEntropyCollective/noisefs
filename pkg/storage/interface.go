@@ -102,12 +102,36 @@ type BackendInfo struct {
 type HealthStatus struct {
 	// Overall health
 	Healthy bool   `json:"healthy"`
-	Status  string `json:"status"` // "healthy", "offline"
+	Status  string `json:"status"` // "healthy", "degraded", "unhealthy", "offline"
+	
+	// Performance metrics
+	Latency    time.Duration `json:"latency"`
+	Throughput float64       `json:"throughput"` // bytes per second
+	ErrorRate  float64       `json:"error_rate"`  // percentage
+	
+	// Capacity information
+	UsedStorage      int64 `json:"used_storage"`
+	AvailableStorage int64 `json:"available_storage"`
+	
+	// Network status
+	ConnectedPeers int    `json:"connected_peers"`
+	NetworkHealth  string `json:"network_health"`
 	
 	// Last check
 	LastCheck time.Time `json:"last_check"`
+	
+	// Issues
+	Issues []HealthIssue `json:"issues,omitempty"`
 }
 
+// HealthIssue represents a specific health issue
+type HealthIssue struct {
+	Severity    string    `json:"severity"` // "warning", "error", "critical"
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	Timestamp   time.Time `json:"timestamp"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
 
 // StorageError represents errors from storage operations
 type StorageError struct {
@@ -230,3 +254,28 @@ const (
 	BackendTypeIPFS = "ipfs"
 	BackendTypeMock = "mock"
 )
+
+// Status types
+
+// ManagerStatus represents the overall status of the storage manager
+type ManagerStatus struct {
+	Started         bool                     `json:"started"`
+	TotalBackends   int                      `json:"total_backends"`
+	ActiveBackends  int                      `json:"active_backends"`
+	HealthyBackends int                      `json:"healthy_backends"`
+	BackendStatus   map[string]*BackendStatus `json:"backend_status"`
+	LastCheck       time.Time                `json:"last_check"`
+}
+
+// BackendStatus represents the status of a single backend
+type BackendStatus struct {
+	Name         string        `json:"name"`
+	Type         string        `json:"type"`
+	Connected    bool          `json:"connected"`
+	Healthy      bool          `json:"healthy"`
+	Status       string        `json:"status"`
+	Latency      time.Duration `json:"latency"`
+	ErrorRate    float64       `json:"error_rate"`
+	LastCheck    time.Time     `json:"last_check"`
+	Capabilities []string      `json:"capabilities"`
+}
