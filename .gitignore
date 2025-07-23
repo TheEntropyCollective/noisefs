@@ -57,4 +57,4 @@ docker-data/
 .local/
 
 # Go module cache
-go.sum.backup
+go.sum.backupbacklog

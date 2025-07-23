@@ -14,15 +14,15 @@ type ConditionSimulator struct {
 	// Active conditions
 	activeConditions map[string]*TestCondition
 	conditionQueue   []*QueuedCondition
-	
+
 	// Simulation state
-	isRunning        bool
-	stopChannel      chan bool
-	
+	isRunning   bool
+	stopChannel chan bool
+
 	// Integrations
-	mockClient       *MockIPFSClient
-	networkSim       *NetworkSimulator
-	
+	mockClient *MockIPFSClient
+	networkSim *NetworkSimulator
+
 	// Metrics
 	appliedConditions int64
 	failedConditions  int64
@@ -46,10 +46,10 @@ type TestCondition struct {
 
 // ConditionEffect represents the effect of a test condition
 type ConditionEffect struct {
-	Target     string      // "latency", "errors", "bandwidth", etc.
-	Action     string      // "increase", "decrease", "set", "multiply"
-	Value      interface{} // The value to apply
-	Probability float64    // Probability of effect occurring (0.0 to 1.0)
+	Target      string      // "latency", "errors", "bandwidth", etc.
+	Action      string      // "increase", "decrease", "set", "multiply"
+	Value       interface{} // The value to apply
+	Probability float64     // Probability of effect occurring (0.0 to 1.0)
 }
 
 // QueuedCondition represents a condition scheduled for future execution
@@ -93,7 +93,7 @@ func (c *ConditionSimulator) GetPredefinedConditions() map[string]*TestCondition
 			Description: "Simulates high network latency conditions",
 			Severity:    "medium",
 			Parameters: map[string]interface{}{
-				"base_latency":    time.Millisecond * 500,
+				"base_latency":     time.Millisecond * 500,
 				"latency_variance": time.Millisecond * 200,
 			},
 			Effects: []ConditionEffect{
@@ -263,7 +263,7 @@ func (c *ConditionSimulator) ApplyCondition(conditionID string) error {
 
 	c.activeConditions[conditionID] = activeCondition
 	c.appliedConditions++
-	
+
 	c.recordConditionEvent(conditionID, "applied", map[string]interface{}{
 		"duration": activeCondition.Duration,
 		"severity": activeCondition.Severity,
@@ -622,7 +622,7 @@ func (c *ConditionSimulator) applyConditionUnlocked(condition *TestCondition) er
 
 	c.activeConditions[activeCondition.ID] = activeCondition
 	c.appliedConditions++
-	
+
 	c.recordConditionEvent(activeCondition.ID, "applied", map[string]interface{}{
 		"duration": activeCondition.Duration,
 		"severity": activeCondition.Severity,
@@ -650,7 +650,7 @@ func (c *ConditionSimulator) removeConditionUnlocked(conditionID string) error {
 	}
 
 	delete(c.activeConditions, conditionID)
-	
+
 	c.recordConditionEvent(conditionID, "removed", map[string]interface{}{
 		"actual_duration": time.Since(condition.StartTime),
 	}, true, "")

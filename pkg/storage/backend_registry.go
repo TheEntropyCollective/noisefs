@@ -22,7 +22,7 @@ func NewBackendRegistry() BackendRegistry {
 func (r *defaultBackendRegistry) GetBackend(name string) (Backend, bool) {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	backend, exists := r.backends[name]
 	return backend, exists
 }
@@ -31,14 +31,14 @@ func (r *defaultBackendRegistry) GetBackend(name string) (Backend, bool) {
 func (r *defaultBackendRegistry) GetAvailableBackends() map[string]Backend {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	available := make(map[string]Backend)
 	for name, backend := range r.backends {
 		if backend.IsConnected() {
 			available[name] = backend
 		}
 	}
-	
+
 	return available
 }
 
@@ -46,7 +46,7 @@ func (r *defaultBackendRegistry) GetAvailableBackends() map[string]Backend {
 func (r *defaultBackendRegistry) GetHealthyBackends() map[string]Backend {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	healthy := make(map[string]Backend)
 	for name, backend := range r.backends {
 		if backend.IsConnected() {
@@ -56,7 +56,7 @@ func (r *defaultBackendRegistry) GetHealthyBackends() map[string]Backend {
 			}
 		}
 	}
-	
+
 	return healthy
 }
 
@@ -64,14 +64,14 @@ func (r *defaultBackendRegistry) GetHealthyBackends() map[string]Backend {
 func (r *defaultBackendRegistry) GetBackendsWithCapability(capability string) []Backend {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	var result []Backend
-	
+
 	for _, backend := range r.backends {
 		if !backend.IsConnected() {
 			continue
 		}
-		
+
 		info := backend.GetBackendInfo()
 		for _, cap := range info.Capabilities {
 			if cap == capability {
@@ -80,7 +80,7 @@ func (r *defaultBackendRegistry) GetBackendsWithCapability(capability string) []
 			}
 		}
 	}
-	
+
 	return result
 }
 
@@ -88,7 +88,7 @@ func (r *defaultBackendRegistry) GetBackendsWithCapability(capability string) []
 func (r *defaultBackendRegistry) AddBackend(name string, backend Backend) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	r.backends[name] = backend
 }
 
@@ -96,7 +96,7 @@ func (r *defaultBackendRegistry) AddBackend(name string, backend Backend) {
 func (r *defaultBackendRegistry) RemoveBackend(name string) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	
+
 	delete(r.backends, name)
 }
 
@@ -104,13 +104,13 @@ func (r *defaultBackendRegistry) RemoveBackend(name string) {
 func (r *defaultBackendRegistry) GetAllBackends() map[string]Backend {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	// Return a copy to prevent concurrent access issues
 	all := make(map[string]Backend)
 	for name, backend := range r.backends {
 		all[name] = backend
 	}
-	
+
 	return all
 }
 
@@ -118,11 +118,11 @@ func (r *defaultBackendRegistry) GetAllBackends() map[string]Backend {
 func (r *defaultBackendRegistry) GetBackendNames() []string {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	names := make([]string, 0, len(r.backends))
 	for name := range r.backends {
 		names = append(names, name)
 	}
-	
+
 	return names
 }

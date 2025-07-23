@@ -11,18 +11,18 @@ import (
 
 // ReadAheadCache implements a cache with read-ahead capabilities
 type ReadAheadCache struct {
-	underlying      Cache
-	readAheadSize   int
+	underlying       Cache
+	readAheadSize    int
 	readAheadWorkers int
-	logger          *logging.Logger
-	
+	logger           *logging.Logger
+
 	// Read-ahead state
-	mu              sync.RWMutex
-	readAheadQueue  chan readAheadRequest
-	stopChan        chan struct{}
-	wg              sync.WaitGroup
-	accessPattern   map[string]*ReadAheadPattern
-	
+	mu             sync.RWMutex
+	readAheadQueue chan readAheadRequest
+	stopChan       chan struct{}
+	wg             sync.WaitGroup
+	accessPattern  map[string]*ReadAheadPattern
+
 	// Statistics
 	stats ReadAheadStats
 }
@@ -54,27 +54,27 @@ type ReadAheadStatsSnapshot struct {
 
 // ReadAheadPattern tracks sequential access patterns for read-ahead
 type ReadAheadPattern struct {
-	LastAccess    time.Time
-	AccessCount   int
-	LastCID       string
-	IsSequential  bool
-	Direction     int // 1 for forward, -1 for backward
+	LastAccess   time.Time
+	AccessCount  int
+	LastCID      string
+	IsSequential bool
+	Direction    int // 1 for forward, -1 for backward
 }
 
 // readAheadRequest represents a request for read-ahead prefetching
 type readAheadRequest struct {
-	baseCID    string
-	count      int
-	direction  int
-	startTime  time.Time
+	baseCID   string
+	count     int
+	direction int
+	startTime time.Time
 }
 
 // ReadAheadConfig configures read-ahead behavior
 type ReadAheadConfig struct {
-	ReadAheadSize   int
-	WorkerCount     int
-	MaxPatterns     int
-	PatternTimeout  time.Duration
+	ReadAheadSize  int
+	WorkerCount    int
+	MaxPatterns    int
+	PatternTimeout time.Duration
 }
 
 // NewReadAheadCache creates a new read-ahead cache
@@ -93,13 +93,13 @@ func NewReadAheadCache(underlying Cache, config ReadAheadConfig, logger *logging
 	}
 
 	cache := &ReadAheadCache{
-		underlying:      underlying,
-		readAheadSize:   config.ReadAheadSize,
+		underlying:       underlying,
+		readAheadSize:    config.ReadAheadSize,
 		readAheadWorkers: config.WorkerCount,
-		logger:          logger,
-		readAheadQueue:  make(chan readAheadRequest, 100),
-		stopChan:        make(chan struct{}),
-		accessPattern:   make(map[string]*ReadAheadPattern),
+		logger:           logger,
+		readAheadQueue:   make(chan readAheadRequest, 100),
+		stopChan:         make(chan struct{}),
+		accessPattern:    make(map[string]*ReadAheadPattern),
 	}
 
 	// Start read-ahead workers
@@ -123,7 +123,7 @@ func (c *ReadAheadCache) Store(cid string, block *blocks.Block) error {
 // Get retrieves a block from the cache and triggers read-ahead if needed
 func (c *ReadAheadCache) Get(cid string) (*blocks.Block, error) {
 	start := time.Now()
-	
+
 	// Get the block from underlying cache
 	block, err := c.underlying.Get(cid)
 	if err != nil {
@@ -195,7 +195,7 @@ func (c *ReadAheadCache) Close() error {
 func (c *ReadAheadCache) GetStats() ReadAheadStatsSnapshot {
 	c.stats.mu.RLock()
 	defer c.stats.mu.RUnlock()
-	
+
 	return ReadAheadStatsSnapshot{
 		ReadAheadRequests:     c.stats.ReadAheadRequests,
 		ReadAheadHits:         c.stats.ReadAheadHits,
@@ -301,11 +301,11 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 	// Use the enhanced sequential tracker if available
 	// Using simple implementation
 	// Enhanced version available via EnhancedReadAheadWorker
-	
+
 	c.logger.Info("Using simplified read-ahead. Consider using EnhancedReadAheadWorker for better sequential detection", map[string]interface{}{
 		"base_cid": req.baseCID,
 	})
-	
+
 	// Simple implementation
 	prefetchedCount := 0
 	cacheHits := 0
@@ -321,7 +321,7 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 			// Backward sequential
 			nextCID = fmt.Sprintf("%s_seq_-%d", req.baseCID, i)
 		}
-		
+
 		// Check if already in cache
 		if c.underlying.Has(nextCID) {
 			cacheHits++
@@ -333,7 +333,7 @@ func (c *ReadAheadCache) processReadAheadRequest(req readAheadRequest) {
 		c.logger.Debug("Would prefetch block", map[string]interface{}{
 			"cid": nextCID,
 		})
-		
+
 		prefetchedCount++
 	}
 

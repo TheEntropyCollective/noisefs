@@ -16,54 +16,54 @@ type MockBackendAdapter struct {
 	mu sync.RWMutex
 
 	// Core components
-	mockClient    *MockIPFSClient
-	networkSim    *NetworkSimulator
-	conditionSim  *ConditionSimulator
-	
+	mockClient   *MockIPFSClient
+	networkSim   *NetworkSimulator
+	conditionSim *ConditionSimulator
+
 	// Compatibility state
-	backendType   string
-	
+	backendType string
+
 	// Environment configuration
-	testMode      string // "unit", "integration", "e2e"
+	testMode       string // "unit", "integration", "e2e"
 	isolationLevel string // "strict", "moderate", "loose"
-	
+
 	// Adapter metrics
-	adapterCalls  map[string]int64
-	errors        map[string]int64
-	
+	adapterCalls map[string]int64
+	errors       map[string]int64
+
 	// Event handling
 	eventHandlers map[string]func(AdapterEvent)
 }
 
 // AdapterEvent represents events from the adapter
 type AdapterEvent struct {
-	Timestamp   time.Time
-	Type        string
-	Method      string
-	Success     bool
-	Duration    time.Duration
-	Details     map[string]interface{}
-	Error       string
+	Timestamp time.Time
+	Type      string
+	Method    string
+	Success   bool
+	Duration  time.Duration
+	Details   map[string]interface{}
+	Error     string
 }
 
 // TestEnvironmentConfig configures the test environment
 type TestEnvironmentConfig struct {
-	TestMode          string
-	IsolationLevel    string
-	EnableNetworkSim  bool
+	TestMode           string
+	IsolationLevel     string
+	EnableNetworkSim   bool
 	EnableConditionSim bool
-	DefaultLatency    time.Duration
-	DefaultPeers      []string
-	StorageQuota      int64
-	BandwidthLimit    int64
-	
+	DefaultLatency     time.Duration
+	DefaultPeers       []string
+	StorageQuota       int64
+	BandwidthLimit     int64
+
 	// Compatibility settings
-	BackendType       string
-	
+	BackendType string
+
 	// Advanced options
-	EnableMetrics     bool
-	EnableEventLog    bool
-	MaxEventHistory   int
+	EnableMetrics   bool
+	EnableEventLog  bool
+	MaxEventHistory int
 }
 
 // NewMockBackendAdapter creates a new adapter
@@ -89,7 +89,7 @@ func NewMockBackendAdapter(config *TestEnvironmentConfig) *MockBackendAdapter {
 	mockClient := NewMockIPFSClient()
 	networkSim := NewNetworkSimulator()
 	conditionSim := NewConditionSimulator(mockClient, networkSim)
-	
+
 	// Link components for block synchronization
 	mockClient.SetNetworkSimulator(networkSim)
 
@@ -102,12 +102,12 @@ func NewMockBackendAdapter(config *TestEnvironmentConfig) *MockBackendAdapter {
 	if config.EnableNetworkSim {
 		networkSim.SetNetworkLatency(config.DefaultLatency, config.DefaultLatency/4)
 		networkSim.SetBandwidthLimit(config.BandwidthLimit)
-		
+
 		// Add default peers
 		for _, peerID := range config.DefaultPeers {
 			networkSim.AddPeer(peerID)
 		}
-		
+
 		// Add a default broadcaster peer
 		broadcaster := networkSim.AddPeer("broadcaster")
 		if broadcaster != nil {
@@ -273,12 +273,12 @@ func (a *MockBackendAdapter) GetConnectedPeers() []string {
 // GetBackendInfo returns backend information
 func (a *MockBackendAdapter) GetBackendInfo() *storage.BackendInfo {
 	info := a.mockClient.GetBackendInfo()
-	
+
 	// Add adapter-specific information
 	info.Config["adapter"] = true
 	info.Config["test_mode"] = true
 	info.Config["isolation_level"] = a.isolationLevel
-	
+
 	return info
 }
 
@@ -319,7 +319,6 @@ func (a *MockBackendAdapter) IsConnected() bool {
 	return a.mockClient.IsConnected()
 }
 
-
 // Test Environment Management
 
 // SetTestMode configures the test mode
@@ -335,7 +334,6 @@ func (a *MockBackendAdapter) SetIsolationLevel(level string) {
 	defer a.mu.Unlock()
 	a.isolationLevel = level
 }
-
 
 // GetMockClient returns the underlying mock client for direct access
 func (a *MockBackendAdapter) GetMockClient() *MockIPFSClient {
@@ -399,12 +397,12 @@ func (a *MockBackendAdapter) ApplyEnvironmentConfig() {
 	// This would typically read from environment variables like:
 	// NOISEFS_TEST_MODE, NOISEFS_MOCK_LATENCY, etc.
 	// For now, we'll use default configuration
-	
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	
+
 	// Example environment configuration
-	a.testMode = "unit" // Could be read from NOISEFS_TEST_MODE
+	a.testMode = "unit"         // Could be read from NOISEFS_TEST_MODE
 	a.isolationLevel = "strict" // Could be read from NOISEFS_ISOLATION_LEVEL
 }
 
@@ -430,7 +428,7 @@ func (a *MockBackendAdapter) Reset() {
 	if a.networkSim != nil {
 		a.networkSim.Reset()
 	}
-	
+
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.adapterCalls = make(map[string]int64)
@@ -480,7 +478,7 @@ func (a *MockBackendAdapter) recordAdapterEvent(method string, start time.Time, 
 	defer a.mu.Unlock()
 
 	a.adapterCalls[method]++
-	
+
 	event := AdapterEvent{
 		Timestamp: start,
 		Type:      "adapter_call",
@@ -514,8 +512,8 @@ func NewUnitTestAdapter() *MockBackendAdapter {
 		EnableNetworkSim:   false,
 		EnableConditionSim: false,
 		DefaultLatency:     time.Microsecond * 100, // Very fast for unit tests
-		StorageQuota:       100000000, // 100MB
-		BandwidthLimit:     10000000,  // 10MB/s
+		StorageQuota:       100000000,              // 100MB
+		BandwidthLimit:     10000000,               // 10MB/s
 		BackendType:        storage.BackendTypeIPFS,
 	}
 	return NewMockBackendAdapter(config)

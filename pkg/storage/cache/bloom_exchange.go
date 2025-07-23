@@ -15,26 +15,26 @@ import (
 type BloomExchangeConfig struct {
 	// Exchange interval
 	ExchangeInterval time.Duration `json:"exchange_interval"`
-	
+
 	// Bloom filter parameters per category
 	FilterCategories map[string]*BloomFilterParams `json:"filter_categories"`
-	
+
 	// Maximum filters to maintain
 	MaxPeerFilters int `json:"max_peer_filters"`
-	
+
 	// Filter expiry time
 	FilterExpiry time.Duration `json:"filter_expiry"`
-	
+
 	// Coordination parameters
-	MinPeersForCoordination int `json:"min_peers_for_coordination"`
+	MinPeersForCoordination int     `json:"min_peers_for_coordination"`
 	CoordinationThreshold   float64 `json:"coordination_threshold"`
 }
 
 // BloomFilterParams defines parameters for a Bloom filter category
 type BloomFilterParams struct {
-	Size            uint    `json:"size"`
-	HashFunctions   uint    `json:"hash_functions"`
-	FalsePositive   float64 `json:"false_positive"`
+	Size          uint    `json:"size"`
+	HashFunctions uint    `json:"hash_functions"`
+	FalsePositive float64 `json:"false_positive"`
 }
 
 // DefaultBloomExchangeConfig returns default configuration
@@ -68,13 +68,13 @@ func DefaultBloomExchangeConfig() *BloomExchangeConfig {
 // BloomExchangeMessage represents a Bloom filter exchange message
 type BloomExchangeMessage struct {
 	// Message metadata
-	Timestamp   time.Time `json:"timestamp"`
-	PeerID      string    `json:"peer_id"`
-	Version     int       `json:"version"`
-	
+	Timestamp time.Time `json:"timestamp"`
+	PeerID    string    `json:"peer_id"`
+	Version   int       `json:"version"`
+
 	// Bloom filters by category
 	Filters map[string]*SerializedBloomFilter `json:"filters"`
-	
+
 	// Coordination hints
 	CoordinationHints *CoordinationHints `json:"coordination_hints,omitempty"`
 }
@@ -91,33 +91,33 @@ type SerializedBloomFilter struct {
 type CoordinationHints struct {
 	// Blocks that multiple peers are interested in
 	HighDemandBlocks []string `json:"high_demand_blocks,omitempty"`
-	
+
 	// Suggested blocks for this peer to cache
 	SuggestedBlocks []string `json:"suggested_blocks,omitempty"`
-	
+
 	// Coordination score (0-1)
 	CoordinationScore float64 `json:"coordination_score"`
 }
 
 // BloomExchanger handles Bloom filter exchange between peers
 type BloomExchanger struct {
-	config        *BloomExchangeConfig
-	cache         *AltruisticCache
-	shell         *shell.Shell
-	
+	config *BloomExchangeConfig
+	cache  *AltruisticCache
+	shell  *shell.Shell
+
 	// Local filters
 	localFilters map[string]*bloom.BloomFilter
-	
+
 	// Peer filters
 	peerFilters map[string]*PeerFilterSet
-	
+
 	// Coordination state
 	coordinationEngine *CoordinationEngine
-	
+
 	// Metrics
 	exchangesSent     int64
 	exchangesReceived int64
-	
+
 	// Control
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -127,10 +127,10 @@ type BloomExchanger struct {
 
 // PeerFilterSet tracks filters from a peer
 type PeerFilterSet struct {
-	PeerID      string
-	LastUpdate  time.Time
-	Filters     map[string]*bloom.BloomFilter
-	Hints       *CoordinationHints
+	PeerID     string
+	LastUpdate time.Time
+	Filters    map[string]*bloom.BloomFilter
+	Hints      *CoordinationHints
 }
 
 // NewBloomExchanger creates a new Bloom filter exchanger
@@ -138,9 +138,9 @@ func NewBloomExchanger(config *BloomExchangeConfig, cache *AltruisticCache, shel
 	if config == nil {
 		config = DefaultBloomExchangeConfig()
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	be := &BloomExchanger{
 		config:       config,
 		cache:        cache,
@@ -150,7 +150,7 @@ func NewBloomExchanger(config *BloomExchangeConfig, cache *AltruisticCache, shel
 		ctx:          ctx,
 		cancel:       cancel,
 	}
-	
+
 	// Initialize local filters
 	for category, params := range config.FilterCategories {
 		be.localFilters[category] = bloom.NewWithEstimates(
@@ -158,10 +158,10 @@ func NewBloomExchanger(config *BloomExchangeConfig, cache *AltruisticCache, shel
 			params.FalsePositive,
 		)
 	}
-	
+
 	// Initialize coordination engine
 	be.coordinationEngine = NewCoordinationEngine(config)
-	
+
 	return be, nil
 }
 
@@ -169,13 +169,13 @@ func NewBloomExchanger(config *BloomExchangeConfig, cache *AltruisticCache, shel
 func (be *BloomExchanger) Start() error {
 	be.wg.Add(1)
 	go be.exchangeLoop()
-	
+
 	be.wg.Add(1)
 	go be.receiveLoop()
-	
+
 	be.wg.Add(1)
 	go be.cleanupLoop()
-	
+
 	return nil
 }
 
@@ -189,15 +189,15 @@ func (be *BloomExchanger) Stop() {
 func (be *BloomExchanger) UpdateLocalFilters() {
 	be.mu.Lock()
 	defer be.mu.Unlock()
-	
+
 	// Get cache statistics
 	_ = be.cache.GetAltruisticStats()
-	
+
 	// Clear and rebuild filters
 	for category := range be.localFilters {
 		be.localFilters[category].ClearAll()
 	}
-	
+
 	// Update valuable blocks filter
 	if filter, exists := be.localFilters["valuable_blocks"]; exists {
 		be.cache.mu.RLock()
@@ -210,7 +210,7 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 		}
 		be.cache.mu.RUnlock()
 	}
-	
+
 	// Update personal blocks filter (privacy-preserving)
 	if filter, exists := be.localFilters["personal_blocks"]; exists {
 		be.cache.mu.RLock()
@@ -229,7 +229,7 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 		}
 		be.cache.mu.RUnlock()
 	}
-	
+
 	// Update popular randomizers filter
 	if filter, exists := be.localFilters["popular_randomizers"]; exists {
 		randomizers, _ := be.cache.GetRandomizers(100)
@@ -242,19 +242,19 @@ func (be *BloomExchanger) UpdateLocalFilters() {
 // exchangeLoop periodically exchanges Bloom filters
 func (be *BloomExchanger) exchangeLoop() {
 	defer be.wg.Done()
-	
+
 	ticker := time.NewTicker(be.config.ExchangeInterval)
 	defer ticker.Stop()
-	
+
 	// Initial update
 	be.UpdateLocalFilters()
-	
+
 	for {
 		select {
 		case <-ticker.C:
 			// Update filters
 			be.UpdateLocalFilters()
-			
+
 			// Send exchange message
 			if err := be.sendExchange(); err != nil {
 				fmt.Printf("Exchange error: %v\n", err)
@@ -269,7 +269,7 @@ func (be *BloomExchanger) exchangeLoop() {
 func (be *BloomExchanger) sendExchange() error {
 	be.mu.RLock()
 	defer be.mu.RUnlock()
-	
+
 	// Create exchange message
 	msg := &BloomExchangeMessage{
 		Timestamp: time.Now(),
@@ -277,14 +277,14 @@ func (be *BloomExchanger) sendExchange() error {
 		Version:   1,
 		Filters:   make(map[string]*SerializedBloomFilter),
 	}
-	
+
 	// Serialize local filters
 	for category, filter := range be.localFilters {
 		data, err := filter.MarshalBinary()
 		if err != nil {
 			continue
 		}
-		
+
 		msg.Filters[category] = &SerializedBloomFilter{
 			Data:         data,
 			ElementCount: uint(filter.ApproximatedSize()),
@@ -292,7 +292,7 @@ func (be *BloomExchanger) sendExchange() error {
 			FillRatio:    float64(filter.ApproximatedSize()) / float64(filter.Cap()),
 		}
 	}
-	
+
 	// Add coordination hints if we have enough peers
 	if len(be.peerFilters) >= be.config.MinPeersForCoordination {
 		msg.CoordinationHints = be.coordinationEngine.GenerateHints(
@@ -300,18 +300,18 @@ func (be *BloomExchanger) sendExchange() error {
 			be.peerFilters,
 		)
 	}
-	
+
 	// Serialize and publish
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal exchange message: %w", err)
 	}
-	
+
 	topic := "noisefs-bloom-exchange"
 	if err := be.shell.PubSubPublish(topic, string(data)); err != nil {
 		return fmt.Errorf("failed to publish exchange: %w", err)
 	}
-	
+
 	be.exchangesSent++
 	return nil
 }
@@ -319,7 +319,7 @@ func (be *BloomExchanger) sendExchange() error {
 // receiveLoop handles incoming exchange messages
 func (be *BloomExchanger) receiveLoop() {
 	defer be.wg.Done()
-	
+
 	topic := "noisefs-bloom-exchange"
 	sub, err := be.shell.PubSubSubscribe(topic)
 	if err != nil {
@@ -327,7 +327,7 @@ func (be *BloomExchanger) receiveLoop() {
 		return
 	}
 	defer sub.Cancel()
-	
+
 	for {
 		select {
 		case <-be.ctx.Done():
@@ -340,7 +340,7 @@ func (be *BloomExchanger) receiveLoop() {
 				}
 				continue
 			}
-			
+
 			// Process exchange message
 			if err := be.processExchange(msg.Data); err != nil {
 				fmt.Printf("Failed to process exchange: %v\n", err)
@@ -355,19 +355,19 @@ func (be *BloomExchanger) processExchange(data []byte) error {
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return fmt.Errorf("failed to unmarshal exchange: %w", err)
 	}
-	
+
 	// Validate message
 	if msg.Version != 1 {
 		return fmt.Errorf("unsupported exchange version: %d", msg.Version)
 	}
-	
+
 	if time.Since(msg.Timestamp) > be.config.FilterExpiry {
 		return fmt.Errorf("exchange message too old")
 	}
-	
+
 	be.mu.Lock()
 	defer be.mu.Unlock()
-	
+
 	// Create peer filter set
 	peerSet := &PeerFilterSet{
 		PeerID:     msg.PeerID,
@@ -375,7 +375,7 @@ func (be *BloomExchanger) processExchange(data []byte) error {
 		Filters:    make(map[string]*bloom.BloomFilter),
 		Hints:      msg.CoordinationHints,
 	}
-	
+
 	// Unmarshal filters
 	for category, serialized := range msg.Filters {
 		filter := &bloom.BloomFilter{}
@@ -383,21 +383,21 @@ func (be *BloomExchanger) processExchange(data []byte) error {
 			peerSet.Filters[category] = filter
 		}
 	}
-	
+
 	// Store peer filters
 	be.peerFilters[msg.PeerID] = peerSet
 	be.exchangesReceived++
-	
+
 	// Process coordination hints
 	if msg.CoordinationHints != nil {
 		be.processCoordinationHints(msg.CoordinationHints)
 	}
-	
+
 	// Limit peer filters
 	if len(be.peerFilters) > be.config.MaxPeerFilters {
 		be.evictOldestPeerFilter()
 	}
-	
+
 	return nil
 }
 
@@ -406,7 +406,7 @@ func (be *BloomExchanger) processCoordinationHints(hints *CoordinationHints) {
 	if hints.CoordinationScore < be.config.CoordinationThreshold {
 		return
 	}
-	
+
 	// Queue suggested blocks for opportunistic fetching
 	if be.cache.config.EnableAltruistic {
 		fetcherInterface := be.cache.GetHealthTracker().GetOpportunisticFetcher()
@@ -433,10 +433,10 @@ func (be *BloomExchanger) processCoordinationHints(hints *CoordinationHints) {
 // cleanupLoop removes expired peer filters
 func (be *BloomExchanger) cleanupLoop() {
 	defer be.wg.Done()
-	
+
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -451,7 +451,7 @@ func (be *BloomExchanger) cleanupLoop() {
 func (be *BloomExchanger) cleanupExpiredFilters() {
 	be.mu.Lock()
 	defer be.mu.Unlock()
-	
+
 	now := time.Now()
 	for peerID, filterSet := range be.peerFilters {
 		if now.Sub(filterSet.LastUpdate) > be.config.FilterExpiry {
@@ -464,14 +464,14 @@ func (be *BloomExchanger) cleanupExpiredFilters() {
 func (be *BloomExchanger) evictOldestPeerFilter() {
 	var oldestPeer string
 	var oldestTime time.Time
-	
+
 	for peerID, filterSet := range be.peerFilters {
 		if oldestPeer == "" || filterSet.LastUpdate.Before(oldestTime) {
 			oldestPeer = peerID
 			oldestTime = filterSet.LastUpdate
 		}
 	}
-	
+
 	if oldestPeer != "" {
 		delete(be.peerFilters, oldestPeer)
 	}
@@ -481,24 +481,24 @@ func (be *BloomExchanger) evictOldestPeerFilter() {
 func (be *BloomExchanger) GetPeerCoordination() *PeerCoordinationStats {
 	be.mu.RLock()
 	defer be.mu.RUnlock()
-	
+
 	stats := &PeerCoordinationStats{
 		ActivePeers:       len(be.peerFilters),
 		ExchangesSent:     be.exchangesSent,
 		ExchangesReceived: be.exchangesReceived,
 		Categories:        make(map[string]*CategoryStats),
 	}
-	
+
 	// Calculate overlap statistics by category
 	for category, localFilter := range be.localFilters {
 		catStats := &CategoryStats{
 			LocalSize: uint(localFilter.ApproximatedSize()),
 		}
-		
+
 		// Calculate average overlap with peers
 		totalOverlap := uint(0)
 		peerCount := 0
-		
+
 		for _, peerSet := range be.peerFilters {
 			if peerFilter, exists := peerSet.Filters[category]; exists {
 				// Estimate overlap (this is approximate)
@@ -507,14 +507,14 @@ func (be *BloomExchanger) GetPeerCoordination() *PeerCoordinationStats {
 				peerCount++
 			}
 		}
-		
+
 		if peerCount > 0 {
 			catStats.AverageOverlap = float64(totalOverlap) / float64(peerCount)
 		}
-		
+
 		stats.Categories[category] = catStats
 	}
-	
+
 	return stats
 }
 
@@ -543,25 +543,25 @@ func estimateBloomOverlap(f1, f2 *bloom.BloomFilter) uint {
 	// Get the approximate sizes of both filters
 	size1 := f1.ApproximatedSize()
 	size2 := f2.ApproximatedSize()
-	
+
 	// If either filter is empty, no overlap
 	if size1 == 0 || size2 == 0 {
 		return 0
 	}
-	
+
 	// Simple heuristic: assume some overlap based on sizes
 	// For test purposes, estimate minimum overlap
 	minSize := size1
 	if size2 < minSize {
 		minSize = size2
 	}
-	
+
 	// Estimate overlap as a fraction of the smaller filter
 	// This is a simple approximation for testing
 	estimatedOverlap := minSize / 4 // Assume 25% overlap as baseline
 	if estimatedOverlap == 0 && minSize > 0 {
 		estimatedOverlap = 1 // Ensure at least 1 if both have elements
 	}
-	
+
 	return uint(estimatedOverlap)
 }

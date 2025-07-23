@@ -17,7 +17,7 @@ type DirectoryManager struct {
 	cache          *DirectoryCache
 	encryptionKey  *crypto.EncryptionKey
 	config         *DirectoryManagerConfig
-	
+
 	// Metrics
 	cacheHits   int64
 	cacheMisses int64
@@ -51,20 +51,20 @@ func NewDirectoryManager(storageManager *Manager, encryptionKey *crypto.Encrypti
 	if storageManager == nil {
 		return nil, fmt.Errorf("storage manager cannot be nil")
 	}
-	
+
 	if encryptionKey == nil {
 		return nil, fmt.Errorf("encryption key cannot be nil")
 	}
-	
+
 	if config == nil {
 		config = DefaultDirectoryManagerConfig()
 	}
-	
+
 	cache, err := NewDirectoryCache(config.CacheSize, config.CacheTTL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create directory cache: %w", err)
 	}
-	
+
 	return &DirectoryManager{
 		storageManager: storageManager,
 		cache:          cache,
@@ -80,27 +80,27 @@ func (dm *DirectoryManager) StoreDirectoryManifest(ctx context.Context, dirPath 
 	if err != nil {
 		return "", fmt.Errorf("failed to encrypt manifest: %w", err)
 	}
-	
+
 	// Check manifest size
 	if int64(len(encryptedManifest)) > dm.config.MaxManifestSize {
 		return "", fmt.Errorf("manifest too large: %d bytes (max: %d)", len(encryptedManifest), dm.config.MaxManifestSize)
 	}
-	
+
 	// Create block from encrypted manifest
 	manifestBlock, err := blocks.NewBlock(encryptedManifest)
 	if err != nil {
 		return "", fmt.Errorf("failed to create manifest block: %w", err)
 	}
-	
+
 	// Store the block using the storage manager
 	address, err := dm.storageManager.Put(ctx, manifestBlock)
 	if err != nil {
 		return "", fmt.Errorf("failed to store manifest block: %w", err)
 	}
-	
+
 	// Cache the manifest
 	dm.cache.Put(dirPath, manifest)
-	
+
 	return address.ID, nil
 }
 
@@ -111,29 +111,29 @@ func (dm *DirectoryManager) RetrieveDirectoryManifest(ctx context.Context, dirPa
 		dm.incrementCacheHits()
 		return cachedManifest, nil
 	}
-	
+
 	dm.incrementCacheMisses()
-	
+
 	// Retrieve from storage
 	address := &BlockAddress{
 		ID:          manifestCID,
 		BackendType: dm.storageManager.config.DefaultBackend,
 	}
-	
+
 	manifestBlock, err := dm.storageManager.Get(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve manifest block: %w", err)
 	}
-	
+
 	// Decrypt the manifest
 	manifest, err := dm.decryptManifest(manifestBlock.Data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt manifest: %w", err)
 	}
-	
+
 	// Cache the manifest
 	dm.cache.Put(dirPath, manifest)
-	
+
 	return manifest, nil
 }
 
@@ -144,7 +144,7 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve manifest: %w", err)
 	}
-	
+
 	// Start reconstruction
 	result := &DirectoryReconstructionResult{
 		TargetPath:       targetPath,
@@ -155,7 +155,7 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 		Status:           "in_progress",
 		Errors:           make([]ReconstructionError, 0),
 	}
-	
+
 	// Process each entry
 	for i, entry := range manifest.Entries {
 		// Check for cancellation
@@ -166,7 +166,7 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 			return result, ctx.Err()
 		default:
 		}
-		
+
 		// Decrypt filename
 		dirKey, err := crypto.DeriveDirectoryKey(dm.encryptionKey, targetPath)
 		if err != nil {
@@ -176,7 +176,7 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 			})
 			continue
 		}
-		
+
 		filename, err := crypto.DecryptFileName(entry.EncryptedName, dirKey)
 		if err != nil {
 			result.Errors = append(result.Errors, ReconstructionError{
@@ -185,7 +185,7 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 			})
 			continue
 		}
-		
+
 		// Create entry result
 		entryResult := ReconstructionEntryResult{
 			Index:         i,
@@ -195,14 +195,14 @@ func (dm *DirectoryManager) ReconstructDirectory(ctx context.Context, manifestCI
 			Size:          entry.Size,
 			ModifiedAt:    entry.ModifiedAt,
 		}
-		
+
 		result.Entries = append(result.Entries, entryResult)
 		result.ProcessedEntries++
 	}
-	
+
 	result.Status = "completed"
 	result.EndTime = time.Now()
-	
+
 	return result, nil
 }
 
@@ -213,13 +213,13 @@ func (dm *DirectoryManager) decryptManifest(encryptedData []byte) (*blocks.Direc
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt data: %w", err)
 	}
-	
+
 	// Unmarshal the manifest
 	var manifest blocks.DirectoryManifest
 	if err := json.Unmarshal(decryptedData, &manifest); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
-	
+
 	return &manifest, nil
 }
 
@@ -227,7 +227,7 @@ func (dm *DirectoryManager) decryptManifest(encryptedData []byte) (*blocks.Direc
 func (dm *DirectoryManager) GetCacheStats() *DirectoryCacheStats {
 	dm.statsMutex.RLock()
 	defer dm.statsMutex.RUnlock()
-	
+
 	return &DirectoryCacheStats{
 		CacheHits:   dm.cacheHits,
 		CacheMisses: dm.cacheMisses,
@@ -271,12 +271,12 @@ func (dm *DirectoryManager) ClearCache() {
 
 // DirectoryCache implements LRU cache for directory manifests
 type DirectoryCache struct {
-	cache    map[string]*DirectoryCacheEntry
-	head     *DirectoryCacheEntry
-	tail     *DirectoryCacheEntry
-	maxSize  int
-	ttl      time.Duration
-	mutex    sync.RWMutex
+	cache   map[string]*DirectoryCacheEntry
+	head    *DirectoryCacheEntry
+	tail    *DirectoryCacheEntry
+	maxSize int
+	ttl     time.Duration
+	mutex   sync.RWMutex
 }
 
 // DirectoryCacheEntry represents a cache entry
@@ -293,19 +293,19 @@ func NewDirectoryCache(maxSize int, ttl time.Duration) (*DirectoryCache, error) 
 	if maxSize <= 0 {
 		return nil, fmt.Errorf("cache size must be positive")
 	}
-	
+
 	cache := &DirectoryCache{
 		cache:   make(map[string]*DirectoryCacheEntry),
 		maxSize: maxSize,
 		ttl:     ttl,
 	}
-	
+
 	// Initialize doubly linked list
 	cache.head = &DirectoryCacheEntry{}
 	cache.tail = &DirectoryCacheEntry{}
 	cache.head.next = cache.tail
 	cache.tail.prev = cache.head
-	
+
 	return cache, nil
 }
 
@@ -313,21 +313,21 @@ func NewDirectoryCache(maxSize int, ttl time.Duration) (*DirectoryCache, error) 
 func (dc *DirectoryCache) Get(key string) *blocks.DirectoryManifest {
 	dc.mutex.Lock()
 	defer dc.mutex.Unlock()
-	
+
 	entry, exists := dc.cache[key]
 	if !exists {
 		return nil
 	}
-	
+
 	// Check TTL
 	if time.Since(entry.timestamp) > dc.ttl {
 		dc.removeEntry(entry)
 		return nil
 	}
-	
+
 	// Move to head (most recently used)
 	dc.moveToHead(entry)
-	
+
 	return entry.manifest
 }
 
@@ -335,7 +335,7 @@ func (dc *DirectoryCache) Get(key string) *blocks.DirectoryManifest {
 func (dc *DirectoryCache) Put(key string, manifest *blocks.DirectoryManifest) {
 	dc.mutex.Lock()
 	defer dc.mutex.Unlock()
-	
+
 	// Check if entry already exists
 	if entry, exists := dc.cache[key]; exists {
 		// Update existing entry
@@ -344,17 +344,17 @@ func (dc *DirectoryCache) Put(key string, manifest *blocks.DirectoryManifest) {
 		dc.moveToHead(entry)
 		return
 	}
-	
+
 	// Create new entry
 	entry := &DirectoryCacheEntry{
 		key:       key,
 		manifest:  manifest,
 		timestamp: time.Now(),
 	}
-	
+
 	dc.cache[key] = entry
 	dc.addToHead(entry)
-	
+
 	// Check if we need to evict
 	if len(dc.cache) > dc.maxSize {
 		dc.removeTail()
@@ -377,7 +377,7 @@ func (dc *DirectoryCache) MaxSize() int {
 func (dc *DirectoryCache) Clear() {
 	dc.mutex.Lock()
 	defer dc.mutex.Unlock()
-	
+
 	dc.cache = make(map[string]*DirectoryCacheEntry)
 	dc.head.next = dc.tail
 	dc.tail.prev = dc.head
@@ -387,7 +387,7 @@ func (dc *DirectoryCache) Clear() {
 func (dc *DirectoryCache) addToHead(entry *DirectoryCacheEntry) {
 	entry.prev = dc.head
 	entry.next = dc.head.next
-	
+
 	dc.head.next.prev = entry
 	dc.head.next = entry
 }
@@ -396,7 +396,7 @@ func (dc *DirectoryCache) addToHead(entry *DirectoryCacheEntry) {
 func (dc *DirectoryCache) removeEntry(entry *DirectoryCacheEntry) {
 	entry.prev.next = entry.next
 	entry.next.prev = entry.prev
-	
+
 	delete(dc.cache, entry.key)
 }
 
@@ -405,7 +405,7 @@ func (dc *DirectoryCache) moveToHead(entry *DirectoryCacheEntry) {
 	// Remove from current position in list
 	entry.prev.next = entry.next
 	entry.next.prev = entry.prev
-	
+
 	// Add to head
 	entry.prev = dc.head
 	entry.next = dc.head.next
@@ -418,31 +418,31 @@ func (dc *DirectoryCache) removeTail() {
 	if dc.tail.prev == dc.head {
 		return // Cache is empty
 	}
-	
+
 	dc.removeEntry(dc.tail.prev)
 }
 
 // DirectoryReconstructionResult represents the result of directory reconstruction
 type DirectoryReconstructionResult struct {
-	TargetPath       string                        `json:"target_path"`
-	ManifestCID      string                        `json:"manifest_cid"`
-	TotalEntries     int                           `json:"total_entries"`
-	ProcessedEntries int                           `json:"processed_entries"`
-	StartTime        time.Time                     `json:"start_time"`
-	EndTime          time.Time                     `json:"end_time"`
-	Status           string                        `json:"status"` // "in_progress", "completed", "cancelled", "failed"
-	Entries          []ReconstructionEntryResult   `json:"entries"`
-	Errors           []ReconstructionError         `json:"errors"`
+	TargetPath       string                      `json:"target_path"`
+	ManifestCID      string                      `json:"manifest_cid"`
+	TotalEntries     int                         `json:"total_entries"`
+	ProcessedEntries int                         `json:"processed_entries"`
+	StartTime        time.Time                   `json:"start_time"`
+	EndTime          time.Time                   `json:"end_time"`
+	Status           string                      `json:"status"` // "in_progress", "completed", "cancelled", "failed"
+	Entries          []ReconstructionEntryResult `json:"entries"`
+	Errors           []ReconstructionError       `json:"errors"`
 }
 
 // ReconstructionEntryResult represents a reconstructed directory entry
 type ReconstructionEntryResult struct {
-	Index         int                     `json:"index"`
-	DecryptedName string                  `json:"decrypted_name"`
-	CID           string                  `json:"cid"`
-	Type          blocks.DescriptorType   `json:"type"`
-	Size          int64                   `json:"size"`
-	ModifiedAt    time.Time               `json:"modified_at"`
+	Index         int                   `json:"index"`
+	DecryptedName string                `json:"decrypted_name"`
+	CID           string                `json:"cid"`
+	Type          blocks.DescriptorType `json:"type"`
+	Size          int64                 `json:"size"`
+	ModifiedAt    time.Time             `json:"modified_at"`
 }
 
 // ReconstructionError represents an error during reconstruction
@@ -486,22 +486,22 @@ func (dm *DirectoryManager) GetStats() *DirectoryManagerStats {
 // Health check for directory manager
 func (dm *DirectoryManager) HealthCheck() *DirectoryManagerHealth {
 	cacheStats := dm.GetCacheStats()
-	
+
 	healthy := true
 	var issues []string
-	
+
 	// Check cache health
 	if cacheStats.HitRate < 0.5 && cacheStats.CacheHits+cacheStats.CacheMisses > 100 {
 		healthy = false
 		issues = append(issues, "low cache hit rate")
 	}
-	
+
 	// Check storage manager health
 	if !dm.storageManager.IsConnected() {
 		healthy = false
 		issues = append(issues, "storage manager not connected")
 	}
-	
+
 	return &DirectoryManagerHealth{
 		Healthy:    healthy,
 		Issues:     issues,
@@ -525,39 +525,39 @@ func (dm *DirectoryManager) CreateDirectorySnapshot(ctx context.Context, origina
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to retrieve original directory manifest: %w", err)
 	}
-	
+
 	// Create snapshot manifest with same file CIDs
 	snapshotManifest := blocks.NewSnapshotManifest(originalManifest, originalCID, snapshotName, description)
-	
+
 	// Generate new encryption key for the snapshot
 	snapshotKey, err := crypto.GenerateKey("snapshot-" + snapshotName)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to generate snapshot encryption key: %w", err)
 	}
-	
+
 	// Encrypt the snapshot manifest
 	encryptedManifest, err := blocks.EncryptManifest(snapshotManifest, snapshotKey)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to encrypt snapshot manifest: %w", err)
 	}
-	
+
 	// Check manifest size
 	if int64(len(encryptedManifest)) > dm.config.MaxManifestSize {
 		return "", nil, fmt.Errorf("snapshot manifest too large: %d bytes (max: %d)", len(encryptedManifest), dm.config.MaxManifestSize)
 	}
-	
+
 	// Create block from encrypted manifest
 	manifestBlock, err := blocks.NewBlock(encryptedManifest)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create snapshot manifest block: %w", err)
 	}
-	
+
 	// Store the snapshot block using the storage manager
 	address, err := dm.storageManager.Put(ctx, manifestBlock)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to store snapshot manifest block: %w", err)
 	}
-	
+
 	return address.ID, snapshotKey, nil
 }
 
@@ -568,18 +568,18 @@ func (dm *DirectoryManager) RetrieveDirectoryManifestWithKey(ctx context.Context
 		ID:          manifestCID,
 		BackendType: dm.storageManager.config.DefaultBackend,
 	}
-	
+
 	manifestBlock, err := dm.storageManager.Get(ctx, address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve manifest block: %w", err)
 	}
-	
+
 	// Decrypt the manifest with the provided key
 	manifest, err := dm.decryptManifestWithKey(manifestBlock.Data, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt manifest: %w", err)
 	}
-	
+
 	return manifest, nil
 }
 
@@ -590,12 +590,12 @@ func (dm *DirectoryManager) decryptManifestWithKey(encryptedData []byte, key *cr
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt data: %w", err)
 	}
-	
+
 	// Unmarshal the manifest
 	var manifest blocks.DirectoryManifest
 	if err := json.Unmarshal(decryptedData, &manifest); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
-	
+
 	return &manifest, nil
 }

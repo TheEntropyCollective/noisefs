@@ -12,13 +12,13 @@ import (
 
 // MockStorageManager provides a mock implementation of storage.Manager for testing
 type MockStorageManager struct {
-	mu              sync.RWMutex
-	blocks          map[string]*blocks.Block
-	backends        map[string]*MockBackend
-	defaultBackend  string
-	isConnected     bool
-	isStarted       bool
-	
+	mu             sync.RWMutex
+	blocks         map[string]*blocks.Block
+	backends       map[string]*MockBackend
+	defaultBackend string
+	isConnected    bool
+	isStarted      bool
+
 	// Test control
 	storeError      error
 	retrieveError   error
@@ -63,11 +63,11 @@ func (m *MockStorageManager) IsConnected() bool {
 func (m *MockStorageManager) GetDefaultBackend() (storage.Backend, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	if backend, exists := m.backends[m.defaultBackend]; exists {
 		return backend, nil
 	}
-	
+
 	// Create a default mock backend
 	backend := NewMockBackend("mock")
 	m.backends[m.defaultBackend] = backend
@@ -78,11 +78,11 @@ func (m *MockStorageManager) GetDefaultBackend() (storage.Backend, error) {
 func (m *MockStorageManager) GetBackend(backendType string) (storage.Backend, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	if backend, exists := m.backends[backendType]; exists {
 		return backend, nil
 	}
-	
+
 	return nil, fmt.Errorf("backend %s not found", backendType)
 }
 
@@ -91,21 +91,21 @@ func (m *MockStorageManager) Store(ctx context.Context, block *blocks.Block) (st
 	if m.latencySimulate > 0 {
 		time.Sleep(m.latencySimulate)
 	}
-	
+
 	if m.storeError != nil {
 		return "", m.storeError
 	}
-	
+
 	backend, err := m.GetDefaultBackend()
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Use the Store method we added to MockBackend for compatibility
 	if mockBackend, ok := backend.(*MockBackend); ok {
 		return mockBackend.Store(ctx, block)
 	}
-	
+
 	// Fallback to Put and extract ID
 	address, err := backend.Put(ctx, block)
 	if err != nil {
@@ -119,21 +119,21 @@ func (m *MockStorageManager) Retrieve(ctx context.Context, cid string) (*blocks.
 	if m.latencySimulate > 0 {
 		time.Sleep(m.latencySimulate)
 	}
-	
+
 	if m.retrieveError != nil {
 		return nil, m.retrieveError
 	}
-	
+
 	backend, err := m.GetDefaultBackend()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	address := &storage.BlockAddress{
 		ID:          cid,
 		BackendType: storage.BackendTypeIPFS,
 	}
-	
+
 	return backend.Get(ctx, address)
 }
 
@@ -143,12 +143,12 @@ func (m *MockStorageManager) Has(ctx context.Context, cid string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	
+
 	address := &storage.BlockAddress{
 		ID:          cid,
 		BackendType: storage.BackendTypeIPFS,
 	}
-	
+
 	return backend.Has(ctx, address)
 }
 
@@ -156,7 +156,7 @@ func (m *MockStorageManager) Has(ctx context.Context, cid string) (bool, error) 
 func (m *MockStorageManager) GetStats() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"blocks_stored":   len(m.blocks),
 		"backends_active": len(m.backends),
@@ -200,7 +200,7 @@ func (m *MockStorageManager) AddBlock(cid string, block *blocks.Block) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.blocks[cid] = block
-	
+
 	// Also add to default backend
 	if backend, exists := m.backends[m.defaultBackend]; exists {
 		backend.AddBlock(cid, block)
