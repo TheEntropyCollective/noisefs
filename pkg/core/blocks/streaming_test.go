@@ -34,8 +34,10 @@ func TestStreamingSplitter(t *testing.T) {
 		result.Write(block.Data)
 	}
 	
-	if result.String() != testData {
-		t.Errorf("Reassembled data doesn't match original")
+	// Trim the reassembled data to original length (remove padding)
+	reassembled := result.Bytes()[:len(testData)]
+	if string(reassembled) != testData {
+		t.Errorf("Reassembled data doesn't match original. Expected: %q, Got: %q", testData, string(reassembled))
 	}
 }
 

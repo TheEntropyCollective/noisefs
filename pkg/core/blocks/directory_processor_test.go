@@ -200,7 +200,9 @@ func TestDirectoryProcessor_ProcessDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Explicitly ignore error in test cleanup
+	}()
 	
 	// Create test directory structure
 	testDir := createTestDirectoryHelper(t, tempDir)
@@ -278,7 +280,9 @@ func TestDirectoryProcessor_ProgressCallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Explicitly ignore error in test cleanup
+	}()
 	
 	// Create test directory structure
 	testDir := createTestDirectoryHelper(t, tempDir)
@@ -333,7 +337,9 @@ func TestDirectoryProcessor_ErrorHandling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Explicitly ignore error in test cleanup
+	}()
 	
 	// Create test directory structure
 	testDir := createTestDirectoryHelper(t, tempDir)
@@ -375,7 +381,9 @@ func TestDirectoryProcessor_Cancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Explicitly ignore error in test cleanup
+	}()
 	
 	// Create test directory structure
 	testDir := createTestDirectoryHelper(t, tempDir)
@@ -435,7 +443,7 @@ func TestStreamingDirectoryProcessor(t *testing.T) {
 	}
 	
 	if processor == nil {
-		t.Error("Expected non-nil streaming processor")
+		t.Fatal("Expected non-nil streaming processor")
 	}
 	
 	if processor.maxMemoryUsage != 100*1024*1024 {
@@ -449,13 +457,17 @@ func TestFileBlockProcessor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		_ = os.Remove(tempFile.Name()) // Explicitly ignore error in test cleanup
+	}()
 	
 	content := "This is test content for the file processor"
 	if _, err := tempFile.Write([]byte(content)); err != nil {
 		t.Fatalf("Failed to write to temp file: %v", err)
 	}
-	tempFile.Close()
+	if err := tempFile.Close(); err != nil {
+		t.Fatalf("Failed to close temp file: %v", err)
+	}
 	
 	// Create file block processor
 	mockProcessor := NewMockDirectoryBlockProcessor()
@@ -495,7 +507,9 @@ func BenchmarkDirectoryProcessor(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create temp directory: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		_ = os.RemoveAll(tempDir) // Explicitly ignore error in test cleanup
+	}()
 	
 	// Create test directory structure
 	testDir := createTestDirectoryBench(b, tempDir)

@@ -25,12 +25,11 @@ type DirectoryProcessor struct {
 	cancelFunc     context.CancelFunc
 	ctx            context.Context
 	
-	// Internal state (protected by stateMux)
+	// Internal state
 	processedFiles int64
 	processedBytes int64
 	totalFiles     int64
 	totalBytes     int64
-	stateMux       sync.RWMutex // Protects progress state fields
 	
 	// Worker pool management
 	workerPool chan struct{}
@@ -216,8 +215,23 @@ func EncryptManifest(manifest *DirectoryManifest, key *crypto.EncryptionKey) ([]
 	// Get a thread-safe snapshot
 	snapshot := manifest.GetSnapshot()
 	
+	// Create a marshaling-safe version without the mutex
+	marshalManifest := struct {
+		Version      string           `json:"version"`
+		Entries      []DirectoryEntry `json:"entries"`
+		CreatedAt    time.Time        `json:"created"`
+		ModifiedAt   time.Time        `json:"modified"`
+		SnapshotInfo *SnapshotInfo    `json:"snapshot_info,omitempty"`
+	}{
+		Version:      snapshot.Version,
+		Entries:      snapshot.Entries,
+		CreatedAt:    snapshot.CreatedAt,
+		ModifiedAt:   snapshot.ModifiedAt,
+		SnapshotInfo: snapshot.SnapshotInfo,
+	}
+	
 	// Serialize manifest as JSON
-	data, err := json.Marshal(snapshot)
+	data, err := json.Marshal(marshalManifest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
@@ -459,7 +473,9 @@ func (dp *DirectoryProcessor) processFileEntry(filePath string, entry os.DirEntr
 			dp.recordError(fmt.Errorf("failed to open file %s: %w", filePath, err))
 			return
 		}
-		defer file.Close()
+		defer func() {
+			_ = file.Close() // Explicitly ignore error in cleanup
+		}()
 		
 		// Create file processor
 		fileProcessor := &FileBlockProcessor{
@@ -653,7 +669,6 @@ type StreamingDirectoryProcessor struct {
 	*DirectoryProcessor
 	maxMemoryUsage int64
 	currentMemory  int64
-	memoryMux      sync.RWMutex
 }
 
 // NewStreamingDirectoryProcessor creates a processor optimized for large directories

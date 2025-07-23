@@ -111,7 +111,7 @@ func BenchmarkRandomizerSelection(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, _, _, _, _, err := client.SelectRandomizers(blockSize)
+			_, _, _, _, _, err := client.SelectRandomizers(context.Background(), blockSize)
 			if err != nil {
 				b.Errorf("Randomizer selection failed: %v", err)
 			}
@@ -164,7 +164,7 @@ func BenchmarkCachePerformance(b *testing.B) {
 		}
 		testBlocks[i] = block
 		
-		cid, err := client.StoreBlockWithCache(block)
+		cid, err := client.StoreBlockWithCache(context.Background(), block)
 		if err != nil {
 			b.Fatalf("Failed to store block: %v", err)
 		}
@@ -178,13 +178,13 @@ func BenchmarkCachePerformance(b *testing.B) {
 			if rand.Float32() < 0.8 {
 				// Cache hit
 				idx := rand.Intn(len(cids))
-				_, err := client.RetrieveBlockWithCache(cids[idx])
+				_, err := client.RetrieveBlockWithCache(context.Background(), cids[idx])
 				if err != nil {
 					b.Errorf("Cache retrieval failed: %v", err)
 				}
 			} else {
 				// Cache miss
-				_, err := client.RetrieveBlockWithCache(fmt.Sprintf("missing-block-%d", rand.Int()))
+				_, err := client.RetrieveBlockWithCache(context.Background(), fmt.Sprintf("missing-block-%d", rand.Int()))
 				if err == nil {
 					b.Error("Expected cache miss but got hit")
 				}
@@ -219,14 +219,14 @@ func BenchmarkThroughput(b *testing.B) {
 				continue
 			}
 			
-			cid, err := client.StoreBlockWithCache(block)
+			cid, err := client.StoreBlockWithCache(context.Background(), block)
 			if err != nil {
 				b.Errorf("Failed to store block: %v", err)
 				continue
 			}
 			
 			// Retrieve the block
-			_, err = client.RetrieveBlockWithCache(cid)
+			_, err = client.RetrieveBlockWithCache(context.Background(), cid)
 			if err != nil {
 				b.Errorf("Failed to retrieve block: %v", err)
 				continue
@@ -262,7 +262,7 @@ func BenchmarkMLPrediction(b *testing.B) {
 			b.Fatalf("Failed to create block: %v", err)
 		}
 		
-		cid, err := client.StoreBlockWithCache(block)
+		cid, err := client.StoreBlockWithCache(context.Background(), block)
 		if err != nil {
 			b.Fatalf("Failed to store block: %v", err)
 		}
@@ -272,12 +272,12 @@ func BenchmarkMLPrediction(b *testing.B) {
 	// Create predictable access pattern for training
 	for round := 0; round < 100; round++ {
 		for i := 0; i < 10; i++ { // Access first 10 blocks frequently
-			client.RetrieveBlockWithCache(blockCIDs[i])
+			client.RetrieveBlockWithCache(context.Background(), blockCIDs[i])
 		}
 		
 		if round%5 == 0 { // Access next 10 blocks occasionally
 			for i := 10; i < 20; i++ {
-				client.RetrieveBlockWithCache(blockCIDs[i])
+				client.RetrieveBlockWithCache(context.Background(), blockCIDs[i])
 			}
 		}
 	}
@@ -298,7 +298,7 @@ func BenchmarkMLPrediction(b *testing.B) {
 		// Actually access blocks
 		accessed := make([]bool, len(blockCIDs))
 		for j := 0; j < 10; j++ { // Actually access first 10
-			client.RetrieveBlockWithCache(blockCIDs[j])
+			client.RetrieveBlockWithCache(context.Background(), blockCIDs[j])
 			accessed[j] = true
 		}
 		
@@ -335,7 +335,7 @@ func BenchmarkStorageOverhead(b *testing.B) {
 		originalSize += int64(len(sourceData))
 		
 		// Get two randomizers for 3-tuple XOR
-		randomizer1, _, randomizer2, _, _, err := client.SelectRandomizers(len(sourceData))
+		randomizer1, _, randomizer2, _, _, err := client.SelectRandomizers(context.Background(), len(sourceData))
 		if err != nil {
 			b.Errorf("Failed to get randomizers: %v", err)
 			continue
@@ -356,7 +356,7 @@ func BenchmarkStorageOverhead(b *testing.B) {
 		}
 		
 		// Store anonymized block
-		_, err = client.StoreBlockWithCache(anonBlock)
+		_, err = client.StoreBlockWithCache(context.Background(), anonBlock)
 		if err != nil {
 			b.Errorf("Failed to store anonymized block: %v", err)
 			continue
