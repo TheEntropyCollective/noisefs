@@ -2,13 +2,14 @@ package storage
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
-// Backend defines the interface that all storage backends must implement
+// Backend defines the interface that all storage backends must implement.
+// This interface provides a unified abstraction for block storage operations
+// across different storage systems (IPFS, local, cloud, etc.) used by NoiseFS.
 type Backend interface {
 	// Core operations
 	Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error)
@@ -34,16 +35,12 @@ type Backend interface {
 	IsConnected() bool
 }
 
-// StreamingBackend extends Backend with streaming capabilities
-type StreamingBackend interface {
-	Backend
-	
-	// Stream operations for large data
-	PutStream(ctx context.Context, reader io.Reader, size int64) (*BlockAddress, error)
-	GetStream(ctx context.Context, address *BlockAddress) (io.ReadCloser, error)
-}
 
-// PeerAwareBackend extends Backend with peer-aware operations
+// PeerAwareBackend extends Backend with peer-aware operations.
+// This interface is essential for NoiseFS's 3-tuple XOR anonymization system,
+// enabling efficient distribution of randomizer blocks across the peer network.
+// The peer-aware operations ensure that data blocks and their associated
+// randomizer blocks can be retrieved from optimal peers for performance.
 type PeerAwareBackend interface {
 	Backend
 	
@@ -56,28 +53,21 @@ type PeerAwareBackend interface {
 	SetPeerManager(manager interface{}) error
 }
 
-// BlockAddress represents a provider-agnostic block address
+// BlockAddress represents a provider-agnostic block address.
+// This simplified structure contains only the essential fields needed
+// for block identification, routing, and validation across storage backends.
 type BlockAddress struct {
 	// Unique identifier for the block (CID, hash, etc.)
 	ID string `json:"id"`
 	
 	// Backend-specific addressing information
-	BackendType string                 `json:"backend_type"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	BackendType string `json:"backend_type"`
 	
-	// Size and verification info
-	Size     int64  `json:"size,omitempty"`
-	Checksum string `json:"checksum,omitempty"`
+	// Size for validation
+	Size int64 `json:"size,omitempty"`
 	
-	// Storage location hints
-	Providers []string `json:"providers,omitempty"`
-	
-	// Storage tracking for metrics
-	WasNewlyStored bool `json:"was_newly_stored,omitempty"` // true if this was a new storage operation, false if block already existed
-	
-	// Timestamps
+	// Timestamp for tracking
 	CreatedAt time.Time `json:"created_at"`
-	AccessedAt time.Time `json:"accessed_at,omitempty"`
 }
 
 // BackendInfo provides information about a storage backend
@@ -156,20 +146,13 @@ func (e *StorageError) Unwrap() error {
 
 // Common error codes
 const (
-	ErrCodeNotFound        = "NOT_FOUND"
-	ErrCodeAlreadyExists   = "ALREADY_EXISTS"
-	ErrCodeInvalidAddress  = "INVALID_ADDRESS"
-	ErrCodeConnectionFailed = "CONNECTION_FAILED"
-	ErrCodeTimeout         = "TIMEOUT"
-	ErrCodeQuotaExceeded   = "QUOTA_EXCEEDED"
-	ErrCodeIntegrityFailure = "INTEGRITY_FAILURE"
-	ErrCodeUnauthorized    = "UNAUTHORIZED"
-	ErrCodeBackendOffline  = "BACKEND_OFFLINE"
-	ErrCodeInvalidConfig   = "INVALID_CONFIG"
-	ErrCodeBackendInit     = "BACKEND_INIT_FAILED"
-	ErrCodeManagerNotStarted = "MANAGER_NOT_STARTED"
-	ErrCodeNoBackends      = "NO_BACKENDS_AVAILABLE"
-	ErrCodeValidationFailed = "VALIDATION_FAILED"
+	ErrCodeNotFound         = "NOT_FOUND"         // Resource not found
+	ErrCodeConnectionFailed = "CONNECTION_FAILED" // Network/connection issues
+	ErrCodeTimeout          = "TIMEOUT"           // Operation timed out
+	ErrCodeIntegrityFailure = "INTEGRITY_FAILURE" // Data integrity check failed
+	ErrCodeBackendOffline   = "BACKEND_OFFLINE"   // Backend is not available
+	ErrCodeNoBackends       = "NO_BACKENDS"       // No backends available
+	ErrCodeInvalidRequest   = "INVALID_REQUEST"   // Invalid request (replaces InvalidAddress, AlreadyExists, InvalidConfig)
 )
 
 // Helper functions for creating storage errors
@@ -201,29 +184,12 @@ func NewConnectionError(backendType string, cause error) *StorageError {
 	}
 }
 
-func NewConfigError(backendType string, message string, cause error) *StorageError {
+func NewInvalidRequestError(backendType string, message string, cause error) *StorageError {
 	return &StorageError{
-		Code:        ErrCodeInvalidConfig,
+		Code:        ErrCodeInvalidRequest,
 		Message:     message,
 		BackendType: backendType,
 		Cause:       cause,
-	}
-}
-
-func NewBackendInitError(backendType string, cause error) *StorageError {
-	return &StorageError{
-		Code:        ErrCodeBackendInit,
-		Message:     "failed to initialize storage backend",
-		BackendType: backendType,
-		Cause:       cause,
-	}
-}
-
-func NewManagerNotStartedError() *StorageError {
-	return &StorageError{
-		Code:        ErrCodeManagerNotStarted,
-		Message:     "storage manager not started",
-		BackendType: "manager",
 	}
 }
 

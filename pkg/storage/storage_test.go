@@ -386,12 +386,10 @@ func TestErrorHandling(t *testing.T) {
 	
 	// Test different error types
 	testErrors := map[error]string{
-		fmt.Errorf("connection refused"):    ErrCodeConnectionFailed,
-		fmt.Errorf("not found"):            ErrCodeNotFound,
-		fmt.Errorf("timeout"):              ErrCodeTimeout,
-		fmt.Errorf("quota exceeded"):       ErrCodeQuotaExceeded,
-		fmt.Errorf("unauthorized"):         ErrCodeUnauthorized,
-		fmt.Errorf("checksum mismatch"):    ErrCodeIntegrityFailure,
+		fmt.Errorf("connection refused"): ErrCodeConnectionFailed,
+		fmt.Errorf("not found"):         ErrCodeNotFound,
+		fmt.Errorf("timeout"):           ErrCodeTimeout,
+		fmt.Errorf("checksum mismatch"): ErrCodeIntegrityFailure,
 	}
 	
 	for err, expectedCode := range testErrors {
@@ -523,11 +521,7 @@ func TestHealthMonitoring(t *testing.T) {
 		t.Fatalf("Expected degraded health, got %s", summary.OverallHealth)
 	}
 	
-	// Check alerts
-	alerts := monitor.GetActiveAlerts()
-	if len(alerts) == 0 {
-		t.Fatal("Expected at least one alert for unhealthy backend")
-	}
+	// Note: GetActiveAlerts removed from HealthMonitor interface
 }
 
 // MockBackendFactory for testing - create a wrapper around the real factory

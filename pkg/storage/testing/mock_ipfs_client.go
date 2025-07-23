@@ -114,7 +114,7 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 	// Check storage quota
 	blockSize := int64(len(block.Data))
 	if m.currentStorage+blockSize > m.storageQuota {
-		return nil, storage.NewStorageError(storage.ErrCodeQuotaExceeded, "storage quota exceeded", storage.BackendTypeIPFS, nil)
+		return nil, storage.NewInvalidRequestError(storage.BackendTypeIPFS, "storage quota exceeded", nil)
 	}
 
 	// Generate deterministic CID
@@ -135,11 +135,6 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 		BackendType: storage.BackendTypeIPFS,
 		Size:        blockSize,
 		CreatedAt:   time.Now(),
-		Providers:   m.getConnectedPeersList(),
-		Metadata: map[string]interface{}{
-			"ipfs_version": "mock-1.0",
-			"block_type":   "raw",
-		},
 	}
 
 	return address, nil
@@ -166,8 +161,6 @@ func (m *MockIPFSClient) Get(ctx context.Context, address *storage.BlockAddress)
 
 	m.operationCount["get"]++
 	
-	// Update access time
-	address.AccessedAt = time.Now()
 
 	return block, nil
 }

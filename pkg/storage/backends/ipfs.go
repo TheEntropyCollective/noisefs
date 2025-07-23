@@ -3,8 +3,6 @@ package backends
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"sync"
@@ -122,7 +120,6 @@ func (ipfs *IPFSBackend) Put(ctx context.Context, block *blocks.Block) (*storage
 		return nil, err
 	}
 
-	startTime := time.Now()
 	reader := bytes.NewReader(block.Data)
 
 	cid, err := ipfs.shell.Add(reader)
@@ -132,19 +129,12 @@ func (ipfs *IPFSBackend) Put(ctx context.Context, block *blocks.Block) (*storage
 		return nil, storageErr
 	}
 
-	// Calculate checksum
-	checksum := sha256.Sum256(block.Data)
 
 	address := &storage.BlockAddress{
 		ID:          cid,
 		BackendType: storage.BackendTypeIPFS,
 		Size:        int64(len(block.Data)),
-		Checksum:    hex.EncodeToString(checksum[:]),
 		CreatedAt:   time.Now(),
-		Metadata: map[string]interface{}{
-			"ipfs_cid":     cid,
-			"put_duration": time.Since(startTime),
-		},
 	}
 
 	return address, nil
@@ -159,14 +149,13 @@ func (ipfs *IPFSBackend) Get(ctx context.Context, address *storage.BlockAddress)
 	}
 
 	if address.BackendType != storage.BackendTypeIPFS {
-		err := storage.NewStorageError(storage.ErrCodeInvalidAddress,
-			"address is not for IPFS backend", storage.BackendTypeIPFS, nil)
+		err := storage.NewInvalidRequestError(storage.BackendTypeIPFS,
+			"address is not for IPFS backend", nil)
 		err.Address = address
 		ipfs.errorReporter.ReportError(err)
 		return nil, err
 	}
 
-	startTime := time.Now()
 
 	// Try intelligent peer selection if available
 	if ipfs.peerManager != nil {
@@ -183,24 +172,6 @@ func (ipfs *IPFSBackend) Get(ctx context.Context, address *storage.BlockAddress)
 		return nil, storageErr
 	}
 
-	// Verify checksum if available
-	if address.Checksum != "" {
-		checksum := sha256.Sum256(block.Data)
-		if hex.EncodeToString(checksum[:]) != address.Checksum {
-			err := storage.NewStorageError(storage.ErrCodeIntegrityFailure,
-				"block checksum mismatch", storage.BackendTypeIPFS, nil)
-			err.Address = address
-			ipfs.errorReporter.ReportError(err)
-			return nil, err
-		}
-	}
-
-	// Update access time
-	address.AccessedAt = time.Now()
-	if address.Metadata == nil {
-		address.Metadata = make(map[string]interface{})
-	}
-	address.Metadata["get_duration"] = time.Since(startTime)
 
 	return block, nil
 }
@@ -214,8 +185,8 @@ func (ipfs *IPFSBackend) Has(ctx context.Context, address *storage.BlockAddress)
 	}
 
 	if address.BackendType != storage.BackendTypeIPFS {
-		return false, storage.NewStorageError(storage.ErrCodeInvalidAddress,
-			"address is not for IPFS backend", storage.BackendTypeIPFS, nil)
+		return false, storage.NewInvalidRequestError(storage.BackendTypeIPFS,
+			"address is not for IPFS backend", nil)
 	}
 
 	// Try to stat the object (faster than full retrieval)
@@ -241,8 +212,8 @@ func (ipfs *IPFSBackend) Delete(ctx context.Context, address *storage.BlockAddre
 	}
 
 	if address.BackendType != storage.BackendTypeIPFS {
-		err := storage.NewStorageError(storage.ErrCodeInvalidAddress,
-			"address is not for IPFS backend", storage.BackendTypeIPFS, nil)
+		err := storage.NewInvalidRequestError(storage.BackendTypeIPFS,
+			"address is not for IPFS backend", nil)
 		err.Address = address
 		ipfs.errorReporter.ReportError(err)
 		return err
@@ -306,8 +277,8 @@ func (ipfs *IPFSBackend) Pin(ctx context.Context, address *storage.BlockAddress)
 	}
 
 	if address.BackendType != storage.BackendTypeIPFS {
-		err := storage.NewStorageError(storage.ErrCodeInvalidAddress,
-			"address is not for IPFS backend", storage.BackendTypeIPFS, nil)
+		err := storage.NewInvalidRequestError(storage.BackendTypeIPFS,
+			"address is not for IPFS backend", nil)
 		err.Address = address
 		ipfs.errorReporter.ReportError(err)
 		return err
@@ -332,8 +303,8 @@ func (ipfs *IPFSBackend) Unpin(ctx context.Context, address *storage.BlockAddres
 	}
 
 	if address.BackendType != storage.BackendTypeIPFS {
-		err := storage.NewStorageError(storage.ErrCodeInvalidAddress,
-			"address is not for IPFS backend", storage.BackendTypeIPFS, nil)
+		err := storage.NewInvalidRequestError(storage.BackendTypeIPFS,
+			"address is not for IPFS backend", nil)
 		err.Address = address
 		ipfs.errorReporter.ReportError(err)
 		return err
@@ -553,28 +524,23 @@ func (ipfs *IPFSBackend) getWithPeerSelection(ctx context.Context, address *stor
 }
 
 func (ipfs *IPFSBackend) requestFromPeer(ctx context.Context, cid string, peerID peer.ID) (*blocks.Block, error) {
-	startTime := time.Now()
-
-	defer func() {
-		duration := time.Since(startTime)
-		ipfs.updateRequestMetrics(peerID, duration, true) // Will be updated with actual success
-	}()
-
+	start := time.Now()
+	
 	// Connect to the specific peer
 	peerAddr := "/p2p/" + peerID.String()
 	if err := ipfs.shell.SwarmConnect(ctx, peerAddr); err != nil {
-		ipfs.updateRequestMetrics(peerID, time.Since(startTime), false)
+		ipfs.updateRequestMetrics(peerID, time.Since(start), false)
 		return nil, err
 	}
 
 	// Retrieve the block
 	block, err := ipfs.getStandard(cid)
 	if err != nil {
-		ipfs.updateRequestMetrics(peerID, time.Since(startTime), false)
+		ipfs.updateRequestMetrics(peerID, time.Since(start), false)
 		return nil, err
 	}
 
-	ipfs.updateRequestMetrics(peerID, time.Since(startTime), true)
+	ipfs.updateRequestMetrics(peerID, time.Since(start), true)
 	return block, nil
 }
 

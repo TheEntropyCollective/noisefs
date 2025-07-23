@@ -61,25 +61,6 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
 		
-	case isQuotaError(err):
-		return &StorageError{
-			Code:        ErrCodeQuotaExceeded,
-			Message:     fmt.Sprintf("%s: storage quota exceeded", operation),
-			BackendType: ec.backendType,
-			Address:     address,
-			Cause:       err,
-			Metadata:    map[string]interface{}{"operation": operation},
-		}
-		
-	case isAuthError(err):
-		return &StorageError{
-			Code:        ErrCodeUnauthorized,
-			Message:     fmt.Sprintf("%s: authentication failed", operation),
-			BackendType: ec.backendType,
-			Address:     address,
-			Cause:       err,
-			Metadata:    map[string]interface{}{"operation": operation},
-		}
 		
 	case isIntegrityError(err):
 		return &StorageError{
