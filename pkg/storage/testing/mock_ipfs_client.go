@@ -20,51 +20,51 @@ type MockIPFSClient struct {
 	// Storage
 	blocks       map[string]*blocks.Block
 	pinnedBlocks map[string]bool
-
+	
 	// Network simulation
-	peers          []string
+	peers         []string
 	connectedPeers map[string]bool
-	networkHealth  string
-
+	networkHealth string
+	
 	// Test controls
 	isConnected    bool
 	errorMode      map[string]error // operation -> error mapping
 	latency        time.Duration
 	operationDelay map[string]time.Duration
-
+	
 	// Metrics and tracking
-	operationCount   map[string]int64
+	operationCount map[string]int64
 	operationHistory []OperationRecord
-
+	
 	// Advanced features
 	bandwidthLimit   int64 // bytes per second
 	storageQuota     int64 // max storage bytes
 	currentStorage   int64
-	requestRateLimit int // requests per second
-
+	requestRateLimit int   // requests per second
+	
 	// Failure simulation
-	failureRate     float64 // 0.0 to 1.0
-	failureCount    int
-	totalOperations int
-
+	failureRate      float64 // 0.0 to 1.0
+	failureCount     int
+	totalOperations  int
+	
 	// State persistence (for complex testing scenarios)
 	statePersistence bool
 	stateFilePath    string
-
+	
 	// Network simulator integration
 	networkSim *NetworkSimulator
 }
 
 // OperationRecord tracks individual operations for debugging
 type OperationRecord struct {
-	Timestamp time.Time
-	Operation string
-	BlockID   string
-	PeerHints []string
-	Success   bool
-	Error     string
-	Duration  time.Duration
-	Metadata  map[string]interface{}
+	Timestamp   time.Time
+	Operation   string
+	BlockID     string
+	PeerHints   []string
+	Success     bool
+	Error       string
+	Duration    time.Duration
+	Metadata    map[string]interface{}
 }
 
 // SetNetworkSimulator links this client with a network simulator for block sync
@@ -79,19 +79,19 @@ func NewMockIPFSClient() *MockIPFSClient {
 	return &MockIPFSClient{
 		blocks:           make(map[string]*blocks.Block),
 		pinnedBlocks:     make(map[string]bool),
-		peers:            []string{"peer1", "peer2", "peer3"},
-		connectedPeers:   map[string]bool{"peer1": true, "peer2": true, "peer3": true},
-		networkHealth:    "good",
-		isConnected:      true,
-		errorMode:        make(map[string]error),
-		operationDelay:   make(map[string]time.Duration),
-		operationCount:   make(map[string]int64),
+		peers:           []string{"peer1", "peer2", "peer3"},
+		connectedPeers:  map[string]bool{"peer1": true, "peer2": true, "peer3": true},
+		networkHealth:   "good",
+		isConnected:     true,
+		errorMode:       make(map[string]error),
+		operationDelay:  make(map[string]time.Duration),
+		operationCount:  make(map[string]int64),
 		operationHistory: make([]OperationRecord, 0),
-		latency:          0,
-		bandwidthLimit:   1000000,    // 1MB/s default
-		storageQuota:     1000000000, // 1GB default
-		requestRateLimit: 100,        // 100 req/s default
-		failureRate:      0.0,
+		latency:         0,
+		bandwidthLimit:  1000000, // 1MB/s default
+		storageQuota:    1000000000, // 1GB default
+		requestRateLimit: 100, // 100 req/s default
+		failureRate:     0.0,
 	}
 }
 
@@ -114,7 +114,7 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 	// Check storage quota
 	blockSize := int64(len(block.Data))
 	if m.currentStorage+blockSize > m.storageQuota {
-		return nil, storage.NewStorageError(storage.ErrCodeQuotaExceeded, "storage quota exceeded", storage.BackendTypeIPFS, nil)
+		return nil, storage.NewInvalidRequestError(storage.BackendTypeIPFS, "storage quota exceeded", nil)
 	}
 
 	// Generate deterministic CID
@@ -124,7 +124,7 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 	m.blocks[cid] = block
 	m.currentStorage += blockSize
 	m.operationCount["put"]++
-
+	
 	// Sync with network simulator if available
 	if m.networkSim != nil {
 		m.networkSim.SyncBlockFromClient(cid, block)
@@ -135,11 +135,6 @@ func (m *MockIPFSClient) Put(ctx context.Context, block *blocks.Block) (*storage
 		BackendType: storage.BackendTypeIPFS,
 		Size:        blockSize,
 		CreatedAt:   time.Now(),
-		Providers:   m.getConnectedPeersList(),
-		Metadata: map[string]interface{}{
-			"ipfs_version": "mock-1.0",
-			"block_type":   "raw",
-		},
 	}
 
 	return address, nil
@@ -165,9 +160,7 @@ func (m *MockIPFSClient) Get(ctx context.Context, address *storage.BlockAddress)
 	}
 
 	m.operationCount["get"]++
-
-	// Update access time
-	address.AccessedAt = time.Now()
+	
 
 	return block, nil
 }
@@ -188,7 +181,7 @@ func (m *MockIPFSClient) Has(ctx context.Context, address *storage.BlockAddress)
 
 	_, exists := m.blocks[address.ID]
 	m.operationCount["has"]++
-
+	
 	return exists, nil
 }
 
@@ -262,7 +255,7 @@ func (m *MockIPFSClient) Pin(ctx context.Context, address *storage.BlockAddress)
 
 	m.pinnedBlocks[address.ID] = true
 	m.operationCount["pin"]++
-
+	
 	return nil
 }
 
@@ -282,7 +275,7 @@ func (m *MockIPFSClient) Unpin(ctx context.Context, address *storage.BlockAddres
 
 	delete(m.pinnedBlocks, address.ID)
 	m.operationCount["unpin"]++
-
+	
 	return nil
 }
 
@@ -309,7 +302,7 @@ func (m *MockIPFSClient) GetWithPeerHint(ctx context.Context, address *storage.B
 			validPeers++
 		}
 	}
-
+	
 	if validPeers == 0 && len(peers) > 0 {
 		// Simulate slower retrieval from non-preferred peers
 		time.Sleep(m.latency * 2)
@@ -340,7 +333,7 @@ func (m *MockIPFSClient) BroadcastToNetwork(ctx context.Context, address *storag
 
 	// Simulate network broadcast delay
 	time.Sleep(time.Duration(len(m.getConnectedPeersList())) * time.Millisecond * 10)
-
+	
 	m.operationCount["broadcast"]++
 	return nil
 }
@@ -371,10 +364,10 @@ func (m *MockIPFSClient) GetBackendInfo() *storage.BackendInfo {
 			storage.CapabilityDistributed,
 		},
 		Config: map[string]interface{}{
-			"mock":            true,
-			"bandwidth_limit": m.bandwidthLimit,
-			"storage_quota":   m.storageQuota,
-			"failure_rate":    m.failureRate,
+			"mock":             true,
+			"bandwidth_limit":  m.bandwidthLimit,
+			"storage_quota":    m.storageQuota,
+			"failure_rate":     m.failureRate,
 		},
 		NetworkID: "mock-ipfs-network",
 		Peers:     m.getConnectedPeersList(),
@@ -413,7 +406,7 @@ func (m *MockIPFSClient) Connect(ctx context.Context) error {
 	m.isConnected = true
 	// Simulate connection establishment delay
 	time.Sleep(time.Millisecond * 100)
-
+	
 	return nil
 }
 
@@ -498,7 +491,7 @@ func (m *MockIPFSClient) AddPeer(peerID string) {
 func (m *MockIPFSClient) RemovePeer(peerID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	
 	for i, peer := range m.peers {
 		if peer == peerID {
 			m.peers = append(m.peers[:i], m.peers[i+1:]...)
@@ -528,7 +521,7 @@ func (m *MockIPFSClient) SetNetworkHealth(health string) {
 func (m *MockIPFSClient) GetOperationCounts() map[string]int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
+	
 	counts := make(map[string]int64)
 	for op, count := range m.operationCount {
 		counts[op] = count
@@ -540,7 +533,7 @@ func (m *MockIPFSClient) GetOperationCounts() map[string]int64 {
 func (m *MockIPFSClient) GetOperationHistory() []OperationRecord {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
+	
 	history := make([]OperationRecord, len(m.operationHistory))
 	copy(history, m.operationHistory)
 	return history
@@ -557,7 +550,7 @@ func (m *MockIPFSClient) ClearHistory() {
 func (m *MockIPFSClient) GetStorageStats() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
+	
 	return map[string]interface{}{
 		"blocks_stored":     len(m.blocks),
 		"blocks_pinned":     len(m.pinnedBlocks),
@@ -573,7 +566,7 @@ func (m *MockIPFSClient) GetStorageStats() map[string]interface{} {
 func (m *MockIPFSClient) Reset() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	
 	m.blocks = make(map[string]*blocks.Block)
 	m.pinnedBlocks = make(map[string]bool)
 	m.operationCount = make(map[string]int64)

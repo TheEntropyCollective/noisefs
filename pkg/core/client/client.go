@@ -176,15 +176,26 @@ func (c *Client) storeBlock(ctx context.Context, block *blocks.Block) (string, e
 
 // storeBlockWithTracking stores a block and returns the CID and actual bytes stored (0 if block already existed)
 func (c *Client) storeBlockWithTracking(ctx context.Context, block *blocks.Block) (string, int64, error) {
-	// Use storage manager
-	address, err := c.storageManager.Put(ctx, block)
+	// Check if block already exists
+	address := &storage.BlockAddress{
+		ID:          block.ID,
+		BackendType: storage.BackendTypeIPFS,
+	}
+	
+	exists, err := c.storageManager.Has(ctx, address)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to check block existence: %w", err)
+	}
+	
+	// Store the block
+	address, err = c.storageManager.Put(ctx, block)
 	if err != nil {
 		return "", 0, fmt.Errorf("storage manager put failed: %w", err)
 	}
 	
 	// Return actual bytes stored based on whether block was newly stored
 	var bytesStored int64
-	if address.WasNewlyStored {
+	if !exists {
 		bytesStored = int64(len(block.Data))
 	} else {
 		bytesStored = 0 // Block already existed, no new storage

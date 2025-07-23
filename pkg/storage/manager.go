@@ -30,7 +30,7 @@ type Manager struct {
 // NewManager creates a new storage manager with decomposed services
 func NewManager(config *Config) (*Manager, error) {
 	if err := config.Validate(); err != nil {
-		return nil, NewConfigError("manager", "invalid configuration", err)
+		return nil, NewInvalidRequestError("manager", "invalid configuration", err)
 	}
 
 	factory := NewBackendFactory(config)
@@ -66,13 +66,13 @@ func (m *Manager) Start(ctx context.Context) error {
 	defer m.mutex.Unlock()
 
 	if m.started {
-		return NewStorageError(ErrCodeAlreadyExists, "manager already started", "manager", nil)
+		return NewInvalidRequestError("manager", "manager already started", nil)
 	}
 
 	// Create all enabled backends
 	backends, err := m.factory.CreateAllBackends()
 	if err != nil {
-		return NewBackendInitError("manager", err)
+		return NewInvalidRequestError("manager", "failed to create backends", err)
 	}
 
 	// Add backends to registry
@@ -153,7 +153,7 @@ func (m *Manager) Stop(ctx context.Context) error {
 // Put stores a block across selected backends
 func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error) {
 	if !m.started {
-		return nil, NewManagerNotStartedError()
+		return nil, NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Put(ctx, block)
@@ -162,7 +162,7 @@ func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, 
 // Get retrieves a block from the best available backend
 func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error) {
 	if !m.started {
-		return nil, NewManagerNotStartedError()
+		return nil, NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Get(ctx, address)
@@ -171,7 +171,7 @@ func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block
 // Has checks if a block exists in any backend
 func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) {
 	if !m.started {
-		return false, NewManagerNotStartedError()
+		return false, NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Has(ctx, address)
@@ -180,7 +180,7 @@ func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) 
 // Delete removes a block from all backends where it exists
 func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return NewManagerNotStartedError()
+		return NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Delete(ctx, address)
@@ -189,7 +189,7 @@ func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 // PutMany stores multiple blocks using optimal distribution
 func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*BlockAddress, error) {
 	if !m.started {
-		return nil, NewManagerNotStartedError()
+		return nil, NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.PutMany(ctx, blocks)
@@ -198,7 +198,7 @@ func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*Block
 // GetMany retrieves multiple blocks efficiently
 func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error) {
 	if !m.started {
-		return nil, NewManagerNotStartedError()
+		return nil, NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.GetMany(ctx, addresses)
@@ -207,7 +207,7 @@ func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*bl
 // Pin pins a block in appropriate backends
 func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return NewManagerNotStartedError()
+		return NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Pin(ctx, address)
@@ -216,7 +216,7 @@ func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 // Unpin unpins a block from all backends
 func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
-		return NewManagerNotStartedError()
+		return NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	return m.router.Unpin(ctx, address)
@@ -289,12 +289,12 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 	defer m.mutex.Unlock()
 
 	if !m.started {
-		return NewManagerNotStartedError()
+		return NewInvalidRequestError("manager", "storage manager not started", nil)
 	}
 
 	// Validate new configuration
 	if err := newConfig.Validate(); err != nil {
-		return NewConfigError(name, "invalid backend configuration", err)
+		return NewInvalidRequestError(name, "invalid backend configuration", err)
 	}
 
 	// Check if backend exists
@@ -319,7 +319,7 @@ func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) erro
 	if newConfig.Enabled {
 		newBackend, err := m.factory.CreateBackend(name)
 		if err != nil {
-			return NewBackendInitError(name, err)
+			return NewInvalidRequestError(name, "failed to create backend", err)
 		}
 
 		// Connect new backend

@@ -162,8 +162,8 @@ func TestMockIPFSClient(t *testing.T) {
 
 		// Check error type
 		if storageErr, ok := err.(*storage.StorageError); ok {
-			if storageErr.Code != storage.ErrCodeQuotaExceeded {
-				t.Fatalf("Expected quota exceeded error, got: %s", storageErr.Code)
+			if storageErr.Code != storage.ErrCodeInvalidRequest {
+				t.Fatalf("Expected invalid request error, got: %s", storageErr.Code)
 			}
 		} else {
 			t.Fatalf("Expected StorageError, got: %T", err)

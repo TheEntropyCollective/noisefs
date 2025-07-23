@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"sort"
 )
 
@@ -24,7 +23,7 @@ func NewBackendSelector(registry BackendRegistry, config *Config) BackendSelecto
 func (s *defaultBackendSelector) SelectBackend(ctx context.Context, criteria SelectionCriteria) (Backend, error) {
 	backends := s.getEligibleBackends(criteria)
 	if len(backends) == 0 {
-		return nil, NewStorageError(ErrCodeNoBackends, "no backends match selection criteria", "selector", nil)
+		return nil, NewNoBackendsError()
 	}
 
 	// Apply selection strategy based on criteria
@@ -84,7 +83,7 @@ func (s *defaultBackendSelector) GetDefaultBackend() (Backend, error) {
 	defaultName := s.config.DefaultBackend
 	backend, exists := s.registry.GetBackend(defaultName)
 	if !exists {
-		return nil, NewStorageError(ErrCodeNotFound, fmt.Sprintf("default backend '%s' not available", defaultName), defaultName, nil)
+		return nil, NewNotFoundError(defaultName, nil)
 	}
 	return backend, nil
 }
@@ -127,7 +126,7 @@ func (s *defaultBackendSelector) SelectHealthyBackends(count int) []Backend {
 func (s *defaultBackendSelector) SelectBackendByCapability(capability string) (Backend, error) {
 	backends := s.registry.GetBackendsWithCapability(capability)
 	if len(backends) == 0 {
-		return nil, NewStorageError(ErrCodeNotFound, fmt.Sprintf("no backends support capability '%s'", capability), "selector", nil)
+		return nil, NewNotFoundError("selector", nil)
 	}
 
 	// Return the first healthy backend with the capability
@@ -213,7 +212,7 @@ func (s *defaultBackendSelector) applySelectionStrategy(backends []Backend, crit
 // selectByLatency selects the backend with the lowest latency
 func (s *defaultBackendSelector) selectByLatency(backends []Backend) (Backend, error) {
 	if len(backends) == 0 {
-		return nil, NewStorageError(ErrCodeNoBackends, "no backends available for latency selection", "selector", nil)
+		return nil, NewNoBackendsError()
 	}
 
 	bestBackend := backends[0]

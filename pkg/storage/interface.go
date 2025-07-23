@@ -2,97 +2,87 @@ package storage
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 )
 
-// Backend defines the interface that all storage backends must implement
+// Backend defines the interface that all storage backends must implement.
+// This interface provides a unified abstraction for block storage operations
+// across different storage systems (IPFS, local, cloud, etc.) used by NoiseFS.
 type Backend interface {
 	// Core operations
 	Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error)
 	Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error)
 	Has(ctx context.Context, address *BlockAddress) (bool, error)
 	Delete(ctx context.Context, address *BlockAddress) error
-
+	
 	// Batch operations for efficiency
 	PutMany(ctx context.Context, blocks []*blocks.Block) ([]*BlockAddress, error)
 	GetMany(ctx context.Context, addresses []*BlockAddress) ([]*blocks.Block, error)
-
+	
 	// Pinning operations (for backends that support it)
 	Pin(ctx context.Context, address *BlockAddress) error
 	Unpin(ctx context.Context, address *BlockAddress) error
-
+	
 	// Metadata and health
 	GetBackendInfo() *BackendInfo
 	HealthCheck(ctx context.Context) *HealthStatus
-
+	
 	// Connection management
 	Connect(ctx context.Context) error
 	Disconnect(ctx context.Context) error
 	IsConnected() bool
 }
 
-// StreamingBackend extends Backend with streaming capabilities
-type StreamingBackend interface {
-	Backend
 
-	// Stream operations for large data
-	PutStream(ctx context.Context, reader io.Reader, size int64) (*BlockAddress, error)
-	GetStream(ctx context.Context, address *BlockAddress) (io.ReadCloser, error)
-}
-
-// PeerAwareBackend extends Backend with peer-aware operations
+// PeerAwareBackend extends Backend with peer-aware operations.
+// This interface is essential for NoiseFS's 3-tuple XOR anonymization system,
+// enabling efficient distribution of randomizer blocks across the peer network.
+// The peer-aware operations ensure that data blocks and their associated
+// randomizer blocks can be retrieved from optimal peers for performance.
 type PeerAwareBackend interface {
 	Backend
-
+	
 	// Peer operations
 	GetWithPeerHint(ctx context.Context, address *BlockAddress, peers []string) (*blocks.Block, error)
 	BroadcastToNetwork(ctx context.Context, address *BlockAddress, block *blocks.Block) error
 	GetConnectedPeers() []string
-
+	
 	// Peer manager integration
 	SetPeerManager(manager interface{}) error
 }
 
-// BlockAddress represents a provider-agnostic block address
+// BlockAddress represents a provider-agnostic block address.
+// This simplified structure contains only the essential fields needed
+// for block identification, routing, and validation across storage backends.
 type BlockAddress struct {
 	// Unique identifier for the block (CID, hash, etc.)
 	ID string `json:"id"`
-
+	
 	// Backend-specific addressing information
-	BackendType string                 `json:"backend_type"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-
-	// Size and verification info
-	Size     int64  `json:"size,omitempty"`
-	Checksum string `json:"checksum,omitempty"`
-
-	// Storage location hints
-	Providers []string `json:"providers,omitempty"`
-
-	// Storage tracking for metrics
-	WasNewlyStored bool `json:"was_newly_stored,omitempty"` // true if this was a new storage operation, false if block already existed
-
-	// Timestamps
-	CreatedAt  time.Time `json:"created_at"`
-	AccessedAt time.Time `json:"accessed_at,omitempty"`
+	BackendType string `json:"backend_type"`
+	
+	// Size for validation
+	Size int64 `json:"size,omitempty"`
+	
+	// Timestamp for tracking
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // BackendInfo provides information about a storage backend
 type BackendInfo struct {
 	// Backend identification
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Version string `json:"version"`
-
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Version     string `json:"version"`
+	
 	// Capabilities
 	Capabilities []string `json:"capabilities"`
-
+	
 	// Configuration
 	Config map[string]interface{} `json:"config,omitempty"`
-
+	
 	// Network information
 	NetworkID string   `json:"network_id,omitempty"`
 	Peers     []string `json:"peers,omitempty"`
@@ -103,33 +93,33 @@ type HealthStatus struct {
 	// Overall health
 	Healthy bool   `json:"healthy"`
 	Status  string `json:"status"` // "healthy", "degraded", "unhealthy", "offline"
-
+	
 	// Performance metrics
 	Latency    time.Duration `json:"latency"`
 	Throughput float64       `json:"throughput"` // bytes per second
-	ErrorRate  float64       `json:"error_rate"` // percentage
-
+	ErrorRate  float64       `json:"error_rate"`  // percentage
+	
 	// Capacity information
 	UsedStorage      int64 `json:"used_storage"`
 	AvailableStorage int64 `json:"available_storage"`
-
+	
 	// Network status
 	ConnectedPeers int    `json:"connected_peers"`
 	NetworkHealth  string `json:"network_health"`
-
+	
 	// Last check
 	LastCheck time.Time `json:"last_check"`
-
+	
 	// Issues
 	Issues []HealthIssue `json:"issues,omitempty"`
 }
 
 // HealthIssue represents a specific health issue
 type HealthIssue struct {
-	Severity    string                 `json:"severity"` // "warning", "error", "critical"
-	Code        string                 `json:"code"`
-	Description string                 `json:"description"`
-	Timestamp   time.Time              `json:"timestamp"`
+	Severity    string    `json:"severity"` // "warning", "error", "critical"
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	Timestamp   time.Time `json:"timestamp"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
@@ -156,20 +146,13 @@ func (e *StorageError) Unwrap() error {
 
 // Common error codes
 const (
-	ErrCodeNotFound          = "NOT_FOUND"
-	ErrCodeAlreadyExists     = "ALREADY_EXISTS"
-	ErrCodeInvalidAddress    = "INVALID_ADDRESS"
-	ErrCodeConnectionFailed  = "CONNECTION_FAILED"
-	ErrCodeTimeout           = "TIMEOUT"
-	ErrCodeQuotaExceeded     = "QUOTA_EXCEEDED"
-	ErrCodeIntegrityFailure  = "INTEGRITY_FAILURE"
-	ErrCodeUnauthorized      = "UNAUTHORIZED"
-	ErrCodeBackendOffline    = "BACKEND_OFFLINE"
-	ErrCodeInvalidConfig     = "INVALID_CONFIG"
-	ErrCodeBackendInit       = "BACKEND_INIT_FAILED"
-	ErrCodeManagerNotStarted = "MANAGER_NOT_STARTED"
-	ErrCodeNoBackends        = "NO_BACKENDS_AVAILABLE"
-	ErrCodeValidationFailed  = "VALIDATION_FAILED"
+	ErrCodeNotFound         = "NOT_FOUND"         // Resource not found
+	ErrCodeConnectionFailed = "CONNECTION_FAILED" // Network/connection issues
+	ErrCodeTimeout          = "TIMEOUT"           // Operation timed out
+	ErrCodeIntegrityFailure = "INTEGRITY_FAILURE" // Data integrity check failed
+	ErrCodeBackendOffline   = "BACKEND_OFFLINE"   // Backend is not available
+	ErrCodeNoBackends       = "NO_BACKENDS"       // No backends available
+	ErrCodeInvalidRequest   = "INVALID_REQUEST"   // Invalid request (replaces InvalidAddress, AlreadyExists, InvalidConfig)
 )
 
 // Helper functions for creating storage errors
@@ -201,29 +184,12 @@ func NewConnectionError(backendType string, cause error) *StorageError {
 	}
 }
 
-func NewConfigError(backendType string, message string, cause error) *StorageError {
+func NewInvalidRequestError(backendType string, message string, cause error) *StorageError {
 	return &StorageError{
-		Code:        ErrCodeInvalidConfig,
+		Code:        ErrCodeInvalidRequest,
 		Message:     message,
 		BackendType: backendType,
 		Cause:       cause,
-	}
-}
-
-func NewBackendInitError(backendType string, cause error) *StorageError {
-	return &StorageError{
-		Code:        ErrCodeBackendInit,
-		Message:     "failed to initialize storage backend",
-		BackendType: backendType,
-		Cause:       cause,
-	}
-}
-
-func NewManagerNotStartedError() *StorageError {
-	return &StorageError{
-		Code:        ErrCodeManagerNotStarted,
-		Message:     "storage manager not started",
-		BackendType: "manager",
 	}
 }
 
@@ -237,16 +203,16 @@ func NewNoBackendsError() *StorageError {
 
 // Capability constants
 const (
-	CapabilityPinning        = "pinning"
-	CapabilityStreaming      = "streaming"
-	CapabilityPeerAware      = "peer_aware"
-	CapabilityBatch          = "batch"
-	CapabilityContentAddress = "content_addressing"
-	CapabilityEncryption     = "encryption"
-	CapabilityDeduplication  = "deduplication"
-	CapabilityVersioning     = "versioning"
-	CapabilityReplication    = "replication"
-	CapabilityDistributed    = "distributed"
+	CapabilityPinning         = "pinning"
+	CapabilityStreaming       = "streaming"
+	CapabilityPeerAware       = "peer_aware"
+	CapabilityBatch           = "batch"
+	CapabilityContentAddress  = "content_addressing"
+	CapabilityEncryption      = "encryption"
+	CapabilityDeduplication   = "deduplication"
+	CapabilityVersioning      = "versioning"
+	CapabilityReplication     = "replication"
+	CapabilityDistributed     = "distributed"
 )
 
 // Backend type constants
@@ -259,12 +225,12 @@ const (
 
 // ManagerStatus represents the overall status of the storage manager
 type ManagerStatus struct {
-	Started         bool                      `json:"started"`
-	TotalBackends   int                       `json:"total_backends"`
-	ActiveBackends  int                       `json:"active_backends"`
-	HealthyBackends int                       `json:"healthy_backends"`
+	Started         bool                     `json:"started"`
+	TotalBackends   int                      `json:"total_backends"`
+	ActiveBackends  int                      `json:"active_backends"`
+	HealthyBackends int                      `json:"healthy_backends"`
 	BackendStatus   map[string]*BackendStatus `json:"backend_status"`
-	LastCheck       time.Time                 `json:"last_check"`
+	LastCheck       time.Time                `json:"last_check"`
 }
 
 // BackendStatus represents the status of a single backend
