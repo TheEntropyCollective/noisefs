@@ -10,6 +10,7 @@ import (
 	"time"
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/streaming"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
@@ -42,14 +43,15 @@ type SyncEngine struct {
 
 // SyncSession represents an active sync session
 type SyncSession struct {
-	SyncID     string
-	LocalPath  string
-	RemotePath string
-	State      *SyncState
-	LastSync   time.Time
-	Status     SyncStatus
-	Progress   *SyncProgress
-	mu         sync.RWMutex
+	SyncID           string
+	LocalPath        string
+	RemotePath       string
+	State            *SyncState
+	LastSync         time.Time
+	Status           SyncStatus
+	Progress         *SyncProgress
+	ProgressReporter streaming.ProgressReporter
+	mu               sync.RWMutex
 }
 
 // SyncStatus represents the current status of a sync session
@@ -71,6 +73,119 @@ type SyncProgress struct {
 	CurrentOperation    string        `json:"current_operation"`
 	StartTime           time.Time     `json:"start_time"`
 	EstimatedCompletion time.Duration `json:"estimated_completion"`
+	
+	// Enhanced progress tracking for task-0014
+	FilesProcessed      int     `json:"files_processed"`
+	TotalFiles          int     `json:"total_files"`
+	BytesTransferred    int64   `json:"bytes_transferred"`
+	TotalBytes          int64   `json:"total_bytes"`
+	PercentComplete     float64 `json:"percent_complete"`
+	CurrentThroughput   float64 `json:"current_throughput"`
+	LastUpdateTime      time.Time `json:"last_update_time"`
+}
+
+// UpdateProgress updates sync progress with new values and calculates derived metrics
+func (sp *SyncProgress) UpdateProgress(filesProcessed, totalFiles int, bytesTransferred, totalBytes int64, currentOperation string) {
+	sp.FilesProcessed = filesProcessed
+	sp.TotalFiles = totalFiles
+	sp.BytesTransferred = bytesTransferred
+	sp.TotalBytes = totalBytes
+	sp.CurrentOperation = currentOperation
+	sp.LastUpdateTime = time.Now()
+	
+	// Calculate percentage completion based on bytes if available, otherwise files
+	if totalBytes > 0 {
+		sp.PercentComplete = float64(bytesTransferred) / float64(totalBytes) * 100
+	} else if totalFiles > 0 {
+		sp.PercentComplete = float64(filesProcessed) / float64(totalFiles) * 100
+	}
+	
+	// Calculate throughput (bytes per second)
+	elapsed := sp.LastUpdateTime.Sub(sp.StartTime)
+	if elapsed.Seconds() > 0 {
+		sp.CurrentThroughput = float64(bytesTransferred) / elapsed.Seconds()
+	}
+	
+	// Update estimated completion based on current progress
+	if sp.PercentComplete > 0 && sp.PercentComplete < 100 {
+		remainingPercent := 100 - sp.PercentComplete
+		if elapsed.Seconds() > 0 {
+			timePerPercent := elapsed.Seconds() / sp.PercentComplete
+			sp.EstimatedCompletion = time.Duration(remainingPercent * timePerPercent * float64(time.Second))
+		}
+	}
+}
+
+// GetProgressInfo converts SyncProgress to streaming.ProgressInfo for compatibility
+func (sp *SyncProgress) GetProgressInfo() *streaming.ProgressInfo {
+	return &streaming.ProgressInfo{
+		Stage:             sp.CurrentOperation,
+		BytesProcessed:    sp.BytesTransferred,
+		TotalBytes:        sp.TotalBytes,
+		BlocksProcessed:   sp.FilesProcessed,
+		TotalBlocks:       sp.TotalFiles,
+		StartTime:         sp.StartTime,
+		CurrentTime:       sp.LastUpdateTime,
+		Throughput:        sp.CurrentThroughput,
+		ETA:               sp.EstimatedCompletion,
+		ErrorCount:        sp.FailedOperations,
+		AdditionalInfo: map[string]interface{}{
+			"percent_complete": sp.PercentComplete,
+			"operations_completed": sp.CompletedOperations,
+			"total_operations": sp.TotalOperations,
+		},
+	}
+}
+
+// SetProgressReporter configures a progress reporter for this sync session
+func (ss *SyncSession) SetProgressReporter(reporter streaming.ProgressReporter) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	ss.ProgressReporter = reporter
+}
+
+// UpdateAndEmitProgress updates progress and emits through progress reporter
+func (ss *SyncSession) UpdateAndEmitProgress(filesProcessed, totalFiles int, bytesTransferred, totalBytes int64, currentOperation string) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	
+	ss.Progress.UpdateProgress(filesProcessed, totalFiles, bytesTransferred, totalBytes, currentOperation)
+	ss.Progress.EmitProgress(ss.ProgressReporter)
+}
+
+// EmitProgress sends progress updates through the configured progress reporter
+func (sp *SyncProgress) EmitProgress(reporter streaming.ProgressReporter) {
+	if reporter == nil {
+		return
+	}
+	
+	progressInfo := sp.GetProgressInfo()
+	reporter.ReportProgress(*progressInfo)
+	
+	// Set total when first known
+	if sp.TotalBytes > 0 || sp.TotalFiles > 0 {
+		reporter.SetTotal(sp.TotalBytes, sp.TotalFiles)
+	}
+}
+
+// EmitCancellation reports sync cancellation through the progress reporter
+func (ss *SyncSession) EmitCancellation(reason string) {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+	
+	if ss.ProgressReporter != nil {
+		ss.ProgressReporter.Cancel(reason)
+	}
+}
+
+// EmitError reports sync errors through the progress reporter
+func (ss *SyncSession) EmitError(err error, context string) {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+	
+	if ss.ProgressReporter != nil {
+		ss.ProgressReporter.ReportError(err, context)
+	}
 }
 
 // SyncEngineStats represents sync engine statistics
@@ -143,6 +258,7 @@ func NewSyncEngine(
 	// Start event processing
 	go engine.processEvents()
 	go engine.processSyncOperations()
+	go engine.emitPeriodicProgress()
 
 	return engine, nil
 }
@@ -181,6 +297,7 @@ func (se *SyncEngine) StartSync(syncID, localPath, remotePath, manifestCID strin
 		Progress: &SyncProgress{
 			StartTime: time.Now(),
 		},
+		ProgressReporter: nil, // Will be set when progress reporting is needed
 	}
 
 	se.activeSyncs[syncID] = session
@@ -221,10 +338,13 @@ func (se *SyncEngine) StopSync(syncID string) error {
 		fmt.Printf("Warning: failed to remove remote path from monitor: %v\n", err)
 	}
 
-	// Update session status
+	// Update session status and emit cancellation
 	session.mu.Lock()
 	session.Status = StatusIdle
 	session.mu.Unlock()
+	
+	// Emit cancellation notification
+	session.EmitCancellation("Sync stopped by user")
 
 	// Remove from active syncs
 	delete(se.activeSyncs, syncID)
@@ -538,14 +658,101 @@ func (se *SyncEngine) performInitialSync(session *SyncSession) {
 	session.Status = StatusSyncing
 	session.mu.Unlock()
 
-	// Initial sync logic would go here
-	// For now, just mark as idle
+	// Scan local directory to count files and calculate total size
+	totalFiles, totalBytes, err := se.scanDirectory(session.LocalPath)
+	if err != nil {
+		fmt.Printf("Error scanning directory %s: %v\n", session.LocalPath, err)
+		session.mu.Lock()
+		session.Status = StatusError
+		session.mu.Unlock()
+		return
+	}
+
+	// Initialize progress with total counts
+	session.mu.Lock()
+	session.Progress.TotalFiles = totalFiles
+	session.Progress.TotalBytes = totalBytes
+	session.Progress.TotalOperations = totalFiles // Approximate operations count
+	session.mu.Unlock()
+
+	// Emit initial progress
+	session.UpdateAndEmitProgress(
+		0, totalFiles, 0, totalBytes,
+		fmt.Sprintf("Initializing sync for %d files (%d bytes)", totalFiles, totalBytes),
+	)
+
+	// TODO: Implement actual sync operations here
+	// For now, just mark as idle after a short delay
 	time.Sleep(100 * time.Millisecond) // Simulate work
 
 	session.mu.Lock()
 	session.Status = StatusIdle
 	session.LastSync = time.Now()
 	session.mu.Unlock()
+
+	// Emit completion
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		"Initial sync completed",
+	)
+}
+
+// scanDirectory recursively scans a directory and returns file count and total size
+func (se *SyncEngine) scanDirectory(path string) (int, int64, error) {
+	var totalFiles int
+	var totalBytes int64
+
+	err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			// Skip files that can't be accessed
+			return nil
+		}
+
+		// Skip directories (only count files)
+		if !info.IsDir() {
+			totalFiles++
+			totalBytes += info.Size()
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to scan directory: %w", err)
+	}
+
+	return totalFiles, totalBytes, nil
+}
+
+// emitPeriodicProgress emits progress updates at regular intervals
+func (se *SyncEngine) emitPeriodicProgress() {
+	ticker := time.NewTicker(2 * time.Second) // Emit progress every 2 seconds
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-se.ctx.Done():
+			return
+		case <-ticker.C:
+			se.mu.RLock()
+			for _, session := range se.activeSyncs {
+				if session.Status == StatusSyncing {
+					// Emit current progress for active sessions
+					session.UpdateAndEmitProgress(
+						session.Progress.FilesProcessed,
+						session.Progress.TotalFiles,
+						session.Progress.BytesTransferred,
+						session.Progress.TotalBytes,
+						session.Progress.CurrentOperation,
+					)
+				}
+			}
+			se.mu.RUnlock()
+		}
+	}
 }
 
 // processSyncOperations processes queued sync operations
@@ -569,9 +776,18 @@ func (se *SyncEngine) executeSyncOperation(op SyncOperation) {
 		return
 	}
 
-	// Update operation status
+	// Update operation status and emit progress
 	op.Status = OpStatusRunning
 	se.stateStore.AddToHistory(session.SyncID, op)
+	
+	// Update progress to show current operation
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		fmt.Sprintf("Processing: %s", filepath.Base(op.LocalPath)),
+	)
 
 	// Execute based on operation type
 	var err error
@@ -612,9 +828,39 @@ func (se *SyncEngine) executeSyncOperation(op SyncOperation) {
 			se.updateStats(func(stats *SyncEngineStats) {
 				stats.TotalErrors++
 			})
+			
+			// Update failed operations counter and emit progress
+			session.mu.Lock()
+			session.Progress.FailedOperations++
+			session.mu.Unlock()
+			
+			// Report error through progress reporter
+			session.EmitError(err, fmt.Sprintf("Operation failed: %s", op.Type))
+			
+			session.UpdateAndEmitProgress(
+				session.Progress.FilesProcessed,
+				session.Progress.TotalFiles,
+				session.Progress.BytesTransferred,
+				session.Progress.TotalBytes,
+				fmt.Sprintf("Failed: %s", filepath.Base(op.LocalPath)),
+			)
 		}
 	} else {
 		op.Status = OpStatusCompleted
+		
+		// Update completion counters
+		session.mu.Lock()
+		session.Progress.CompletedOperations++
+		session.mu.Unlock()
+		
+		// Emit progress for completed operation
+		session.UpdateAndEmitProgress(
+			session.Progress.FilesProcessed,
+			session.Progress.TotalFiles,
+			session.Progress.BytesTransferred,
+			session.Progress.TotalBytes,
+			"Operation completed",
+		)
 	}
 
 	// Update state store
@@ -650,6 +896,18 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 		// For directories, we don't need to upload content, just ensure remote directory exists
 		// This would be handled by the directory structure sync
 		fmt.Printf("Directory sync: %s -> %s\n", op.LocalPath, op.RemotePath)
+		
+		// Update progress for directory processing
+		session.mu.Lock()
+		session.Progress.FilesProcessed++
+		session.mu.Unlock()
+		session.UpdateAndEmitProgress(
+			session.Progress.FilesProcessed,
+			session.Progress.TotalFiles,
+			session.Progress.BytesTransferred,
+			session.Progress.TotalBytes,
+			fmt.Sprintf("Created directory: %s", filepath.Base(op.LocalPath)),
+		)
 		return nil
 	}
 
@@ -660,8 +918,18 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 	}
 	defer file.Close()
 
-	// Extract filename from path
+	// Extract filename from path and get file size
 	filename := filepath.Base(op.LocalPath)
+	fileSize := fileInfo.Size()
+
+	// Update progress before upload
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		fmt.Sprintf("Uploading: %s", filename),
+	)
 
 	// Upload file using NoiseFS client
 	ctx := context.Background()
@@ -669,6 +937,20 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 	if err != nil {
 		return fmt.Errorf("failed to upload file %s to NoiseFS: %w", op.LocalPath, err)
 	}
+
+	// Update progress after successful upload
+	session.mu.Lock()
+	session.Progress.FilesProcessed++
+	session.Progress.BytesTransferred += fileSize
+	session.mu.Unlock()
+	
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		fmt.Sprintf("Uploaded: %s", filename),
+	)
 
 	fmt.Printf("Successfully uploaded: %s -> %s (CID: %s)\n", op.LocalPath, op.RemotePath, descriptorCID)
 
@@ -691,6 +973,15 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 		// No noisefs:// prefix, might be a direct CID or need state lookup
 		return fmt.Errorf("cannot determine descriptor CID for remote path: %s", op.RemotePath)
 	}
+
+	// Update progress before download
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		fmt.Sprintf("Downloading: %s", filepath.Base(op.LocalPath)),
+	)
 
 	// Ensure local directory exists
 	if err := os.MkdirAll(filepath.Dir(op.LocalPath), 0755); err != nil {
@@ -715,6 +1006,20 @@ func (se *SyncEngine) executeDownload(session *SyncSession, op SyncOperation) er
 	if err := os.WriteFile(targetPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write downloaded file to %s: %w", targetPath, err)
 	}
+
+	// Update progress after successful download
+	session.mu.Lock()
+	session.Progress.FilesProcessed++
+	session.Progress.BytesTransferred += int64(len(data))
+	session.mu.Unlock()
+	
+	session.UpdateAndEmitProgress(
+		session.Progress.FilesProcessed,
+		session.Progress.TotalFiles,
+		session.Progress.BytesTransferred,
+		session.Progress.TotalBytes,
+		fmt.Sprintf("Downloaded: %s", filename),
+	)
 
 	fmt.Printf("Successfully downloaded: %s -> %s (filename: %s)\n", op.RemotePath, targetPath, filename)
 

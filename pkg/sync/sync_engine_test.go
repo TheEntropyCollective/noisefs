@@ -1,8 +1,11 @@
 package sync
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/TheEntropyCollective/noisefs/pkg/core/streaming"
 )
 
 func TestSyncEngine_Basic(t *testing.T) {
@@ -53,6 +56,254 @@ func TestSyncSession_StatusManagement(t *testing.T) {
 	session.Status = StatusPaused
 	if session.Status != StatusPaused {
 		t.Errorf("Expected status %s, got %s", StatusPaused, session.Status)
+	}
+}
+
+// TestSyncProgress_UpdateProgress tests the enhanced progress update functionality
+func TestSyncProgress_UpdateProgress(t *testing.T) {
+	progress := &SyncProgress{
+		StartTime: time.Now().Add(-10 * time.Second),
+	}
+
+	// Test initial update
+	progress.UpdateProgress(5, 10, 1000, 2000, "Processing files")
+
+	if progress.FilesProcessed != 5 {
+		t.Errorf("Expected FilesProcessed 5, got %d", progress.FilesProcessed)
+	}
+	if progress.TotalFiles != 10 {
+		t.Errorf("Expected TotalFiles 10, got %d", progress.TotalFiles)
+	}
+	if progress.BytesTransferred != 1000 {
+		t.Errorf("Expected BytesTransferred 1000, got %d", progress.BytesTransferred)
+	}
+	if progress.TotalBytes != 2000 {
+		t.Errorf("Expected TotalBytes 2000, got %d", progress.TotalBytes)
+	}
+	if progress.CurrentOperation != "Processing files" {
+		t.Errorf("Expected CurrentOperation 'Processing files', got %s", progress.CurrentOperation)
+	}
+
+	// Check percentage calculation
+	expectedPercent := float64(1000) / float64(2000) * 100
+	if progress.PercentComplete != expectedPercent {
+		t.Errorf("Expected PercentComplete %.1f, got %.1f", expectedPercent, progress.PercentComplete)
+	}
+
+	// Check throughput calculation
+	if progress.CurrentThroughput <= 0 {
+		t.Errorf("Expected positive CurrentThroughput, got %f", progress.CurrentThroughput)
+	}
+
+	// Check that LastUpdateTime was set
+	if progress.LastUpdateTime.IsZero() {
+		t.Error("Expected LastUpdateTime to be set")
+	}
+}
+
+// TestSyncProgress_GetProgressInfo tests conversion to streaming.ProgressInfo
+func TestSyncProgress_GetProgressInfo(t *testing.T) {
+	startTime := time.Now().Add(-5 * time.Second)
+	progress := &SyncProgress{
+		FilesProcessed:      3,
+		TotalFiles:          6,
+		BytesTransferred:    750,
+		TotalBytes:          1500,
+		PercentComplete:     50.0,
+		CurrentThroughput:   150.0,
+		CurrentOperation:    "Uploading file.txt",
+		StartTime:           startTime,
+		LastUpdateTime:      time.Now(),
+		EstimatedCompletion: 5 * time.Second,
+		CompletedOperations: 2,
+		FailedOperations:    1,
+		TotalOperations:     6,
+	}
+
+	progressInfo := progress.GetProgressInfo()
+
+	if progressInfo.Stage != "Uploading file.txt" {
+		t.Errorf("Expected Stage 'Uploading file.txt', got %s", progressInfo.Stage)
+	}
+	if progressInfo.BytesProcessed != 750 {
+		t.Errorf("Expected BytesProcessed 750, got %d", progressInfo.BytesProcessed)
+	}
+	if progressInfo.TotalBytes != 1500 {
+		t.Errorf("Expected TotalBytes 1500, got %d", progressInfo.TotalBytes)
+	}
+	if progressInfo.BlocksProcessed != 3 {
+		t.Errorf("Expected BlocksProcessed 3, got %d", progressInfo.BlocksProcessed)
+	}
+	if progressInfo.TotalBlocks != 6 {
+		t.Errorf("Expected TotalBlocks 6, got %d", progressInfo.TotalBlocks)
+	}
+	if progressInfo.Throughput != 150.0 {
+		t.Errorf("Expected Throughput 150.0, got %f", progressInfo.Throughput)
+	}
+	if progressInfo.ETA != 5*time.Second {
+		t.Errorf("Expected ETA 5s, got %s", progressInfo.ETA)
+	}
+	if progressInfo.ErrorCount != 1 {
+		t.Errorf("Expected ErrorCount 1, got %d", progressInfo.ErrorCount)
+	}
+
+	// Check additional info
+	if progressInfo.AdditionalInfo["percent_complete"] != 50.0 {
+		t.Errorf("Expected percent_complete 50.0, got %v", progressInfo.AdditionalInfo["percent_complete"])
+	}
+	if progressInfo.AdditionalInfo["operations_completed"] != 2 {
+		t.Errorf("Expected operations_completed 2, got %v", progressInfo.AdditionalInfo["operations_completed"])
+	}
+}
+
+// MockProgressReporter implements streaming.ProgressReporter for testing
+type MockProgressReporter struct {
+	progressReports []streaming.ProgressInfo
+	errorReports    []error
+	totalSet        bool
+	totalBytes      int64
+	totalBlocks     int
+	cancelled       bool
+	cancelReason    string
+	completed       bool
+	completedInfo   streaming.ProgressInfo
+}
+
+func (m *MockProgressReporter) ReportProgress(info streaming.ProgressInfo) {
+	m.progressReports = append(m.progressReports, info)
+}
+
+func (m *MockProgressReporter) ReportError(err error, context string) {
+	m.errorReports = append(m.errorReports, err)
+}
+
+func (m *MockProgressReporter) SetTotal(totalBytes int64, totalBlocks int) {
+	m.totalSet = true
+	m.totalBytes = totalBytes
+	m.totalBlocks = totalBlocks
+}
+
+func (m *MockProgressReporter) Complete(finalInfo streaming.ProgressInfo) {
+	m.completed = true
+	m.completedInfo = finalInfo
+}
+
+func (m *MockProgressReporter) Cancel(reason string) {
+	m.cancelled = true
+	m.cancelReason = reason
+}
+
+// TestSyncProgress_EmitProgress tests progress emission through reporter
+func TestSyncProgress_EmitProgress(t *testing.T) {
+	mockReporter := &MockProgressReporter{}
+	
+	progress := &SyncProgress{
+		FilesProcessed:   2,
+		TotalFiles:       5,
+		BytesTransferred: 1000,
+		TotalBytes:       2500,
+		CurrentOperation: "Syncing files",
+		StartTime:        time.Now().Add(-2 * time.Second),
+		LastUpdateTime:   time.Now(),
+	}
+
+	// Test emission
+	progress.EmitProgress(mockReporter)
+
+	// Check that total was set
+	if !mockReporter.totalSet {
+		t.Error("Expected SetTotal to be called")
+	}
+	if mockReporter.totalBytes != 2500 {
+		t.Errorf("Expected totalBytes 2500, got %d", mockReporter.totalBytes)
+	}
+	if mockReporter.totalBlocks != 5 {
+		t.Errorf("Expected totalBlocks 5, got %d", mockReporter.totalBlocks)
+	}
+
+	// Check that progress was reported
+	if len(mockReporter.progressReports) != 1 {
+		t.Errorf("Expected 1 progress report, got %d", len(mockReporter.progressReports))
+	}
+
+	report := mockReporter.progressReports[0]
+	if report.Stage != "Syncing files" {
+		t.Errorf("Expected Stage 'Syncing files', got %s", report.Stage)
+	}
+	if report.BytesProcessed != 1000 {
+		t.Errorf("Expected BytesProcessed 1000, got %d", report.BytesProcessed)
+	}
+}
+
+// TestSyncSession_UpdateAndEmitProgress tests session progress updates
+func TestSyncSession_UpdateAndEmitProgress(t *testing.T) {
+	mockReporter := &MockProgressReporter{}
+	
+	session := &SyncSession{
+		SyncID:           "test-sync",
+		ProgressReporter: mockReporter,
+		Progress: &SyncProgress{
+			StartTime: time.Now().Add(-1 * time.Second),
+		},
+	}
+
+	// Test update and emit
+	session.UpdateAndEmitProgress(3, 10, 1500, 5000, "Processing files")
+
+	// Check that progress was updated
+	if session.Progress.FilesProcessed != 3 {
+		t.Errorf("Expected FilesProcessed 3, got %d", session.Progress.FilesProcessed)
+	}
+	if session.Progress.CurrentOperation != "Processing files" {
+		t.Errorf("Expected CurrentOperation 'Processing files', got %s", session.Progress.CurrentOperation)
+	}
+
+	// Check that progress was emitted
+	if len(mockReporter.progressReports) != 1 {
+		t.Errorf("Expected 1 progress report, got %d", len(mockReporter.progressReports))
+	}
+}
+
+// TestSyncSession_EmitCancellation tests cancellation reporting
+func TestSyncSession_EmitCancellation(t *testing.T) {
+	mockReporter := &MockProgressReporter{}
+	
+	session := &SyncSession{
+		SyncID:           "test-sync",
+		ProgressReporter: mockReporter,
+	}
+
+	// Test cancellation emission
+	session.EmitCancellation("User requested stop")
+
+	// Check that cancellation was reported
+	if !mockReporter.cancelled {
+		t.Error("Expected cancellation to be reported")
+	}
+	if mockReporter.cancelReason != "User requested stop" {
+		t.Errorf("Expected cancel reason 'User requested stop', got %s", mockReporter.cancelReason)
+	}
+}
+
+// TestSyncSession_EmitError tests error reporting
+func TestSyncSession_EmitError(t *testing.T) {
+	mockReporter := &MockProgressReporter{}
+	
+	session := &SyncSession{
+		SyncID:           "test-sync",
+		ProgressReporter: mockReporter,
+	}
+
+	// Test error emission
+	testErr := fmt.Errorf("test error")
+	session.EmitError(testErr, "test context")
+
+	// Check that error was reported
+	if len(mockReporter.errorReports) != 1 {
+		t.Errorf("Expected 1 error report, got %d", len(mockReporter.errorReports))
+	}
+	if mockReporter.errorReports[0].Error() != "test error" {
+		t.Errorf("Expected error 'test error', got %s", mockReporter.errorReports[0].Error())
 	}
 }
 
