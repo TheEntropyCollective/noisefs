@@ -202,12 +202,46 @@ func handleSyncStatus(args []string, storageManager *storage.Manager, quiet bool
 
 			if session.Progress != nil {
 				fmt.Printf("\nProgress:\n")
-				fmt.Printf("  Total Operations: %d\n", session.Progress.TotalOperations)
-				fmt.Printf("  Completed: %d\n", session.Progress.CompletedOperations)
-				fmt.Printf("  Failed: %d\n", session.Progress.FailedOperations)
-				fmt.Printf("  Current: %s\n", session.Progress.CurrentOperation)
+				
+				// File progress
+				if session.Progress.TotalFiles > 0 {
+					fmt.Printf("  Files: %d/%d (%.1f%%)\n", 
+						session.Progress.FilesProcessed, 
+						session.Progress.TotalFiles,
+						session.Progress.PercentComplete)
+				}
+				
+				// Byte progress with human-readable format
+				if session.Progress.TotalBytes > 0 {
+					fmt.Printf("  Data: %s/%s\n", 
+						formatBytes(session.Progress.BytesTransferred),
+						formatBytes(session.Progress.TotalBytes))
+				}
+				
+				// Throughput
+				if session.Progress.CurrentThroughput > 0 {
+					fmt.Printf("  Speed: %s/s\n", formatBytes(int64(session.Progress.CurrentThroughput)))
+				}
+				
+				// Operations
+				fmt.Printf("  Operations: %d completed, %d failed\n", 
+					session.Progress.CompletedOperations, 
+					session.Progress.FailedOperations)
+				
+				// Current operation
+				if session.Progress.CurrentOperation != "" {
+					fmt.Printf("  Current: %s\n", session.Progress.CurrentOperation)
+				}
+				
+				// Time estimates
 				if session.Progress.EstimatedCompletion > 0 {
-					fmt.Printf("  Estimated Completion: %s\n", session.Progress.EstimatedCompletion)
+					fmt.Printf("  ETA: %s\n", formatDuration(session.Progress.EstimatedCompletion))
+				}
+				
+				// Elapsed time
+				if !session.Progress.StartTime.IsZero() {
+					elapsed := time.Since(session.Progress.StartTime)
+					fmt.Printf("  Elapsed: %s\n", formatDuration(elapsed))
 				}
 			}
 		}
@@ -494,3 +528,4 @@ type SyncActionResult struct {
 	Success   bool      `json:"success"`
 	Timestamp time.Time `json:"timestamp"`
 }
+
