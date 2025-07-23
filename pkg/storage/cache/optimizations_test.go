@@ -13,7 +13,7 @@ func TestReadAheadCache(t *testing.T) {
 	// Create underlying cache
 	underlying := NewMemoryCache(100)
 	logger := logging.NewLogger(logging.DefaultConfig())
-	
+
 	// Create read-ahead cache
 	config := ReadAheadConfig{
 		ReadAheadSize:  4,
@@ -23,14 +23,14 @@ func TestReadAheadCache(t *testing.T) {
 	}
 	cache := NewReadAheadCache(underlying, config, logger)
 	defer cache.Close()
-	
+
 	// Test basic operations
 	block := &blocks.Block{}
 	err := cache.Store("test1", block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
-	
+
 	// Test retrieval
 	retrieved, err := cache.Get("test1")
 	if err != nil {
@@ -39,7 +39,7 @@ func TestReadAheadCache(t *testing.T) {
 	if retrieved != block {
 		t.Error("Retrieved block doesn't match stored block")
 	}
-	
+
 	// Test statistics
 	stats := cache.GetStats()
 	if stats.ReadAheadHits != 1 {
@@ -51,7 +51,7 @@ func TestWriteBackCache(t *testing.T) {
 	// Create underlying cache
 	underlying := NewMemoryCache(100)
 	logger := logging.NewLogger(logging.DefaultConfig())
-	
+
 	// Create write-back cache
 	config := WriteBackConfig{
 		BufferSize:    10,
@@ -60,14 +60,14 @@ func TestWriteBackCache(t *testing.T) {
 	}
 	cache := NewWriteBackCache(underlying, config, logger)
 	defer cache.Close()
-	
+
 	// Test buffered write
 	block := &blocks.Block{}
 	err := cache.Store("test1", block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
-	
+
 	// Test immediate retrieval from buffer
 	retrieved, err := cache.Get("test1")
 	if err != nil {
@@ -76,10 +76,10 @@ func TestWriteBackCache(t *testing.T) {
 	if retrieved != block {
 		t.Error("Retrieved block doesn't match stored block")
 	}
-	
+
 	// Wait for flush
 	time.Sleep(200 * time.Millisecond)
-	
+
 	// Test statistics
 	stats := cache.GetStats()
 	if stats.BufferedWrites != 1 {
@@ -90,15 +90,15 @@ func TestWriteBackCache(t *testing.T) {
 func TestLRUEvictionPolicy(t *testing.T) {
 	policy := NewLRUEvictionPolicy()
 	block := &blocks.Block{}
-	
+
 	// Add some blocks
 	policy.OnStore("block1", block)
 	policy.OnStore("block2", block)
 	policy.OnStore("block3", block)
-	
+
 	// Access block1 to make it most recent
 	policy.OnAccess("block1")
-	
+
 	// Select victim (should be block2, oldest)
 	victim, ok := policy.SelectVictim()
 	if !ok {
@@ -112,17 +112,17 @@ func TestLRUEvictionPolicy(t *testing.T) {
 func TestLFUEvictionPolicy(t *testing.T) {
 	policy := NewLFUEvictionPolicy()
 	block := &blocks.Block{}
-	
+
 	// Add some blocks
 	policy.OnStore("block1", block)
 	policy.OnStore("block2", block)
 	policy.OnStore("block3", block)
-	
+
 	// Access block1 multiple times
 	policy.OnAccess("block1")
 	policy.OnAccess("block1")
 	policy.OnAccess("block2")
-	
+
 	// Select victim (should be block3, least frequent)
 	victim, ok := policy.SelectVictim()
 	if !ok {
@@ -136,13 +136,13 @@ func TestLFUEvictionPolicy(t *testing.T) {
 func TestTTLEvictionPolicy(t *testing.T) {
 	policy := NewTTLEvictionPolicy(50 * time.Millisecond)
 	block := &blocks.Block{}
-	
+
 	// Add a block
 	policy.OnStore("block1", block)
-	
+
 	// Wait for expiration
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Select victim (should be block1, expired)
 	victim, ok := policy.SelectVictim()
 	if !ok {
@@ -158,29 +158,29 @@ func TestEvictingCache(t *testing.T) {
 	underlying := NewMemoryCache(3) // Small capacity
 	policy := NewLRUEvictionPolicy()
 	logger := logging.NewLogger(logging.DefaultConfig())
-	
+
 	// Create evicting cache
 	cache := NewEvictingCache(underlying, policy, 3, logger)
-	
+
 	block := &blocks.Block{}
-	
+
 	// Fill cache to capacity
 	cache.Store("block1", block)
 	cache.Store("block2", block)
 	cache.Store("block3", block)
-	
+
 	if cache.Size() != 3 {
 		t.Errorf("Expected cache size 3, got %d", cache.Size())
 	}
-	
+
 	// Add one more block (should trigger eviction)
 	cache.Store("block4", block)
-	
+
 	// Cache should still be at capacity
 	if cache.Size() != 3 {
 		t.Errorf("Expected cache size 3 after eviction, got %d", cache.Size())
 	}
-	
+
 	// block1 should have been evicted (LRU)
 	if cache.Has("block1") {
 		t.Error("Expected block1 to be evicted")
@@ -191,30 +191,30 @@ func TestStatisticsCache(t *testing.T) {
 	// Create underlying cache
 	underlying := NewMemoryCache(100)
 	logger := logging.NewLogger(logging.DefaultConfig())
-	
+
 	// Create statistics cache
 	cache := NewStatisticsCache(underlying, logger)
-	
+
 	block := &blocks.Block{}
-	
+
 	// Test store operation
 	err := cache.Store("test1", block)
 	if err != nil {
 		t.Fatalf("Failed to store block: %v", err)
 	}
-	
+
 	// Test hit
 	_, err = cache.Get("test1")
 	if err != nil {
 		t.Fatalf("Failed to get block: %v", err)
 	}
-	
+
 	// Test miss
 	_, err = cache.Get("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent block")
 	}
-	
+
 	// Check statistics
 	stats := cache.GetDetailedStats().GetSnapshot()
 	if stats.Stores != 1 {
@@ -236,17 +236,17 @@ func TestStatisticsCache(t *testing.T) {
 
 func TestCacheStatsJSON(t *testing.T) {
 	stats := NewCacheStats()
-	
+
 	// Record some operations
 	stats.RecordHit("test1", time.Millisecond)
 	stats.RecordMiss("test2", 2*time.Millisecond)
-	
+
 	// Test JSON serialization
 	jsonData, err := stats.ToJSON()
 	if err != nil {
 		t.Fatalf("Failed to serialize stats to JSON: %v", err)
 	}
-	
+
 	if len(jsonData) == 0 {
 		t.Error("Expected non-empty JSON data")
 	}
@@ -255,25 +255,25 @@ func TestCacheStatsJSON(t *testing.T) {
 func TestAdaptiveEvictionPolicy(t *testing.T) {
 	logger := logging.NewLogger(logging.DefaultConfig())
 	policy := NewAdaptiveEvictionPolicy(logger)
-	
+
 	block := &blocks.Block{}
-	
+
 	// Add some blocks
 	policy.OnStore("block1", block)
 	policy.OnStore("block2", block)
 	policy.OnStore("block3", block)
-	
+
 	// Access patterns
 	policy.OnAccess("block1")
 	policy.OnAccess("block1")
 	policy.OnAccess("block2")
-	
+
 	// Select victim
 	victim, ok := policy.SelectVictim()
 	if !ok {
 		t.Error("Expected victim to be found")
 	}
-	
+
 	// Should return some victim (exact choice depends on policy weights)
 	if victim == "" {
 		t.Error("Expected non-empty victim CID")
@@ -291,9 +291,9 @@ func BenchmarkReadAheadCache(b *testing.B) {
 	}
 	cache := NewReadAheadCache(underlying, config, logger)
 	defer cache.Close()
-	
+
 	block := &blocks.Block{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("block%d", i%100)
@@ -312,9 +312,9 @@ func BenchmarkWriteBackCache(b *testing.B) {
 	}
 	cache := NewWriteBackCache(underlying, config, logger)
 	defer cache.Close()
-	
+
 	block := &blocks.Block{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("block%d", i)
@@ -327,9 +327,9 @@ func BenchmarkEvictingCache(b *testing.B) {
 	policy := NewLRUEvictionPolicy()
 	logger := logging.NewLogger(logging.DefaultConfig())
 	cache := NewEvictingCache(underlying, policy, 500, logger)
-	
+
 	block := &blocks.Block{}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("block%d", i)

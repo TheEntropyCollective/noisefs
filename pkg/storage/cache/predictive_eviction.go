@@ -19,15 +19,15 @@ type AccessPattern struct {
 type PredictiveEvictor struct {
 	// Access patterns for prediction
 	patterns map[string]*AccessPattern
-	
+
 	// Configuration
-	predictionWindow   time.Duration
-	updateInterval     time.Duration
-	preEvictThreshold  float64 // Utilization threshold to start pre-eviction
-	
+	predictionWindow  time.Duration
+	updateInterval    time.Duration
+	preEvictThreshold float64 // Utilization threshold to start pre-eviction
+
 	// Prediction model (simplified)
 	hourlyAverages [24]float64 // Average access rate by hour
-	
+
 	// State
 	lastUpdate time.Time
 	mu         sync.RWMutex
@@ -54,7 +54,7 @@ func NewPredictiveEvictor(config *PredictiveEvictorConfig) *PredictiveEvictor {
 	if config == nil {
 		config = DefaultPredictiveEvictorConfig()
 	}
-	
+
 	return &PredictiveEvictor{
 		patterns:          make(map[string]*AccessPattern),
 		predictionWindow:  config.PredictionWindow,
@@ -68,7 +68,7 @@ func NewPredictiveEvictor(config *PredictiveEvictorConfig) *PredictiveEvictor {
 func (pe *PredictiveEvictor) RecordAccess(blockID string, accessTime time.Time) {
 	pe.mu.Lock()
 	defer pe.mu.Unlock()
-	
+
 	pattern, exists := pe.patterns[blockID]
 	if !exists {
 		pattern = &AccessPattern{
@@ -78,20 +78,20 @@ func (pe *PredictiveEvictor) RecordAccess(blockID string, accessTime time.Time) 
 		}
 		pe.patterns[blockID] = pattern
 	}
-	
+
 	pattern.AccessTimes = append(pattern.AccessTimes, accessTime)
-	
+
 	// Sort access times to ensure chronological order
 	sort.Slice(pattern.AccessTimes, func(i, j int) bool {
 		return pattern.AccessTimes[i].Before(pattern.AccessTimes[j])
 	})
-	
+
 	hour := accessTime.Hour()
 	pattern.AccessCounts[hour]++
-	
+
 	// Update hourly averages
 	pe.updateHourlyAverages()
-	
+
 	// Clean old access times
 	cutoff := time.Now().Add(-pe.predictionWindow)
 	newTimes := make([]time.Time, 0)
@@ -107,31 +107,31 @@ func (pe *PredictiveEvictor) RecordAccess(blockID string, accessTime time.Time) 
 func (pe *PredictiveEvictor) PredictNextAccess(blockID string) (time.Time, float64) {
 	pe.mu.RLock()
 	defer pe.mu.RUnlock()
-	
+
 	pattern, exists := pe.patterns[blockID]
 	if !exists || len(pattern.AccessTimes) == 0 {
 		// No history, use average prediction
 		return pe.predictFromAverage(), 0.1
 	}
-	
+
 	// Simple prediction based on access intervals
 	intervals := pe.calculateIntervals(pattern.AccessTimes)
 	if len(intervals) == 0 {
 		return pe.predictFromAverage(), 0.2
 	}
-	
+
 	// Calculate average interval
 	avgInterval := pe.averageInterval(intervals)
-	
+
 	// Predict next access
 	lastAccess := pattern.AccessTimes[len(pattern.AccessTimes)-1]
 	now := time.Now()
-	
+
 	// If last access was recent, predict avgInterval from last access
 	// Otherwise, predict from now
 	var predictedTime time.Time
 	timeSinceLastAccess := now.Sub(lastAccess)
-	
+
 	if timeSinceLastAccess < avgInterval {
 		// Next access is avgInterval from last access
 		predictedTime = lastAccess.Add(avgInterval)
@@ -139,14 +139,14 @@ func (pe *PredictiveEvictor) PredictNextAccess(blockID string) (time.Time, float
 		// We've already passed the expected time, predict soon
 		predictedTime = now.Add(avgInterval / 4)
 	}
-	
+
 	// Calculate confidence based on interval variance
 	variance := pe.calculateVariance(intervals, avgInterval)
 	// Use exponential decay for confidence based on variance
 	// Higher variance = much lower confidence
 	confidence := math.Exp(-variance)
 	confidence = math.Min(1.0, math.Max(0.0, confidence))
-	
+
 	return predictedTime, confidence
 }
 
@@ -154,26 +154,26 @@ func (pe *PredictiveEvictor) PredictNextAccess(blockID string) (time.Time, float
 func (pe *PredictiveEvictor) GetEvictionCandidates(blocks map[string]*BlockMetadata, count int) []string {
 	pe.mu.RLock()
 	defer pe.mu.RUnlock()
-	
+
 	type prediction struct {
-		blockID      string
-		nextAccess   time.Time
-		confidence   float64
-		score        float64
+		blockID    string
+		nextAccess time.Time
+		confidence float64
+		score      float64
 	}
-	
+
 	predictions := make([]prediction, 0, len(blocks))
 	now := time.Now()
-	
+
 	for blockID := range blocks {
 		nextAccess, confidence := pe.PredictNextAccess(blockID)
-		
+
 		// Calculate score (higher = more likely to evict)
 		timeUntilAccess := nextAccess.Sub(now).Hours()
 		if timeUntilAccess < 0 {
 			timeUntilAccess = 0
 		}
-		
+
 		// Score based on time until access and confidence
 		// Higher score = more likely to evict
 		// Blocks with longer time until access should have higher scores
@@ -183,7 +183,7 @@ func (pe *PredictiveEvictor) GetEvictionCandidates(blocks map[string]*BlockMetad
 			// Low confidence - reduce score to avoid premature eviction
 			score *= 0.5
 		}
-		
+
 		predictions = append(predictions, prediction{
 			blockID:    blockID,
 			nextAccess: nextAccess,
@@ -191,7 +191,7 @@ func (pe *PredictiveEvictor) GetEvictionCandidates(blocks map[string]*BlockMetad
 			score:      score,
 		})
 	}
-	
+
 	// Sort by score (descending - blocks with longest time until access first)
 	for i := 0; i < len(predictions); i++ {
 		for j := i + 1; j < len(predictions); j++ {
@@ -200,13 +200,13 @@ func (pe *PredictiveEvictor) GetEvictionCandidates(blocks map[string]*BlockMetad
 			}
 		}
 	}
-	
+
 	// Return top candidates
 	candidates := make([]string, 0, count)
 	for i := 0; i < len(predictions) && i < count; i++ {
 		candidates = append(candidates, predictions[i].blockID)
 	}
-	
+
 	return candidates
 }
 
@@ -220,12 +220,12 @@ func (pe *PredictiveEvictor) GetPreEvictionSize(currentUtilization float64, tota
 	if currentUtilization < pe.preEvictThreshold {
 		return 0
 	}
-	
+
 	// Pre-evict to bring utilization to 75%
 	targetUtilization := 0.75
 	currentSize := int64(currentUtilization * float64(totalCapacity))
 	targetSize := int64(targetUtilization * float64(totalCapacity))
-	
+
 	return currentSize - targetSize
 }
 
@@ -236,11 +236,11 @@ func (pe *PredictiveEvictor) updateHourlyAverages() {
 	for i := range pe.hourlyAverages {
 		pe.hourlyAverages[i] = 0
 	}
-	
+
 	// Calculate new averages
 	totalByHour := make(map[int]int)
 	patternCount := 0
-	
+
 	for _, pattern := range pe.patterns {
 		if len(pattern.AccessTimes) > 0 {
 			patternCount++
@@ -249,7 +249,7 @@ func (pe *PredictiveEvictor) updateHourlyAverages() {
 			}
 		}
 	}
-	
+
 	if patternCount > 0 {
 		for hour, total := range totalByHour {
 			pe.hourlyAverages[hour] = float64(total) / float64(patternCount)
@@ -261,12 +261,12 @@ func (pe *PredictiveEvictor) calculateIntervals(times []time.Time) []time.Durati
 	if len(times) < 2 {
 		return nil
 	}
-	
+
 	intervals := make([]time.Duration, len(times)-1)
 	for i := 1; i < len(times); i++ {
 		intervals[i-1] = times[i].Sub(times[i-1])
 	}
-	
+
 	return intervals
 }
 
@@ -274,12 +274,12 @@ func (pe *PredictiveEvictor) averageInterval(intervals []time.Duration) time.Dur
 	if len(intervals) == 0 {
 		return time.Hour // Default
 	}
-	
+
 	total := time.Duration(0)
 	for _, interval := range intervals {
 		total += interval
 	}
-	
+
 	return total / time.Duration(len(intervals))
 }
 
@@ -287,39 +287,39 @@ func (pe *PredictiveEvictor) calculateVariance(intervals []time.Duration, mean t
 	if len(intervals) < 2 {
 		return 10.0 // High variance for insufficient data
 	}
-	
+
 	variance := 0.0
 	meanSeconds := mean.Seconds()
-	
+
 	// Prevent division by zero
 	if meanSeconds == 0 {
 		return 10.0
 	}
-	
+
 	for _, interval := range intervals {
 		diff := interval.Seconds() - meanSeconds
 		variance += diff * diff
 	}
-	
+
 	variance /= float64(len(intervals))
 	coeffVariation := math.Sqrt(variance) / meanSeconds
-	
+
 	// For highly irregular patterns, return high variance
 	if coeffVariation > 1.0 {
 		return coeffVariation * 10.0
 	}
-	
+
 	return coeffVariation
 }
 
 func (pe *PredictiveEvictor) predictFromAverage() time.Time {
 	now := time.Now()
 	currentHour := now.Hour()
-	
+
 	// Find next hour with high average access
 	maxAvg := 0.0
 	nextHour := (currentHour + 1) % 24
-	
+
 	for i := 1; i <= 24; i++ {
 		hour := (currentHour + i) % 24
 		if pe.hourlyAverages[hour] > maxAvg {
@@ -327,18 +327,18 @@ func (pe *PredictiveEvictor) predictFromAverage() time.Time {
 			nextHour = hour
 		}
 	}
-	
+
 	// If no activity, predict 2 hours from now
 	if maxAvg == 0 {
 		return now.Add(2 * time.Hour)
 	}
-	
+
 	// Calculate time until that hour
 	hoursUntil := nextHour - currentHour
 	if hoursUntil <= 0 {
 		hoursUntil += 24
 	}
-	
+
 	// Return the beginning of that hour
 	nextTime := now.Add(time.Duration(hoursUntil) * time.Hour)
 	// Round to the start of the hour
@@ -367,7 +367,7 @@ func (pei *PredictiveEvictionIntegration) RecordBlockAccess(blockID string) {
 	if !pei.enabled {
 		return
 	}
-	
+
 	pei.predictor.RecordAccess(blockID, time.Now())
 }
 
@@ -375,40 +375,40 @@ func (pei *PredictiveEvictionIntegration) RecordBlockAccess(blockID string) {
 func (pei *PredictiveEvictionIntegration) PerformPreEviction() error {
 	pei.mu.Lock()
 	defer pei.mu.Unlock()
-	
+
 	if !pei.enabled {
 		return nil
 	}
-	
+
 	stats := pei.cache.GetAltruisticStats()
 	utilization := float64(stats.PersonalSize+stats.AltruisticSize) / float64(stats.TotalCapacity)
-	
+
 	if !pei.predictor.ShouldPreEvict(utilization) {
 		return nil
 	}
-	
+
 	// Get pre-eviction size
 	evictSize := pei.predictor.GetPreEvictionSize(utilization, stats.TotalCapacity)
 	if evictSize <= 0 {
 		return nil
 	}
-	
+
 	// Get eviction candidates
 	pei.cache.mu.RLock()
 	candidates := pei.predictor.GetEvictionCandidates(pei.cache.altruisticBlocks, 20)
 	pei.cache.mu.RUnlock()
-	
+
 	// Evict predicted blocks
 	evicted := int64(0)
 	for _, blockID := range candidates {
 		if evicted >= evictSize {
 			break
 		}
-		
+
 		pei.cache.mu.RLock()
 		metadata, exists := pei.cache.altruisticBlocks[blockID]
 		pei.cache.mu.RUnlock()
-		
+
 		if exists {
 			err := pei.cache.Remove(blockID)
 			if err == nil {
@@ -416,7 +416,7 @@ func (pei *PredictiveEvictionIntegration) PerformPreEviction() error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 

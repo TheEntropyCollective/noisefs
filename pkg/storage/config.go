@@ -112,7 +112,6 @@ type DistributionConfig struct {
 	LoadBalancing *LoadBalancingConfig `json:"load_balancing,omitempty" yaml:"load_balancing,omitempty"`
 }
 
-
 // SelectionConfig represents backend selection criteria
 type SelectionConfig struct {
 	// Prefer backends with these capabilities
@@ -156,7 +155,6 @@ type HealthCheckConfig struct {
 	// Health check timeout
 	Timeout time.Duration `json:"timeout" yaml:"timeout"`
 }
-
 
 // PerformanceConfig represents performance tuning configuration
 type PerformanceConfig struct {
@@ -365,7 +363,7 @@ func (bc *BackendConfig) Validate() error {
 		}
 	}
 
-	// Validate timeout configuration if present  
+	// Validate timeout configuration if present
 	if bc.Timeouts != nil {
 		if err := bc.Timeouts.Validate(); err != nil {
 			return NewInvalidRequestError(bc.Type, "timeout configuration invalid", err)
@@ -570,7 +568,6 @@ func (dc *DistributionConfig) Validate() error {
 	return nil
 }
 
-
 // Validate validates selection configuration
 func (sc *SelectionConfig) Validate() error {
 	if sc.CostWeight < 0 || sc.CostWeight > 1 {
@@ -639,10 +636,8 @@ func (hcc *HealthCheckConfig) Validate() error {
 		return NewInvalidRequestError("health_check", "timeout must be less than interval", nil)
 	}
 
-
 	return nil
 }
-
 
 // Validate validates performance configuration
 func (pc *PerformanceConfig) Validate() error {
@@ -659,14 +654,14 @@ func (pc *PerformanceConfig) Validate() error {
 		// Cache validation will depend on cache config structure
 	}
 
-	// Validate batch config if present - add placeholder methods if needed  
+	// Validate batch config if present - add placeholder methods if needed
 	if pc.Batch != nil {
 		// Batch validation will depend on batch config structure
 	}
 
 	// Validate compression config if present - add placeholder methods if needed
 	if pc.Compression != nil {
-		// Compression validation will depend on compression config structure  
+		// Compression validation will depend on compression config structure
 	}
 
 	return nil

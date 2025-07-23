@@ -7,19 +7,19 @@ import (
 	"math/rand"
 
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
+	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
-	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
 )
 
 // CreateTestStorageManager creates a pre-configured mock storage manager for testing
 func CreateTestStorageManager() *MockStorageManager {
 	manager := NewMockStorageManager()
-	
+
 	// Add a default mock backend
 	backend := NewMockBackend("ipfs")
 	manager.backends[manager.defaultBackend] = backend
-	
+
 	return manager
 }
 
@@ -30,10 +30,10 @@ func CreateRealTestStorageManager() (*storage.Manager, error) {
 		// Create a mock backend for testing
 		return NewMockBackend("mock"), nil
 	})
-	
+
 	config := storage.DefaultConfig()
 	config.Backends = make(map[string]*storage.BackendConfig)
-	
+
 	// Configure to use the mock backend type (which is in the supported list)
 	config.Backends["mock"] = &storage.BackendConfig{
 		Type:    "mock",
@@ -43,29 +43,29 @@ func CreateRealTestStorageManager() (*storage.Manager, error) {
 		},
 	}
 	config.DefaultBackend = "mock"
-	
+
 	manager, err := storage.NewManager(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create test storage manager: %w", err)
 	}
-	
+
 	// Start the manager
 	err = manager.Start(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to start test storage manager: %w", err)
 	}
-	
+
 	return manager, nil
 }
 
 // CreateTestStorageManagerWithBackends creates a mock storage manager with multiple backends
 func CreateTestStorageManagerWithBackends() *MockStorageManager {
 	manager := NewMockStorageManager()
-	
+
 	// Add multiple backends
 	manager.backends["ipfs"] = NewMockBackend("ipfs")
 	manager.backends["mock"] = NewMockBackend("mock")
-	
+
 	manager.defaultBackend = "ipfs"
 	return manager
 }
@@ -74,26 +74,26 @@ func CreateTestStorageManagerWithBackends() *MockStorageManager {
 func CreateTestStorageManagerWithData(blockCount int) (*MockStorageManager, map[string]*blocks.Block, error) {
 	manager := CreateTestStorageManager()
 	testBlocks := make(map[string]*blocks.Block)
-	
+
 	for i := 0; i < blockCount; i++ {
 		// Create test data
 		data := make([]byte, 1024) // 1KB blocks
 		cryptorand.Read(data)
-		
+
 		block, err := blocks.NewBlock(data)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create test block %d: %w", i, err)
 		}
-		
+
 		// Store the block
 		cid, err := manager.Store(context.Background(), block)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to store test block %d: %w", i, err)
 		}
-		
+
 		testBlocks[cid] = block
 	}
-	
+
 	return manager, testBlocks, nil
 }
 
@@ -102,7 +102,7 @@ func CreateTestNoiseClient() (*noisefs.Client, *storage.Manager, error) {
 	// Create a real storage manager with mock backend for compatibility
 	config := storage.DefaultConfig()
 	config.Backends = make(map[string]*storage.BackendConfig)
-	
+
 	// Configure to use mock storage which works well for testing
 	config.Backends["mock"] = &storage.BackendConfig{
 		Type: storage.BackendTypeMock,
@@ -111,24 +111,24 @@ func CreateTestNoiseClient() (*noisefs.Client, *storage.Manager, error) {
 		},
 	}
 	config.DefaultBackend = "mock"
-	
+
 	manager, err := storage.NewManager(config)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create test storage manager: %w", err)
 	}
-	
+
 	// Start the manager
 	err = manager.Start(context.Background())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to start test storage manager: %w", err)
 	}
-	
+
 	cache := cache.NewMemoryCache(100)
 	client, err := noisefs.NewClient(manager, cache)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create test NoiseFS client: %w", err)
 	}
-	
+
 	return client, manager, nil
 }
 
@@ -138,32 +138,32 @@ func CreateTestNoiseClientWithData(blockCount int) (*noisefs.Client, *storage.Ma
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	
+
 	cache := cache.NewMemoryCache(100)
 	client, err := noisefs.NewClient(manager, cache)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create test NoiseFS client: %w", err)
 	}
-	
+
 	// Pre-populate with test data
 	testBlocks := make(map[string]*blocks.Block)
 	for i := 0; i < blockCount; i++ {
 		data := make([]byte, 1024)
 		cryptorand.Read(data)
-		
+
 		block, err := blocks.NewBlock(data)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to create test block %d: %w", i, err)
 		}
-		
+
 		cid, err := client.StoreBlockWithCache(context.Background(), block)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to store test block %d: %w", i, err)
 		}
-		
+
 		testBlocks[cid] = block
 	}
-	
+
 	return client, manager, testBlocks, nil
 }
 
@@ -187,19 +187,19 @@ func (c *CorruptedMockStorageManager) Retrieve(ctx context.Context, cid string) 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Simulate corruption based on corruption rate
 	if rand.Float64() < c.corruptionRate {
 		// Corrupt the data by flipping a random bit
 		if len(block.Data) > 0 {
 			corruptedData := make([]byte, len(block.Data))
 			copy(corruptedData, block.Data)
-			
+
 			// Flip a random bit
 			byteIndex := rand.Intn(len(corruptedData))
 			bitIndex := rand.Intn(8)
 			corruptedData[byteIndex] ^= (1 << bitIndex)
-			
+
 			corruptedBlock, err := blocks.NewBlock(corruptedData)
 			if err != nil {
 				return nil, err
@@ -207,7 +207,7 @@ func (c *CorruptedMockStorageManager) Retrieve(ctx context.Context, cid string) 
 			return corruptedBlock, nil
 		}
 	}
-	
+
 	return block, nil
 }
 
@@ -221,12 +221,11 @@ func NewSlowMockStorageManager() *SlowMockStorageManager {
 	manager := CreateTestStorageManager()
 	// Set 100ms latency simulation
 	manager.SetLatencySimulation(100000000) // 100ms in nanoseconds
-	
+
 	return &SlowMockStorageManager{
 		MockStorageManager: manager,
 	}
 }
-
 
 // TestBlock creates a test block with specified data
 func CreateTestBlock(data []byte) (*blocks.Block, error) {
@@ -241,19 +240,19 @@ func CreateTestBlock(data []byte) (*blocks.Block, error) {
 // CreateTestBlocks creates multiple test blocks
 func CreateTestBlocks(count int, size int) ([]*blocks.Block, error) {
 	testBlocks := make([]*blocks.Block, count)
-	
+
 	for i := 0; i < count; i++ {
 		data := make([]byte, size)
 		cryptorand.Read(data)
-		
+
 		block, err := blocks.NewBlock(data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create test block %d: %w", i, err)
 		}
-		
+
 		testBlocks[i] = block
 	}
-	
+
 	return testBlocks, nil
 }
 
@@ -263,13 +262,13 @@ func SetupTestEnvironment() (*noisefs.Client, *storage.Manager, cache.Cache, err
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create test storage manager: %w", err)
 	}
-	
+
 	blockCache := cache.NewMemoryCache(100)
-	
+
 	client, err := noisefs.NewClient(manager, blockCache)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create test environment: %w", err)
 	}
-	
+
 	return client, manager, blockCache, nil
 }

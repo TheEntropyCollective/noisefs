@@ -11,7 +11,7 @@ import (
 // BenchmarkAltruisticCache_Store benchmarks storing blocks
 func BenchmarkAltruisticCache_Store(b *testing.B) {
 	sizes := []int{1024, 4096, 16384, 65536} // 1KB, 4KB, 16KB, 64KB
-	
+
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
 			baseCache := NewMemoryCache(10000)
@@ -21,17 +21,17 @@ func BenchmarkAltruisticCache_Store(b *testing.B) {
 				EvictionCooldown: 5 * time.Minute,
 			}
 			cache := NewAltruisticCache(baseCache, config, 100*1024*1024) // 100MB
-			
+
 			// Pre-generate blocks
 			testBlocks := make([]*blocks.Block, b.N)
 			for i := 0; i < b.N; i++ {
 				data := make([]byte, size)
 				testBlocks[i], _ = blocks.NewBlock(data)
 			}
-			
+
 			b.ResetTimer()
 			b.SetBytes(int64(size))
-			
+
 			for i := 0; i < b.N; i++ {
 				origin := PersonalBlock
 				if i%3 == 0 {
@@ -52,7 +52,7 @@ func BenchmarkAltruisticCache_Get(b *testing.B) {
 		EvictionCooldown: 5 * time.Minute,
 	}
 	cache := NewAltruisticCache(baseCache, config, 100*1024*1024)
-	
+
 	// Pre-populate cache
 	numBlocks := 1000
 	blockSize := 4096
@@ -65,10 +65,10 @@ func BenchmarkAltruisticCache_Get(b *testing.B) {
 		}
 		cache.StoreWithOrigin(fmt.Sprintf("block-%d", i), block, origin)
 	}
-	
+
 	b.ResetTimer()
 	b.SetBytes(int64(blockSize))
-	
+
 	for i := 0; i < b.N; i++ {
 		cid := fmt.Sprintf("block-%d", i%numBlocks)
 		cache.Get(cid)
@@ -86,7 +86,7 @@ func BenchmarkAltruisticCache_Eviction(b *testing.B) {
 				EvictionCooldown: 100 * time.Millisecond,
 			}
 			cache := NewAltruisticCache(baseCache, config, 20*1024*1024) // 20MB
-			
+
 			// Fill with altruistic blocks
 			blockSize := 4096
 			for i := 0; i < numAltruistic; i++ {
@@ -94,15 +94,15 @@ func BenchmarkAltruisticCache_Eviction(b *testing.B) {
 				block := &blocks.Block{Data: data}
 				cache.StoreWithOrigin(fmt.Sprintf("alt-%d", i), block, AltruisticBlock)
 			}
-			
+
 			b.ResetTimer()
-			
+
 			// Benchmark eviction by adding personal blocks
 			for i := 0; i < b.N; i++ {
 				data := make([]byte, blockSize)
 				block := &blocks.Block{Data: data}
 				cache.StoreWithOrigin(fmt.Sprintf("personal-%d", i), block, PersonalBlock)
-				
+
 				// Reset after cooldown
 				if i%10 == 0 {
 					time.Sleep(150 * time.Millisecond)
@@ -121,7 +121,7 @@ func BenchmarkAltruisticCache_Stats(b *testing.B) {
 		EvictionCooldown: 5 * time.Minute,
 	}
 	cache := NewAltruisticCache(baseCache, config, 100*1024*1024)
-	
+
 	// Pre-populate with mixed blocks
 	for i := 0; i < 1000; i++ {
 		data := make([]byte, 4096)
@@ -132,9 +132,9 @@ func BenchmarkAltruisticCache_Stats(b *testing.B) {
 		}
 		cache.StoreWithOrigin(fmt.Sprintf("block-%d", i), block, origin)
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		stats := cache.GetAltruisticStats()
 		_ = stats.FlexPoolUsage // Force calculation
@@ -151,11 +151,11 @@ func BenchmarkAltruisticCache_MemoryOverhead(b *testing.B) {
 			EvictionCooldown: 5 * time.Minute,
 		}
 		_ = NewAltruisticCache(baseCache, config, 100*1024*1024)
-		
+
 		// The memory profiler will show the overhead
 		b.ReportAllocs()
 	})
-	
+
 	b.Run("PlainCache", func(b *testing.B) {
 		_ = NewMemoryCache(1000)
 		b.ReportAllocs()
@@ -166,7 +166,7 @@ func BenchmarkAltruisticCache_MemoryOverhead(b *testing.B) {
 func BenchmarkAltruisticCache_Comparison(b *testing.B) {
 	blockSize := 4096
 	numOps := 10000
-	
+
 	b.Run("AltruisticCache", func(b *testing.B) {
 		baseCache := NewMemoryCache(10000)
 		config := &AltruisticCacheConfig{
@@ -175,15 +175,15 @@ func BenchmarkAltruisticCache_Comparison(b *testing.B) {
 			EvictionCooldown: 5 * time.Minute,
 		}
 		cache := NewAltruisticCache(baseCache, config, 100*1024*1024)
-		
+
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			for j := 0; j < numOps; j++ {
 				data := make([]byte, blockSize)
 				block := &blocks.Block{Data: data}
 				cid := fmt.Sprintf("block-%d", j)
-				
+
 				// Mix of operations
 				switch j % 4 {
 				case 0:
@@ -198,18 +198,18 @@ func BenchmarkAltruisticCache_Comparison(b *testing.B) {
 			}
 		}
 	})
-	
+
 	b.Run("RegularCache", func(b *testing.B) {
 		cache := NewMemoryCache(10000)
-		
+
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			for j := 0; j < numOps; j++ {
 				data := make([]byte, blockSize)
 				block := &blocks.Block{Data: data}
 				cid := fmt.Sprintf("block-%d", j)
-				
+
 				// Similar operations
 				if j%4 <= 1 {
 					cache.Store(cid, block)

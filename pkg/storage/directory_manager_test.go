@@ -38,7 +38,7 @@ func (tb *testBackend) IsConnected() bool {
 func (tb *testBackend) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, error) {
 	tb.mutex.Lock()
 	defer tb.mutex.Unlock()
-	
+
 	tb.data[block.ID] = block.Data
 	return &BlockAddress{
 		ID:          block.ID,
@@ -49,12 +49,12 @@ func (tb *testBackend) Put(ctx context.Context, block *blocks.Block) (*BlockAddr
 func (tb *testBackend) Get(ctx context.Context, address *BlockAddress) (*blocks.Block, error) {
 	tb.mutex.RLock()
 	defer tb.mutex.RUnlock()
-	
+
 	data, exists := tb.data[address.ID]
 	if !exists {
 		return nil, fmt.Errorf("block not found")
 	}
-	
+
 	return &blocks.Block{
 		ID:   address.ID,
 		Data: data,
@@ -64,7 +64,7 @@ func (tb *testBackend) Get(ctx context.Context, address *BlockAddress) (*blocks.
 func (tb *testBackend) Has(ctx context.Context, address *BlockAddress) (bool, error) {
 	tb.mutex.RLock()
 	defer tb.mutex.RUnlock()
-	
+
 	_, exists := tb.data[address.ID]
 	return exists, nil
 }
@@ -72,7 +72,7 @@ func (tb *testBackend) Has(ctx context.Context, address *BlockAddress) (bool, er
 func (tb *testBackend) Delete(ctx context.Context, address *BlockAddress) error {
 	tb.mutex.Lock()
 	defer tb.mutex.Unlock()
-	
+
 	delete(tb.data, address.ID)
 	return nil
 }
@@ -137,7 +137,7 @@ func createTestStorageManager(t *testing.T) *Manager {
 	RegisterBackend("mock", func(cfg *BackendConfig) (Backend, error) {
 		return newTestBackend(), nil
 	})
-	
+
 	config := &Config{
 		DefaultBackend: "mock",
 		Backends: map[string]*BackendConfig{
@@ -160,12 +160,12 @@ func createTestStorageManager(t *testing.T) *Manager {
 			Timeout:  time.Second,
 		},
 	}
-	
+
 	manager, err := NewManager(config)
 	if err != nil {
 		t.Fatalf("Failed to create storage manager: %v", err)
 	}
-	
+
 	return manager
 }
 
@@ -179,7 +179,7 @@ func createTestEncryptionKey(t *testing.T) *crypto.EncryptionKey {
 
 func createTestDirectoryManifest() *blocks.DirectoryManifest {
 	manifest := blocks.NewDirectoryManifest()
-	
+
 	// Add some test entries
 	entries := []blocks.DirectoryEntry{
 		{
@@ -204,33 +204,33 @@ func createTestDirectoryManifest() *blocks.DirectoryManifest {
 			ModifiedAt:    time.Now(),
 		},
 	}
-	
+
 	for _, entry := range entries {
 		manifest.AddEntry(entry)
 	}
-	
+
 	return manifest
 }
 
 func TestDefaultDirectoryManagerConfig(t *testing.T) {
 	config := DefaultDirectoryManagerConfig()
-	
+
 	if config.CacheSize <= 0 {
 		t.Error("Cache size should be positive")
 	}
-	
+
 	if config.CacheTTL <= 0 {
 		t.Error("Cache TTL should be positive")
 	}
-	
+
 	if config.MaxManifestSize <= 0 {
 		t.Error("Max manifest size should be positive")
 	}
-	
+
 	if config.ReconstructionTTL <= 0 {
 		t.Error("Reconstruction TTL should be positive")
 	}
-	
+
 	if !config.EnableMetrics {
 		t.Error("Metrics should be enabled by default")
 	}
@@ -238,11 +238,11 @@ func TestDefaultDirectoryManagerConfig(t *testing.T) {
 
 func TestNewDirectoryManager(t *testing.T) {
 	tests := []struct {
-		name             string
-		storageManager   *Manager
-		encryptionKey    *crypto.EncryptionKey
-		config           *DirectoryManagerConfig
-		expectError      bool
+		name           string
+		storageManager *Manager
+		encryptionKey  *crypto.EncryptionKey
+		config         *DirectoryManagerConfig
+		expectError    bool
 	}{
 		{
 			name:           "nil storage manager",
@@ -273,28 +273,28 @@ func TestNewDirectoryManager(t *testing.T) {
 			expectError:    false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manager, err := NewDirectoryManager(tt.storageManager, tt.encryptionKey, tt.config)
-			
+
 			if tt.expectError {
 				if err == nil {
 					t.Error("Expected error but got nil")
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Unexpected error: %v", err)
 				return
 			}
-			
+
 			if manager == nil {
 				t.Error("Expected non-nil manager")
 				return
 			}
-			
+
 			if manager.cache == nil {
 				t.Error("Expected non-nil cache")
 			}
@@ -305,51 +305,51 @@ func TestNewDirectoryManager(t *testing.T) {
 func TestDirectoryManager_StoreAndRetrieveManifest(t *testing.T) {
 	storageManager := createTestStorageManager(t)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create test manifest
 	manifest := createTestDirectoryManifest()
 	dirPath := "/test/directory"
-	
+
 	// Store manifest
 	manifestCID, err := manager.StoreDirectoryManifest(ctx, dirPath, manifest)
 	if err != nil {
 		t.Fatalf("Failed to store manifest: %v", err)
 	}
-	
+
 	if manifestCID == "" {
 		t.Error("Expected non-empty manifest CID")
 	}
-	
+
 	// Retrieve manifest
 	retrievedManifest, err := manager.RetrieveDirectoryManifest(ctx, dirPath, manifestCID)
 	if err != nil {
 		t.Fatalf("Failed to retrieve manifest: %v", err)
 	}
-	
+
 	if retrievedManifest == nil {
 		t.Error("Expected non-nil retrieved manifest")
 	}
-	
+
 	// Verify manifest contents
 	if retrievedManifest.Version != manifest.Version {
 		t.Errorf("Version mismatch: expected %s, got %s", manifest.Version, retrievedManifest.Version)
 	}
-	
+
 	if len(retrievedManifest.Entries) != len(manifest.Entries) {
 		t.Errorf("Entry count mismatch: expected %d, got %d", len(manifest.Entries), len(retrievedManifest.Entries))
 	}
@@ -358,59 +358,59 @@ func TestDirectoryManager_StoreAndRetrieveManifest(t *testing.T) {
 func TestDirectoryManager_CacheHitAndMiss(t *testing.T) {
 	storageManager := createTestStorageManager(t)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create test manifest
 	manifest := createTestDirectoryManifest()
 	dirPath := "/test/directory"
-	
+
 	// Store manifest
 	manifestCID, err := manager.StoreDirectoryManifest(ctx, dirPath, manifest)
 	if err != nil {
 		t.Fatalf("Failed to store manifest: %v", err)
 	}
-	
+
 	// Clear cache to ensure miss
 	manager.ClearCache()
-	
+
 	// First retrieval should be cache miss
 	initialStats := manager.GetCacheStats()
-	
+
 	_, err = manager.RetrieveDirectoryManifest(ctx, dirPath, manifestCID)
 	if err != nil {
 		t.Fatalf("Failed to retrieve manifest: %v", err)
 	}
-	
+
 	// Second retrieval should be cache hit
 	_, err = manager.RetrieveDirectoryManifest(ctx, dirPath, manifestCID)
 	if err != nil {
 		t.Fatalf("Failed to retrieve manifest: %v", err)
 	}
-	
+
 	finalStats := manager.GetCacheStats()
-	
-	if finalStats.CacheMisses != initialStats.CacheMisses + 1 {
+
+	if finalStats.CacheMisses != initialStats.CacheMisses+1 {
 		t.Errorf("Expected cache miss count to increase by 1")
 	}
-	
-	if finalStats.CacheHits != initialStats.CacheHits + 1 {
+
+	if finalStats.CacheHits != initialStats.CacheHits+1 {
 		t.Errorf("Expected cache hit count to increase by 1")
 	}
-	
+
 	if finalStats.HitRate <= 0 {
 		t.Error("Expected positive hit rate")
 	}
@@ -419,32 +419,32 @@ func TestDirectoryManager_CacheHitAndMiss(t *testing.T) {
 func TestDirectoryManager_ReconstructDirectory(t *testing.T) {
 	storageManager := createTestStorageManager(t)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create test manifest with encrypted filenames
 	manifest := blocks.NewDirectoryManifest()
 	dirPath := "/test/directory"
-	
+
 	// Derive directory key
 	dirKey, err := crypto.DeriveDirectoryKey(encryptionKey, dirPath)
 	if err != nil {
 		t.Fatalf("Failed to derive directory key: %v", err)
 	}
-	
+
 	// Add entries with encrypted names
 	filenames := []string{"file1.txt", "file2.txt", "subdir"}
 	for i, filename := range filenames {
@@ -452,7 +452,7 @@ func TestDirectoryManager_ReconstructDirectory(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to encrypt filename: %v", err)
 		}
-		
+
 		entry := blocks.DirectoryEntry{
 			EncryptedName: encryptedName,
 			CID:           fmt.Sprintf("test-cid-%d", i+1),
@@ -460,41 +460,41 @@ func TestDirectoryManager_ReconstructDirectory(t *testing.T) {
 			Size:          int64((i + 1) * 100),
 			ModifiedAt:    time.Now(),
 		}
-		
+
 		if filename == "subdir" {
 			entry.Type = blocks.DirectoryType
 			entry.Size = 0
 		}
-		
+
 		manifest.AddEntry(entry)
 	}
-	
+
 	// Store manifest
 	manifestCID, err := manager.StoreDirectoryManifest(ctx, dirPath, manifest)
 	if err != nil {
 		t.Fatalf("Failed to store manifest: %v", err)
 	}
-	
+
 	// Reconstruct directory (use same path as when created to derive correct key)
 	targetPath := dirPath
 	result, err := manager.ReconstructDirectory(ctx, manifestCID, targetPath)
 	if err != nil {
 		t.Fatalf("Failed to reconstruct directory: %v", err)
 	}
-	
+
 	// Verify reconstruction result
 	if result.Status != "completed" {
 		t.Errorf("Expected status 'completed', got '%s'", result.Status)
 	}
-	
+
 	if result.TotalEntries != len(filenames) {
 		t.Errorf("Expected %d entries, got %d", len(filenames), result.TotalEntries)
 	}
-	
+
 	if result.ProcessedEntries != len(filenames) {
 		t.Errorf("Expected %d processed entries, got %d", len(filenames), result.ProcessedEntries)
 	}
-	
+
 	// Verify decrypted filenames
 	for i, entry := range result.Entries {
 		expectedName := filenames[i]
@@ -502,7 +502,7 @@ func TestDirectoryManager_ReconstructDirectory(t *testing.T) {
 			t.Errorf("Expected filename '%s', got '%s'", expectedName, entry.DecryptedName)
 		}
 	}
-	
+
 	if len(result.Errors) > 0 {
 		t.Errorf("Expected no errors, got %d errors", len(result.Errors))
 	}
@@ -513,45 +513,45 @@ func TestDirectoryCache_LRUEviction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	
+
 	// Create test manifests
 	manifest1 := createTestDirectoryManifest()
 	manifest2 := createTestDirectoryManifest()
 	manifest3 := createTestDirectoryManifest()
-	
+
 	// Add entries to cache
 	cache.Put("key1", manifest1)
 	cache.Put("key2", manifest2)
-	
+
 	// Verify cache size
 	if cache.Size() != 2 {
 		t.Errorf("Expected cache size 2, got %d", cache.Size())
 	}
-	
+
 	// Access key1 to make it most recently used
 	retrieved := cache.Get("key1")
 	if retrieved == nil {
 		t.Error("Expected to retrieve key1")
 	}
-	
+
 	// Add key3, should evict key2 (least recently used)
 	cache.Put("key3", manifest3)
-	
+
 	// Verify cache size is still 2
 	if cache.Size() != 2 {
 		t.Errorf("Expected cache size 2, got %d", cache.Size())
 	}
-	
+
 	// key1 should still be in cache
 	if cache.Get("key1") == nil {
 		t.Error("Expected key1 to still be in cache")
 	}
-	
+
 	// key2 should have been evicted
 	if cache.Get("key2") != nil {
 		t.Error("Expected key2 to be evicted")
 	}
-	
+
 	// key3 should be in cache
 	if cache.Get("key3") == nil {
 		t.Error("Expected key3 to be in cache")
@@ -563,25 +563,25 @@ func TestDirectoryCache_TTLExpiration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	
+
 	manifest := createTestDirectoryManifest()
-	
+
 	// Add entry to cache
 	cache.Put("test-key", manifest)
-	
+
 	// Should be retrievable immediately
 	if cache.Get("test-key") == nil {
 		t.Error("Expected to retrieve entry immediately")
 	}
-	
+
 	// Wait for TTL expiration
 	time.Sleep(15 * time.Millisecond)
-	
+
 	// Should be expired and return nil
 	if cache.Get("test-key") != nil {
 		t.Error("Expected entry to be expired")
 	}
-	
+
 	// Cache should be empty after expiration
 	if cache.Size() != 0 {
 		t.Errorf("Expected cache size 0 after expiration, got %d", cache.Size())
@@ -591,37 +591,37 @@ func TestDirectoryCache_TTLExpiration(t *testing.T) {
 func TestDirectoryManager_HealthCheck(t *testing.T) {
 	storageManager := createTestStorageManager(t)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Check health
 	health := manager.HealthCheck()
-	
+
 	if health == nil {
 		t.Error("Expected non-nil health check result")
 	}
-	
+
 	if !health.Healthy {
 		t.Errorf("Expected healthy status, got issues: %v", health.Issues)
 	}
-	
+
 	if health.CacheStats == nil {
 		t.Error("Expected non-nil cache stats")
 	}
-	
+
 	if health.LastCheck.IsZero() {
 		t.Error("Expected non-zero last check time")
 	}
@@ -630,27 +630,27 @@ func TestDirectoryManager_HealthCheck(t *testing.T) {
 func TestDirectoryManager_MaxManifestSize(t *testing.T) {
 	storageManager := createTestStorageManager(t)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager with small max size
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
 	config.MaxManifestSize = 100 // Very small size for testing
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create large manifest
 	manifest := createTestDirectoryManifest()
 	dirPath := "/test/directory"
-	
+
 	// Try to store manifest (should fail due to size limit)
 	_, err = manager.StoreDirectoryManifest(ctx, dirPath, manifest)
 	if err == nil {
@@ -661,27 +661,27 @@ func TestDirectoryManager_MaxManifestSize(t *testing.T) {
 func BenchmarkDirectoryManager_StoreManifest(b *testing.B) {
 	storageManager := createTestStorageManagerBench(b)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		b.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKeyBench(b)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		b.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create test manifest
 	manifest := createTestDirectoryManifest()
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		dirPath := fmt.Sprintf("/test/directory-%d", i)
 		_, err := manager.StoreDirectoryManifest(ctx, dirPath, manifest)
@@ -694,33 +694,33 @@ func BenchmarkDirectoryManager_StoreManifest(b *testing.B) {
 func BenchmarkDirectoryManager_RetrieveManifest(b *testing.B) {
 	storageManager := createTestStorageManagerBench(b)
 	ctx := context.Background()
-	
+
 	// Start storage manager
 	if err := storageManager.Start(ctx); err != nil {
 		b.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer storageManager.Stop(ctx)
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKeyBench(b)
 	config := DefaultDirectoryManagerConfig()
-	
+
 	manager, err := NewDirectoryManager(storageManager, encryptionKey, config)
 	if err != nil {
 		b.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Store test manifest
 	manifest := createTestDirectoryManifest()
 	dirPath := "/test/directory"
-	
+
 	manifestCID, err := manager.StoreDirectoryManifest(ctx, dirPath, manifest)
 	if err != nil {
 		b.Fatalf("Failed to store manifest: %v", err)
 	}
-	
+
 	b.ResetTimer()
-	
+
 	for i := 0; i < b.N; i++ {
 		_, err := manager.RetrieveDirectoryManifest(ctx, dirPath, manifestCID)
 		if err != nil {
@@ -735,7 +735,7 @@ func createTestStorageManagerBench(b *testing.B) *Manager {
 	RegisterBackend("mock", func(cfg *BackendConfig) (Backend, error) {
 		return newTestBackend(), nil
 	})
-	
+
 	config := &Config{
 		DefaultBackend: "mock",
 		Backends: map[string]*BackendConfig{
@@ -758,12 +758,12 @@ func createTestStorageManagerBench(b *testing.B) *Manager {
 			Timeout:  time.Second,
 		},
 	}
-	
+
 	manager, err := NewManager(config)
 	if err != nil {
 		b.Fatalf("Failed to create storage manager: %v", err)
 	}
-	
+
 	return manager
 }
 
@@ -784,7 +784,7 @@ func TestCreateDirectorySnapshot(t *testing.T) {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer manager.Stop(context.Background())
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
@@ -792,14 +792,14 @@ func TestCreateDirectorySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create and store original directory manifest
 	originalManifest := createTestDirectoryManifest()
 	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
 	if err != nil {
 		t.Fatalf("Failed to store original directory manifest: %v", err)
 	}
-	
+
 	// Create snapshot
 	snapshotName := "test-snapshot"
 	description := "Test snapshot description"
@@ -813,21 +813,21 @@ func TestCreateDirectorySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory snapshot: %v", err)
 	}
-	
+
 	// Verify snapshot was created
 	if snapshotCID == "" {
 		t.Error("Snapshot CID should not be empty")
 	}
-	
+
 	if snapshotKey == nil {
 		t.Error("Snapshot key should not be nil")
 	}
-	
+
 	// Verify snapshot key is different from original key
 	if snapshotKey.String() == encryptionKey.String() {
 		t.Error("Snapshot key should be different from original key")
 	}
-	
+
 	// Retrieve snapshot manifest
 	snapshotManifest, err := dirManager.RetrieveDirectoryManifestWithKey(
 		context.Background(),
@@ -837,34 +837,34 @@ func TestCreateDirectorySnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to retrieve snapshot manifest: %v", err)
 	}
-	
+
 	// Verify snapshot properties
 	if !snapshotManifest.IsSnapshot() {
 		t.Error("Retrieved manifest should be a snapshot")
 	}
-	
+
 	snapshotInfo := snapshotManifest.GetSnapshotInfo()
 	if snapshotInfo == nil {
 		t.Fatal("Snapshot info should not be nil")
 	}
-	
+
 	if snapshotInfo.OriginalCID != originalCID {
 		t.Errorf("Expected original CID %s, got %s", originalCID, snapshotInfo.OriginalCID)
 	}
-	
+
 	if snapshotInfo.SnapshotName != snapshotName {
 		t.Errorf("Expected snapshot name %s, got %s", snapshotName, snapshotInfo.SnapshotName)
 	}
-	
+
 	if snapshotInfo.Description != description {
 		t.Errorf("Expected description %s, got %s", description, snapshotInfo.Description)
 	}
-	
+
 	// Verify entries are identical
 	if len(snapshotManifest.Entries) != len(originalManifest.Entries) {
 		t.Errorf("Expected %d entries, got %d", len(originalManifest.Entries), len(snapshotManifest.Entries))
 	}
-	
+
 	for i, entry := range snapshotManifest.Entries {
 		originalEntry := originalManifest.Entries[i]
 		if entry.CID != originalEntry.CID {
@@ -888,7 +888,7 @@ func TestCreateDirectorySnapshotErrors(t *testing.T) {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer manager.Stop(context.Background())
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
@@ -896,7 +896,7 @@ func TestCreateDirectorySnapshotErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Test with invalid CID
 	_, _, err = dirManager.CreateDirectorySnapshot(
 		context.Background(),
@@ -908,7 +908,7 @@ func TestCreateDirectorySnapshotErrors(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for invalid CID")
 	}
-	
+
 	// Test with nil key
 	_, _, err = dirManager.CreateDirectorySnapshot(
 		context.Background(),
@@ -920,7 +920,7 @@ func TestCreateDirectorySnapshotErrors(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for nil key")
 	}
-	
+
 	// Test with empty snapshot name
 	_, _, err = dirManager.CreateDirectorySnapshot(
 		context.Background(),
@@ -943,7 +943,7 @@ func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer manager.Stop(context.Background())
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
@@ -951,14 +951,14 @@ func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create and store original directory manifest
 	originalManifest := createTestDirectoryManifest()
 	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
 	if err != nil {
 		t.Fatalf("Failed to store original directory manifest: %v", err)
 	}
-	
+
 	// Create snapshot
 	snapshotCID, snapshotKey, err := dirManager.CreateDirectorySnapshot(
 		context.Background(),
@@ -970,7 +970,7 @@ func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory snapshot: %v", err)
 	}
-	
+
 	// Retrieve with correct key
 	retrievedManifest, err := dirManager.RetrieveDirectoryManifestWithKey(
 		context.Background(),
@@ -980,17 +980,17 @@ func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to retrieve manifest with correct key: %v", err)
 	}
-	
+
 	if !retrievedManifest.IsSnapshot() {
 		t.Error("Retrieved manifest should be a snapshot")
 	}
-	
+
 	// Try to retrieve with wrong key
 	wrongKey, err := crypto.GenerateKey("wrong-password")
 	if err != nil {
 		t.Fatalf("Failed to generate wrong key: %v", err)
 	}
-	
+
 	_, err = dirManager.RetrieveDirectoryManifestWithKey(
 		context.Background(),
 		snapshotCID,
@@ -999,7 +999,7 @@ func TestRetrieveDirectoryManifestWithKey(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when retrieving with wrong key")
 	}
-	
+
 	// Try to retrieve with invalid CID
 	_, err = dirManager.RetrieveDirectoryManifestWithKey(
 		context.Background(),
@@ -1020,7 +1020,7 @@ func TestSnapshotKeyGeneration(t *testing.T) {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer manager.Stop(context.Background())
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
@@ -1028,17 +1028,17 @@ func TestSnapshotKeyGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create and store original directory manifest
 	originalManifest := createTestDirectoryManifest()
 	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
 	if err != nil {
 		t.Fatalf("Failed to store original directory manifest: %v", err)
 	}
-	
+
 	// Create multiple snapshots and ensure keys are different
 	keys := make(map[string]bool)
-	
+
 	for i := 0; i < 5; i++ {
 		snapshotName := fmt.Sprintf("test-snapshot-%d", i)
 		_, snapshotKey, err := dirManager.CreateDirectorySnapshot(
@@ -1051,13 +1051,13 @@ func TestSnapshotKeyGeneration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create snapshot %d: %v", i, err)
 		}
-		
+
 		keyStr := snapshotKey.String()
 		if keys[keyStr] {
 			t.Errorf("Duplicate key generated for snapshot %d", i)
 		}
 		keys[keyStr] = true
-		
+
 		// Verify key is different from original
 		if keyStr == encryptionKey.String() {
 			t.Errorf("Snapshot key %d should be different from original", i)
@@ -1074,7 +1074,7 @@ func TestSnapshotConcurrency(t *testing.T) {
 		t.Fatalf("Failed to start storage manager: %v", err)
 	}
 	defer manager.Stop(context.Background())
-	
+
 	// Create directory manager
 	encryptionKey := createTestEncryptionKey(t)
 	config := DefaultDirectoryManagerConfig()
@@ -1082,18 +1082,18 @@ func TestSnapshotConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create directory manager: %v", err)
 	}
-	
+
 	// Create and store original directory manifest
 	originalManifest := createTestDirectoryManifest()
 	originalCID, err := dirManager.StoreDirectoryManifest(context.Background(), "/test/path", originalManifest)
 	if err != nil {
 		t.Fatalf("Failed to store original directory manifest: %v", err)
 	}
-	
+
 	// Create snapshots concurrently
 	numWorkers := 10
 	results := make(chan error, numWorkers)
-	
+
 	for i := 0; i < numWorkers; i++ {
 		go func(workerID int) {
 			snapshotName := fmt.Sprintf("concurrent-snapshot-%d", workerID)
@@ -1107,7 +1107,7 @@ func TestSnapshotConcurrency(t *testing.T) {
 			results <- err
 		}(i)
 	}
-	
+
 	// Wait for all workers to complete
 	for i := 0; i < numWorkers; i++ {
 		err := <-results

@@ -12,40 +12,40 @@ import (
 
 // CacheStats tracks comprehensive cache performance metrics
 type CacheStats struct {
-	mu                    sync.RWMutex
-	
+	mu sync.RWMutex
+
 	// Hit/Miss statistics
-	Hits                  int64     `json:"hits"`
-	Misses                int64     `json:"misses"`
-	TotalRequests         int64     `json:"total_requests"`
-	HitRate               float64   `json:"hit_rate"`
-	
+	Hits          int64   `json:"hits"`
+	Misses        int64   `json:"misses"`
+	TotalRequests int64   `json:"total_requests"`
+	HitRate       float64 `json:"hit_rate"`
+
 	// Storage statistics
-	Stores                int64     `json:"stores"`
-	Removals              int64     `json:"removals"`
-	Evictions             int64     `json:"evictions"`
-	CurrentSize           int64     `json:"current_size"`
-	MaxSize               int64     `json:"max_size"`
-	
+	Stores      int64 `json:"stores"`
+	Removals    int64 `json:"removals"`
+	Evictions   int64 `json:"evictions"`
+	CurrentSize int64 `json:"current_size"`
+	MaxSize     int64 `json:"max_size"`
+
 	// Byte statistics
-	BytesStored           int64     `json:"bytes_stored"`
-	BytesRetrieved        int64     `json:"bytes_retrieved"`
-	BytesEvicted          int64     `json:"bytes_evicted"`
-	
+	BytesStored    int64 `json:"bytes_stored"`
+	BytesRetrieved int64 `json:"bytes_retrieved"`
+	BytesEvicted   int64 `json:"bytes_evicted"`
+
 	// Performance statistics
-	AvgGetLatency         time.Duration `json:"avg_get_latency"`
-	AvgStoreLatency       time.Duration `json:"avg_store_latency"`
-	TotalGetLatency       time.Duration `json:"total_get_latency"`
-	TotalStoreLatency     time.Duration `json:"total_store_latency"`
-	
+	AvgGetLatency     time.Duration `json:"avg_get_latency"`
+	AvgStoreLatency   time.Duration `json:"avg_store_latency"`
+	TotalGetLatency   time.Duration `json:"total_get_latency"`
+	TotalStoreLatency time.Duration `json:"total_store_latency"`
+
 	// Time-based statistics
-	StartTime             time.Time `json:"start_time"`
-	LastReset             time.Time `json:"last_reset"`
-	
+	StartTime time.Time `json:"start_time"`
+	LastReset time.Time `json:"last_reset"`
+
 	// Popular blocks
-	PopularBlocks         map[string]int64 `json:"popular_blocks"`
-	MostPopularCID        string           `json:"most_popular_cid"`
-	MostPopularCount      int64            `json:"most_popular_count"`
+	PopularBlocks    map[string]int64 `json:"popular_blocks"`
+	MostPopularCID   string           `json:"most_popular_cid"`
+	MostPopularCount int64            `json:"most_popular_count"`
 }
 
 // NewCacheStats creates a new cache statistics tracker
@@ -61,21 +61,21 @@ func NewCacheStats() *CacheStats {
 func (s *CacheStats) RecordHit(cid string, latency time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Hits++
 	s.TotalRequests++
 	s.TotalGetLatency += latency
-	
+
 	// Update hit rate
 	if s.TotalRequests > 0 {
 		s.HitRate = float64(s.Hits) / float64(s.TotalRequests)
 	}
-	
+
 	// Update average latency
 	if s.Hits > 0 {
 		s.AvgGetLatency = s.TotalGetLatency / time.Duration(s.Hits)
 	}
-	
+
 	// Update popularity
 	s.PopularBlocks[cid]++
 	if s.PopularBlocks[cid] > s.MostPopularCount {
@@ -88,16 +88,16 @@ func (s *CacheStats) RecordHit(cid string, latency time.Duration) {
 func (s *CacheStats) RecordMiss(cid string, latency time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Misses++
 	s.TotalRequests++
 	s.TotalGetLatency += latency
-	
+
 	// Update hit rate
 	if s.TotalRequests > 0 {
 		s.HitRate = float64(s.Hits) / float64(s.TotalRequests)
 	}
-	
+
 	// Update average latency (includes misses)
 	if s.TotalRequests > 0 {
 		s.AvgGetLatency = s.TotalGetLatency / time.Duration(s.TotalRequests)
@@ -108,12 +108,12 @@ func (s *CacheStats) RecordMiss(cid string, latency time.Duration) {
 func (s *CacheStats) RecordStore(cid string, block *blocks.Block, latency time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Stores++
 	s.CurrentSize++
 	s.BytesStored += int64(block.Size())
 	s.TotalStoreLatency += latency
-	
+
 	// Update average store latency
 	if s.Stores > 0 {
 		s.AvgStoreLatency = s.TotalStoreLatency / time.Duration(s.Stores)
@@ -124,13 +124,13 @@ func (s *CacheStats) RecordStore(cid string, block *blocks.Block, latency time.D
 func (s *CacheStats) RecordRemoval(cid string, blockSize int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Removals++
 	s.CurrentSize--
-	
+
 	// Remove from popularity tracking
 	delete(s.PopularBlocks, cid)
-	
+
 	// Recalculate most popular if needed
 	if cid == s.MostPopularCID {
 		s.recalculateMostPopular()
@@ -141,14 +141,14 @@ func (s *CacheStats) RecordRemoval(cid string, blockSize int64) {
 func (s *CacheStats) RecordEviction(cid string, blockSize int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Evictions++
 	s.CurrentSize--
 	s.BytesEvicted += blockSize
-	
+
 	// Remove from popularity tracking
 	delete(s.PopularBlocks, cid)
-	
+
 	// Recalculate most popular if needed
 	if cid == s.MostPopularCID {
 		s.recalculateMostPopular()
@@ -159,7 +159,7 @@ func (s *CacheStats) RecordEviction(cid string, blockSize int64) {
 func (s *CacheStats) recalculateMostPopular() {
 	s.MostPopularCID = ""
 	s.MostPopularCount = 0
-	
+
 	for cid, count := range s.PopularBlocks {
 		if count > s.MostPopularCount {
 			s.MostPopularCID = cid
@@ -178,74 +178,74 @@ func (s *CacheStats) SetMaxSize(maxSize int64) {
 // CacheStatsSnapshot represents a snapshot of cache statistics without mutex
 type CacheStatsSnapshot struct {
 	// Hit/Miss statistics
-	Hits                  int64     `json:"hits"`
-	Misses                int64     `json:"misses"`
-	TotalRequests         int64     `json:"total_requests"`
-	HitRate               float64   `json:"hit_rate"`
-	
+	Hits          int64   `json:"hits"`
+	Misses        int64   `json:"misses"`
+	TotalRequests int64   `json:"total_requests"`
+	HitRate       float64 `json:"hit_rate"`
+
 	// Storage statistics
-	Stores                int64     `json:"stores"`
-	Removals              int64     `json:"removals"`
-	Evictions             int64     `json:"evictions"`
-	CurrentSize           int64     `json:"current_size"`
-	MaxSize               int64     `json:"max_size"`
-	
+	Stores      int64 `json:"stores"`
+	Removals    int64 `json:"removals"`
+	Evictions   int64 `json:"evictions"`
+	CurrentSize int64 `json:"current_size"`
+	MaxSize     int64 `json:"max_size"`
+
 	// Byte statistics
-	BytesStored           int64     `json:"bytes_stored"`
-	BytesRetrieved        int64     `json:"bytes_retrieved"`
-	BytesEvicted          int64     `json:"bytes_evicted"`
-	
+	BytesStored    int64 `json:"bytes_stored"`
+	BytesRetrieved int64 `json:"bytes_retrieved"`
+	BytesEvicted   int64 `json:"bytes_evicted"`
+
 	// Performance statistics
-	AvgGetLatency         time.Duration `json:"avg_get_latency"`
-	AvgStoreLatency       time.Duration `json:"avg_store_latency"`
-	TotalGetLatency       time.Duration `json:"total_get_latency"`
-	TotalStoreLatency     time.Duration `json:"total_store_latency"`
-	
+	AvgGetLatency     time.Duration `json:"avg_get_latency"`
+	AvgStoreLatency   time.Duration `json:"avg_store_latency"`
+	TotalGetLatency   time.Duration `json:"total_get_latency"`
+	TotalStoreLatency time.Duration `json:"total_store_latency"`
+
 	// Time-based statistics
-	StartTime             time.Time `json:"start_time"`
-	LastReset             time.Time `json:"last_reset"`
-	
+	StartTime time.Time `json:"start_time"`
+	LastReset time.Time `json:"last_reset"`
+
 	// Popular blocks
-	PopularBlocks         map[string]int64 `json:"popular_blocks"`
-	MostPopularCID        string           `json:"most_popular_cid"`
-	MostPopularCount      int64            `json:"most_popular_count"`
+	PopularBlocks    map[string]int64 `json:"popular_blocks"`
+	MostPopularCID   string           `json:"most_popular_cid"`
+	MostPopularCount int64            `json:"most_popular_count"`
 }
 
 // GetSnapshot returns a snapshot of current statistics
 func (s *CacheStats) GetSnapshot() CacheStatsSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	// Create a copy of the stats without the mutex
 	snapshot := CacheStatsSnapshot{
-		Hits:                  s.Hits,
-		Misses:                s.Misses,
-		TotalRequests:         s.TotalRequests,
-		HitRate:               s.HitRate,
-		Stores:                s.Stores,
-		Removals:              s.Removals,
-		Evictions:             s.Evictions,
-		CurrentSize:           s.CurrentSize,
-		MaxSize:               s.MaxSize,
-		BytesStored:           s.BytesStored,
-		BytesRetrieved:        s.BytesRetrieved,
-		BytesEvicted:          s.BytesEvicted,
-		AvgGetLatency:         s.AvgGetLatency,
-		AvgStoreLatency:       s.AvgStoreLatency,
-		TotalGetLatency:       s.TotalGetLatency,
-		TotalStoreLatency:     s.TotalStoreLatency,
-		StartTime:             s.StartTime,
-		LastReset:             s.LastReset,
-		MostPopularCID:        s.MostPopularCID,
-		MostPopularCount:      s.MostPopularCount,
+		Hits:              s.Hits,
+		Misses:            s.Misses,
+		TotalRequests:     s.TotalRequests,
+		HitRate:           s.HitRate,
+		Stores:            s.Stores,
+		Removals:          s.Removals,
+		Evictions:         s.Evictions,
+		CurrentSize:       s.CurrentSize,
+		MaxSize:           s.MaxSize,
+		BytesStored:       s.BytesStored,
+		BytesRetrieved:    s.BytesRetrieved,
+		BytesEvicted:      s.BytesEvicted,
+		AvgGetLatency:     s.AvgGetLatency,
+		AvgStoreLatency:   s.AvgStoreLatency,
+		TotalGetLatency:   s.TotalGetLatency,
+		TotalStoreLatency: s.TotalStoreLatency,
+		StartTime:         s.StartTime,
+		LastReset:         s.LastReset,
+		MostPopularCID:    s.MostPopularCID,
+		MostPopularCount:  s.MostPopularCount,
 	}
-	
+
 	// Deep copy the popular blocks map
 	snapshot.PopularBlocks = make(map[string]int64)
 	for cid, count := range s.PopularBlocks {
 		snapshot.PopularBlocks[cid] = count
 	}
-	
+
 	return snapshot
 }
 
@@ -253,7 +253,7 @@ func (s *CacheStats) GetSnapshot() CacheStatsSnapshot {
 func (s *CacheStats) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	s.Hits = 0
 	s.Misses = 0
 	s.TotalRequests = 0
@@ -277,38 +277,38 @@ func (s *CacheStats) Reset() {
 // PrintStats prints formatted statistics
 func (s *CacheStats) PrintStats() {
 	snapshot := s.GetSnapshot()
-	
+
 	fmt.Println("=== Cache Statistics ===")
 	fmt.Printf("Uptime: %v\n", time.Since(snapshot.StartTime))
 	fmt.Printf("Last Reset: %v ago\n", time.Since(snapshot.LastReset))
 	fmt.Println()
-	
-	fmt.Printf("Hit Rate: %.2f%% (%d hits, %d misses)\n", 
+
+	fmt.Printf("Hit Rate: %.2f%% (%d hits, %d misses)\n",
 		snapshot.HitRate*100, snapshot.Hits, snapshot.Misses)
 	fmt.Printf("Total Requests: %d\n", snapshot.TotalRequests)
 	fmt.Println()
-	
-	fmt.Printf("Cache Size: %d / %d (%.1f%% full)\n", 
-		snapshot.CurrentSize, snapshot.MaxSize, 
+
+	fmt.Printf("Cache Size: %d / %d (%.1f%% full)\n",
+		snapshot.CurrentSize, snapshot.MaxSize,
 		float64(snapshot.CurrentSize)/float64(snapshot.MaxSize)*100)
-	fmt.Printf("Stores: %d, Removals: %d, Evictions: %d\n", 
+	fmt.Printf("Stores: %d, Removals: %d, Evictions: %d\n",
 		snapshot.Stores, snapshot.Removals, snapshot.Evictions)
 	fmt.Println()
-	
+
 	fmt.Printf("Data Transfer:\n")
 	fmt.Printf("  Stored: %s\n", formatBytes(snapshot.BytesStored))
 	fmt.Printf("  Retrieved: %s\n", formatBytes(snapshot.BytesRetrieved))
 	fmt.Printf("  Evicted: %s\n", formatBytes(snapshot.BytesEvicted))
 	fmt.Println()
-	
+
 	fmt.Printf("Average Latencies:\n")
 	fmt.Printf("  Get: %v\n", snapshot.AvgGetLatency)
 	fmt.Printf("  Store: %v\n", snapshot.AvgStoreLatency)
 	fmt.Println()
-	
+
 	if snapshot.MostPopularCID != "" {
-		fmt.Printf("Most Popular Block: %s (%d accesses)\n", 
-			snapshot.MostPopularCID[:min(16, len(snapshot.MostPopularCID))], 
+		fmt.Printf("Most Popular Block: %s (%d accesses)\n",
+			snapshot.MostPopularCID[:min(16, len(snapshot.MostPopularCID))],
 			snapshot.MostPopularCount)
 	}
 }
@@ -338,31 +338,31 @@ func NewStatisticsCache(underlying Cache, logger *logging.Logger) *StatisticsCac
 // Store adds a block to the cache with statistics tracking
 func (c *StatisticsCache) Store(cid string, block *blocks.Block) error {
 	start := time.Now()
-	
+
 	err := c.underlying.Store(cid, block)
 	latency := time.Since(start)
-	
+
 	if err == nil {
 		c.stats.RecordStore(cid, block, latency)
 	}
-	
+
 	return err
 }
 
 // Get retrieves a block from the cache with statistics tracking
 func (c *StatisticsCache) Get(cid string) (*blocks.Block, error) {
 	start := time.Now()
-	
+
 	block, err := c.underlying.Get(cid)
 	latency := time.Since(start)
-	
+
 	if err == nil {
 		c.stats.RecordHit(cid, latency)
 		c.stats.BytesRetrieved += int64(block.Size())
 	} else {
 		c.stats.RecordMiss(cid, latency)
 	}
-	
+
 	return block, err
 }
 
@@ -378,12 +378,12 @@ func (c *StatisticsCache) Remove(cid string) error {
 	if block, err := c.underlying.Get(cid); err == nil {
 		blockSize = int64(block.Size())
 	}
-	
+
 	err := c.underlying.Remove(cid)
 	if err == nil {
 		c.stats.RecordRemoval(cid, blockSize)
 	}
-	
+
 	return err
 }
 
@@ -413,13 +413,13 @@ func (c *StatisticsCache) Clear() {
 // GetStats returns the cache-specific statistics (implements Cache interface)
 func (c *StatisticsCache) GetStats() *Stats {
 	snapshot := c.stats.GetSnapshot()
-	
+
 	// Calculate hit rate
 	var hitRate float64
 	if snapshot.Hits+snapshot.Misses > 0 {
 		hitRate = float64(snapshot.Hits) / float64(snapshot.Hits+snapshot.Misses)
 	}
-	
+
 	return &Stats{
 		Hits:      snapshot.Hits,
 		Misses:    snapshot.Misses,
@@ -437,21 +437,21 @@ func (c *StatisticsCache) GetDetailedStats() *CacheStats {
 // LogStats logs current statistics
 func (c *StatisticsCache) LogStats() {
 	snapshot := c.stats.GetSnapshot()
-	
+
 	c.logger.Info("Cache statistics", map[string]interface{}{
-		"hit_rate":          snapshot.HitRate,
-		"total_requests":    snapshot.TotalRequests,
-		"hits":              snapshot.Hits,
-		"misses":            snapshot.Misses,
-		"current_size":      snapshot.CurrentSize,
-		"max_size":          snapshot.MaxSize,
-		"stores":            snapshot.Stores,
-		"evictions":         snapshot.Evictions,
-		"bytes_stored":      snapshot.BytesStored,
-		"bytes_retrieved":   snapshot.BytesRetrieved,
-		"avg_get_latency":   snapshot.AvgGetLatency.String(),
-		"avg_store_latency": snapshot.AvgStoreLatency.String(),
-		"most_popular_cid":  snapshot.MostPopularCID,
+		"hit_rate":           snapshot.HitRate,
+		"total_requests":     snapshot.TotalRequests,
+		"hits":               snapshot.Hits,
+		"misses":             snapshot.Misses,
+		"current_size":       snapshot.CurrentSize,
+		"max_size":           snapshot.MaxSize,
+		"stores":             snapshot.Stores,
+		"evictions":          snapshot.Evictions,
+		"bytes_stored":       snapshot.BytesStored,
+		"bytes_retrieved":    snapshot.BytesRetrieved,
+		"avg_get_latency":    snapshot.AvgGetLatency.String(),
+		"avg_store_latency":  snapshot.AvgStoreLatency.String(),
+		"most_popular_cid":   snapshot.MostPopularCID,
 		"most_popular_count": snapshot.MostPopularCount,
 	})
 }

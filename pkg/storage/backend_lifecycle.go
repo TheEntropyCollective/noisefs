@@ -40,18 +40,18 @@ func (l *defaultBackendLifecycle) DisconnectBackend(ctx context.Context, name st
 // ConnectAllBackends connects multiple backends, collecting errors
 func (l *defaultBackendLifecycle) ConnectAllBackends(ctx context.Context, backends map[string]Backend) error {
 	l.clearConnectionErrors()
-	
+
 	var errors ErrorAggregator
 	for name, backend := range backends {
 		if err := l.ConnectBackend(ctx, name, backend); err != nil {
 			errors.Add(err)
 		}
 	}
-	
+
 	if errors.HasErrors() {
 		return errors.CreateAggregateError()
 	}
-	
+
 	return nil
 }
 
@@ -63,11 +63,11 @@ func (l *defaultBackendLifecycle) DisconnectAllBackends(ctx context.Context, bac
 			errors.Add(err)
 		}
 	}
-	
+
 	if errors.HasErrors() {
 		return errors.CreateAggregateError()
 	}
-	
+
 	return nil
 }
 
@@ -82,7 +82,7 @@ func (l *defaultBackendLifecycle) IsBackendConnected(name string) bool {
 func (l *defaultBackendLifecycle) GetConnectionErrors() []error {
 	l.mutex.RLock()
 	defer l.mutex.RUnlock()
-	
+
 	// Return a copy to prevent concurrent access issues
 	errors := make([]error, len(l.connectionErrors))
 	copy(errors, l.connectionErrors)
@@ -93,7 +93,7 @@ func (l *defaultBackendLifecycle) GetConnectionErrors() []error {
 func (l *defaultBackendLifecycle) addConnectionError(err error) {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	
+
 	l.connectionErrors = append(l.connectionErrors, err)
 }
 
@@ -101,6 +101,6 @@ func (l *defaultBackendLifecycle) addConnectionError(err error) {
 func (l *defaultBackendLifecycle) clearConnectionErrors() {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
-	
+
 	l.connectionErrors = l.connectionErrors[:0]
 }

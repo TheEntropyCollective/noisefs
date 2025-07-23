@@ -24,16 +24,16 @@ func NewStatusAggregator(registry BackendRegistry, config *Config) StatusAggrega
 func (a *defaultStatusAggregator) GetManagerStatus() *ManagerStatus {
 	allBackends := a.registry.GetAllBackends()
 	availableBackends := a.registry.GetAvailableBackends()
-	
+
 	status := &ManagerStatus{
-		Started:        len(availableBackends) > 0, // Manager is considered started if any backends are available
-		TotalBackends:  len(a.config.Backends),
-		ActiveBackends: len(availableBackends),
+		Started:         len(availableBackends) > 0, // Manager is considered started if any backends are available
+		TotalBackends:   len(a.config.Backends),
+		ActiveBackends:  len(availableBackends),
 		HealthyBackends: 0,
-		BackendStatus:  make(map[string]*BackendStatus),
-		LastCheck:     time.Now(),
+		BackendStatus:   make(map[string]*BackendStatus),
+		LastCheck:       time.Now(),
 	}
-	
+
 	for name, backend := range allBackends {
 		backendStatus := a.GetBackendStatus(name, backend)
 		if backendStatus.Healthy {
@@ -41,7 +41,7 @@ func (a *defaultStatusAggregator) GetManagerStatus() *ManagerStatus {
 		}
 		status.BackendStatus[name] = backendStatus
 	}
-	
+
 	return status
 }
 
@@ -49,22 +49,22 @@ func (a *defaultStatusAggregator) GetManagerStatus() *ManagerStatus {
 func (a *defaultStatusAggregator) GetBackendStatuses() map[string]*BackendStatus {
 	allBackends := a.registry.GetAllBackends()
 	statuses := make(map[string]*BackendStatus)
-	
+
 	for name, backend := range allBackends {
 		statuses[name] = a.GetBackendStatus(name, backend)
 	}
-	
+
 	return statuses
 }
 
 // GetHealthStatus returns the overall health status
 func (a *defaultStatusAggregator) GetHealthStatus(ctx context.Context) *HealthStatus {
 	status := a.GetManagerStatus()
-	
+
 	healthy := status.HealthyBackends > 0
 	healthStr := "healthy"
 	var issues []HealthIssue
-	
+
 	if status.HealthyBackends == 0 {
 		healthy = false
 		healthStr = "critical"
@@ -77,14 +77,14 @@ func (a *defaultStatusAggregator) GetHealthStatus(ctx context.Context) *HealthSt
 	} else if status.HealthyBackends < status.ActiveBackends {
 		healthStr = "degraded"
 		issues = append(issues, HealthIssue{
-			Severity:    "warning",
-			Code:        "SOME_BACKENDS_UNHEALTHY",
-			Description: fmt.Sprintf("%d of %d backends unhealthy", 
+			Severity: "warning",
+			Code:     "SOME_BACKENDS_UNHEALTHY",
+			Description: fmt.Sprintf("%d of %d backends unhealthy",
 				status.ActiveBackends-status.HealthyBackends, status.ActiveBackends),
-			Timestamp:   time.Now(),
+			Timestamp: time.Now(),
 		})
 	}
-	
+
 	return &HealthStatus{
 		Healthy:   healthy,
 		Status:    healthStr,
@@ -112,14 +112,14 @@ func (a *defaultStatusAggregator) GetHealthyBackends() int {
 func (a *defaultStatusAggregator) GetConnectedPeerCount() int {
 	allBackends := a.registry.GetAllBackends()
 	totalPeers := 0
-	
+
 	for _, backend := range allBackends {
 		if peerAware, ok := backend.(PeerAwareBackend); ok {
 			peers := peerAware.GetConnectedPeers()
 			totalPeers += len(peers)
 		}
 	}
-	
+
 	return totalPeers
 }
 
@@ -127,7 +127,7 @@ func (a *defaultStatusAggregator) GetConnectedPeerCount() int {
 func (a *defaultStatusAggregator) GetBackendStatus(name string, backend Backend) *BackendStatus {
 	backendHealth := backend.HealthCheck(context.Background())
 	backendInfo := backend.GetBackendInfo()
-	
+
 	return &BackendStatus{
 		Name:         name,
 		Type:         backendInfo.Type,

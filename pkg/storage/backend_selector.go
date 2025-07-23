@@ -25,7 +25,7 @@ func (s *defaultBackendSelector) SelectBackend(ctx context.Context, criteria Sel
 	if len(backends) == 0 {
 		return nil, NewNoBackendsError()
 	}
-	
+
 	// Apply selection strategy based on criteria
 	return s.applySelectionStrategy(backends, criteria)
 }
@@ -38,22 +38,22 @@ func (s *defaultBackendSelector) GetBackendsByPriority() []Backend {
 		priority int
 		healthy  bool
 	}
-	
+
 	var infos []backendInfo
 	allBackends := s.registry.GetAllBackends()
-	
+
 	for name, backend := range allBackends {
 		if !backend.IsConnected() {
 			continue
 		}
-		
+
 		config, exists := s.config.Backends[name]
 		if !exists {
 			continue
 		}
-		
+
 		status := backend.HealthCheck(context.Background())
-		
+
 		infos = append(infos, backendInfo{
 			backend:  backend,
 			name:     name,
@@ -61,7 +61,7 @@ func (s *defaultBackendSelector) GetBackendsByPriority() []Backend {
 			healthy:  status.Healthy,
 		})
 	}
-	
+
 	// Sort by health first, then priority
 	sort.Slice(infos, func(i, j int) bool {
 		if infos[i].healthy != infos[j].healthy {
@@ -69,12 +69,12 @@ func (s *defaultBackendSelector) GetBackendsByPriority() []Backend {
 		}
 		return infos[i].priority > infos[j].priority // Higher priority first
 	})
-	
+
 	backends := make([]Backend, len(infos))
 	for i, info := range infos {
 		backends[i] = info.backend
 	}
-	
+
 	return backends
 }
 
@@ -97,16 +97,16 @@ func (s *defaultBackendSelector) SelectBestBackend(ctx context.Context, criteria
 // SelectHealthyBackends returns the specified number of healthy backends
 func (s *defaultBackendSelector) SelectHealthyBackends(count int) []Backend {
 	healthyBackends := s.registry.GetHealthyBackends()
-	
+
 	// Convert map to slice for prioritization
 	backends := make([]Backend, 0, len(healthyBackends))
 	for _, backend := range healthyBackends {
 		backends = append(backends, backend)
 	}
-	
+
 	// Sort by priority
 	prioritizedBackends := s.GetBackendsByPriority()
-	
+
 	// Filter to only include healthy ones and limit count
 	var result []Backend
 	for _, backend := range prioritizedBackends {
@@ -118,7 +118,7 @@ func (s *defaultBackendSelector) SelectHealthyBackends(count int) []Backend {
 			}
 		}
 	}
-	
+
 	return result
 }
 
@@ -128,7 +128,7 @@ func (s *defaultBackendSelector) SelectBackendByCapability(capability string) (B
 	if len(backends) == 0 {
 		return nil, NewNotFoundError("selector", nil)
 	}
-	
+
 	// Return the first healthy backend with the capability
 	for _, backend := range backends {
 		status := backend.HealthCheck(context.Background())
@@ -136,7 +136,7 @@ func (s *defaultBackendSelector) SelectBackendByCapability(capability string) (B
 			return backend, nil
 		}
 	}
-	
+
 	// If no healthy backends, return the first available one
 	return backends[0], nil
 }
@@ -144,21 +144,21 @@ func (s *defaultBackendSelector) SelectBackendByCapability(capability string) (B
 // getEligibleBackends filters backends based on selection criteria
 func (s *defaultBackendSelector) getEligibleBackends(criteria SelectionCriteria) []Backend {
 	var eligible []Backend
-	
+
 	// Start with available backends
 	available := s.registry.GetAvailableBackends()
-	
+
 	for name, backend := range available {
 		// Check exclusions
 		if s.isExcluded(name, criteria.ExcludeBackends) {
 			continue
 		}
-		
+
 		// Check capabilities
 		if !s.hasRequiredCapabilities(backend, criteria.RequiredCapabilities) {
 			continue
 		}
-		
+
 		// Check health if preferred
 		if criteria.PreferHealthy {
 			status := backend.HealthCheck(context.Background())
@@ -166,7 +166,7 @@ func (s *defaultBackendSelector) getEligibleBackends(criteria SelectionCriteria)
 				continue
 			}
 		}
-		
+
 		// Check storage requirements
 		if criteria.MinAvailableStorage > 0 {
 			status := backend.HealthCheck(context.Background())
@@ -174,10 +174,10 @@ func (s *defaultBackendSelector) getEligibleBackends(criteria SelectionCriteria)
 				continue
 			}
 		}
-		
+
 		eligible = append(eligible, backend)
 	}
-	
+
 	return eligible
 }
 
@@ -186,7 +186,7 @@ func (s *defaultBackendSelector) applySelectionStrategy(backends []Backend, crit
 	if len(backends) == 1 {
 		return backends[0], nil
 	}
-	
+
 	// Apply priority-based selection if preferred
 	if criteria.PreferHighPriority {
 		prioritized := s.GetBackendsByPriority()
@@ -199,12 +199,12 @@ func (s *defaultBackendSelector) applySelectionStrategy(backends []Backend, crit
 			}
 		}
 	}
-	
+
 	// Apply latency-based selection if preferred
 	if criteria.PreferLowLatency {
 		return s.selectByLatency(backends)
 	}
-	
+
 	// Default: return the first backend
 	return backends[0], nil
 }
@@ -214,10 +214,10 @@ func (s *defaultBackendSelector) selectByLatency(backends []Backend) (Backend, e
 	if len(backends) == 0 {
 		return nil, NewNoBackendsError()
 	}
-	
+
 	bestBackend := backends[0]
 	bestLatency := bestBackend.HealthCheck(context.Background()).Latency
-	
+
 	for _, backend := range backends[1:] {
 		status := backend.HealthCheck(context.Background())
 		if status.Latency < bestLatency {
@@ -225,7 +225,7 @@ func (s *defaultBackendSelector) selectByLatency(backends []Backend) (Backend, e
 			bestLatency = status.Latency
 		}
 	}
-	
+
 	return bestBackend, nil
 }
 
@@ -244,18 +244,18 @@ func (s *defaultBackendSelector) hasRequiredCapabilities(backend Backend, requir
 	if len(required) == 0 {
 		return true
 	}
-	
+
 	info := backend.GetBackendInfo()
 	backendCaps := make(map[string]bool)
 	for _, cap := range info.Capabilities {
 		backendCaps[cap] = true
 	}
-	
+
 	for _, req := range required {
 		if !backendCaps[req] {
 			return false
 		}
 	}
-	
+
 	return true
 }

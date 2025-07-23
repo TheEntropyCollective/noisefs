@@ -9,19 +9,19 @@ import (
 // keeping randomizer blocks in cache due to their high reuse potential
 type RandomizerAwareEvictionPolicy struct {
 	// Weight factors for scoring
-	randomizerWeight   float64
-	accessWeight       float64
-	recencyWeight      float64
-	predictionWeight   float64
+	randomizerWeight float64
+	accessWeight     float64
+	recencyWeight    float64
+	predictionWeight float64
 }
 
 // NewRandomizerAwareEvictionPolicy creates a new randomizer-aware eviction policy
 func NewRandomizerAwareEvictionPolicy() *RandomizerAwareEvictionPolicy {
 	return &RandomizerAwareEvictionPolicy{
-		randomizerWeight: 3.0,  // Strong preference for keeping randomizers
-		accessWeight:     2.0,  // Frequency of access
-		recencyWeight:    1.0,  // Recent access
-		predictionWeight: 1.5,  // ML prediction value
+		randomizerWeight: 3.0, // Strong preference for keeping randomizers
+		accessWeight:     2.0, // Frequency of access
+		recencyWeight:    1.0, // Recent access
+		predictionWeight: 1.5, // ML prediction value
 	}
 }
 
@@ -31,15 +31,15 @@ func (p *RandomizerAwareEvictionPolicy) ShouldEvict(item *AdaptiveCacheItem, cac
 	if item.IsRandomizer && item.Tier == AdaptiveHotTier {
 		return false
 	}
-	
+
 	// Calculate retention score
 	score := p.GetPriority(item)
-	
+
 	// Items with very low scores should be evicted
 	// Threshold depends on cache pressure
 	utilizationRatio := float64(cache.currentSize) / float64(cache.maxSize)
 	threshold := 0.2 * (1.0 + utilizationRatio) // Dynamic threshold
-	
+
 	return score < threshold
 }
 
@@ -50,9 +50,9 @@ func (p *RandomizerAwareEvictionPolicy) SelectEvictionCandidates(cache *Adaptive
 		item  *AdaptiveCacheItem
 		score float64
 	}
-	
+
 	scoredItems := make([]scoredItem, 0, len(cache.items))
-	
+
 	// Score all items
 	for _, item := range cache.items {
 		score := p.GetPriority(item)
@@ -61,30 +61,30 @@ func (p *RandomizerAwareEvictionPolicy) SelectEvictionCandidates(cache *Adaptive
 			score: score,
 		})
 	}
-	
+
 	// Sort by score (lowest first - these are eviction candidates)
 	sort.Slice(scoredItems, func(i, j int) bool {
 		return scoredItems[i].score < scoredItems[j].score
 	})
-	
+
 	// Select items until we have enough space
 	candidates := make([]*AdaptiveCacheItem, 0)
 	freedSpace := int64(0)
-	
+
 	for _, scored := range scoredItems {
 		if freedSpace >= spaceNeeded {
 			break
 		}
-		
+
 		// Skip hot tier randomizers completely
 		if scored.item.IsRandomizer && scored.item.Tier == AdaptiveHotTier {
 			continue
 		}
-		
+
 		candidates = append(candidates, scored.item)
 		freedSpace += scored.item.Size
 	}
-	
+
 	return candidates
 }
 
@@ -92,14 +92,14 @@ func (p *RandomizerAwareEvictionPolicy) SelectEvictionCandidates(cache *Adaptive
 // Higher score = less likely to be evicted
 func (p *RandomizerAwareEvictionPolicy) GetPriority(item *AdaptiveCacheItem) float64 {
 	now := time.Now()
-	
+
 	// Base score components
 	var score float64
-	
+
 	// 1. Randomizer bonus - heavily weighted
 	if item.IsRandomizer {
 		score += p.randomizerWeight
-		
+
 		// Additional bonus based on randomizer usage
 		if item.RandomizerUse > 0 {
 			usageBonus := float64(item.RandomizerUse) / 100.0 // Normalize
@@ -109,24 +109,24 @@ func (p *RandomizerAwareEvictionPolicy) GetPriority(item *AdaptiveCacheItem) flo
 			score += p.randomizerWeight * usageBonus
 		}
 	}
-	
+
 	// 2. Access frequency score
 	timeSinceCreation := now.Sub(item.CreatedAt).Hours()
 	if timeSinceCreation > 0 {
 		accessRate := float64(item.AccessCount) / timeSinceCreation
 		score += p.accessWeight * (accessRate / 10.0) // Normalize by 10 accesses/hour
 	}
-	
+
 	// 3. Recency score
 	timeSinceAccess := now.Sub(item.LastAccessed).Hours()
 	recencyScore := 1.0 / (1.0 + timeSinceAccess/24.0) // Decay over days
 	score += p.recencyWeight * recencyScore
-	
+
 	// 4. ML prediction score
 	if item.PredictedValue > 0 {
 		score += p.predictionWeight * item.PredictedValue
 	}
-	
+
 	// 5. Tier multiplier
 	switch item.Tier {
 	case AdaptiveHotTier:
@@ -136,7 +136,7 @@ func (p *RandomizerAwareEvictionPolicy) GetPriority(item *AdaptiveCacheItem) flo
 	case AdaptiveColdTier:
 		score *= 1.0
 	}
-	
+
 	// 6. Special block type bonuses
 	switch item.BlockType {
 	case "descriptor":
@@ -144,7 +144,7 @@ func (p *RandomizerAwareEvictionPolicy) GetPriority(item *AdaptiveCacheItem) flo
 	case "index":
 		score *= 1.1 // Index blocks help with navigation
 	}
-	
+
 	return score
 }
 
@@ -159,11 +159,11 @@ func (p *RandomizerAwareEvictionPolicy) SetWeights(randomizer, access, recency, 
 // GetStatistics returns eviction policy statistics
 func (p *RandomizerAwareEvictionPolicy) GetStatistics(cache *AdaptiveCache) map[string]interface{} {
 	stats := make(map[string]interface{})
-	
+
 	randomizerCount := 0
 	totalRandomizerUse := int64(0)
 	avgScore := 0.0
-	
+
 	for _, item := range cache.items {
 		if item.IsRandomizer {
 			randomizerCount++
@@ -171,11 +171,11 @@ func (p *RandomizerAwareEvictionPolicy) GetStatistics(cache *AdaptiveCache) map[
 		}
 		avgScore += p.GetPriority(item)
 	}
-	
+
 	if len(cache.items) > 0 {
 		avgScore /= float64(len(cache.items))
 	}
-	
+
 	stats["randomizer_count"] = randomizerCount
 	stats["total_randomizer_use"] = totalRandomizerUse
 	stats["average_retention_score"] = avgScore
@@ -185,6 +185,6 @@ func (p *RandomizerAwareEvictionPolicy) GetStatistics(cache *AdaptiveCache) map[
 		"recency":    p.recencyWeight,
 		"prediction": p.predictionWeight,
 	}
-	
+
 	return stats
 }

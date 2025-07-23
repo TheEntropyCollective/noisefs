@@ -14,19 +14,19 @@ import (
 
 // MockBackend provides a mock implementation of storage.Backend for testing
 type MockBackend struct {
-	mu           sync.RWMutex
-	blocks       map[string]*blocks.Block
-	backendType  string
-	isConnected  bool
-	
+	mu          sync.RWMutex
+	blocks      map[string]*blocks.Block
+	backendType string
+	isConnected bool
+
 	// Test control
-	storeError     error
-	retrieveError  error
-	hasError       error
-	latency        time.Duration
-	storeDelay     time.Duration
-	retrieveDelay  time.Duration
-	
+	storeError    error
+	retrieveError error
+	hasError      error
+	latency       time.Duration
+	storeDelay    time.Duration
+	retrieveDelay time.Duration
+
 	// Metrics
 	storeCount    int64
 	retrieveCount int64
@@ -46,24 +46,24 @@ func NewMockBackend(backendType string) *MockBackend {
 func (m *MockBackend) Put(ctx context.Context, block *blocks.Block) (*storage.BlockAddress, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.storeCount++
-	
+
 	if m.storeDelay > 0 {
 		time.Sleep(m.storeDelay)
 	}
 	if m.latency > 0 {
 		time.Sleep(m.latency)
 	}
-	
+
 	if m.storeError != nil {
 		return nil, m.storeError
 	}
-	
+
 	// Generate a deterministic CID based on block data
 	hash := sha256.Sum256(block.Data)
 	cid := hex.EncodeToString(hash[:16]) // Use first 16 bytes as CID
-	
+
 	m.blocks[cid] = block
 	address := &storage.BlockAddress{
 		ID:          cid,
@@ -78,25 +78,25 @@ func (m *MockBackend) Put(ctx context.Context, block *blocks.Block) (*storage.Bl
 func (m *MockBackend) Get(ctx context.Context, address *storage.BlockAddress) (*blocks.Block, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	m.retrieveCount++
-	
+
 	if m.retrieveDelay > 0 {
 		time.Sleep(m.retrieveDelay)
 	}
 	if m.latency > 0 {
 		time.Sleep(m.latency)
 	}
-	
+
 	if m.retrieveError != nil {
 		return nil, m.retrieveError
 	}
-	
+
 	block, exists := m.blocks[address.ID]
 	if !exists {
 		return nil, fmt.Errorf("block not found: %s", address.ID)
 	}
-	
+
 	return block, nil
 }
 
@@ -104,17 +104,17 @@ func (m *MockBackend) Get(ctx context.Context, address *storage.BlockAddress) (*
 func (m *MockBackend) Has(ctx context.Context, address *storage.BlockAddress) (bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	m.hasCount++
-	
+
 	if m.latency > 0 {
 		time.Sleep(m.latency)
 	}
-	
+
 	if m.hasError != nil {
 		return false, m.hasError
 	}
-	
+
 	_, exists := m.blocks[address.ID]
 	return exists, nil
 }
@@ -123,7 +123,7 @@ func (m *MockBackend) Has(ctx context.Context, address *storage.BlockAddress) (b
 func (m *MockBackend) Delete(ctx context.Context, address *storage.BlockAddress) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	delete(m.blocks, address.ID)
 	return nil
 }
@@ -132,14 +132,14 @@ func (m *MockBackend) Delete(ctx context.Context, address *storage.BlockAddress)
 func (m *MockBackend) GetStats() map[string]interface{} {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return map[string]interface{}{
-		"backend_type":    m.backendType,
-		"blocks_stored":   len(m.blocks),
-		"store_count":     m.storeCount,
-		"retrieve_count":  m.retrieveCount,
-		"has_count":       m.hasCount,
-		"connected":       m.isConnected,
+		"backend_type":   m.backendType,
+		"blocks_stored":  len(m.blocks),
+		"store_count":    m.storeCount,
+		"retrieve_count": m.retrieveCount,
+		"has_count":      m.hasCount,
+		"connected":      m.isConnected,
 	}
 }
 
@@ -154,7 +154,7 @@ func (m *MockBackend) GetBackendInfo() *storage.BackendInfo {
 			storage.CapabilityContentAddress,
 		},
 		Config: map[string]interface{}{
-			"mock": true,
+			"mock":    true,
 			"testing": true,
 		},
 	}
@@ -164,12 +164,12 @@ func (m *MockBackend) GetBackendInfo() *storage.BackendInfo {
 func (m *MockBackend) HealthCheck(ctx context.Context) *storage.HealthStatus {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	status := "healthy"
 	if !m.isConnected {
 		status = "offline"
 	}
-	
+
 	return &storage.HealthStatus{
 		Healthy:   m.isConnected,
 		Status:    status,
@@ -324,7 +324,7 @@ func (m *MockBackend) Clear() {
 func (m *MockBackend) GetMetrics() map[string]int64 {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
 	return map[string]int64{
 		"stores":    m.storeCount,
 		"retrieves": m.retrieveCount,

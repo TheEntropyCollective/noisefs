@@ -614,7 +614,6 @@ func (ipfs *IPFSBackend) updateHealthStatus() {
 	ipfs.healthStatus.LastCheck = time.Now()
 }
 
-
 // Ensure IPFSBackend implements all required interfaces
 var _ storage.Backend = (*IPFSBackend)(nil)
 var _ storage.PeerAwareBackend = (*IPFSBackend)(nil)

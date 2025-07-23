@@ -13,7 +13,7 @@ type BackendRegistry interface {
 	GetBackendsWithCapability(capability string) []Backend
 	AddBackend(name string, backend Backend)
 	RemoveBackend(name string)
-	
+
 	// Registry information
 	GetAllBackends() map[string]Backend
 	GetBackendNames() []string
@@ -26,7 +26,7 @@ type BackendLifecycle interface {
 	DisconnectBackend(ctx context.Context, name string, backend Backend) error
 	ConnectAllBackends(ctx context.Context, backends map[string]Backend) error
 	DisconnectAllBackends(ctx context.Context, backends map[string]Backend) error
-	
+
 	// Lifecycle status
 	IsBackendConnected(name string) bool
 	GetConnectionErrors() []error
@@ -39,7 +39,7 @@ type BackendSelector interface {
 	GetBackendsByPriority() []Backend
 	GetDefaultBackend() (Backend, error)
 	SelectBestBackend(ctx context.Context, criteria SelectionCriteria) (Backend, error)
-	
+
 	// Priority and health-based selection
 	SelectHealthyBackends(count int) []Backend
 	SelectBackendByCapability(capability string) (Backend, error)
@@ -51,13 +51,13 @@ type StatusAggregator interface {
 	GetManagerStatus() *ManagerStatus
 	GetBackendStatuses() map[string]*BackendStatus
 	GetHealthStatus(ctx context.Context) *HealthStatus
-	
+
 	// Aggregated metrics
 	GetTotalBackends() int
 	GetActiveBackends() int
 	GetHealthyBackends() int
 	GetConnectedPeerCount() int
-	
+
 	// Individual backend status
 	GetBackendStatus(name string, backend Backend) *BackendStatus
 	GetBackendHealth(name string, backend Backend) *HealthStatus
@@ -67,35 +67,35 @@ type StatusAggregator interface {
 type SelectionCriteria struct {
 	// Required capabilities
 	RequiredCapabilities []string
-	
+
 	// Preferred capabilities (nice to have)
 	PreferredCapabilities []string
-	
+
 	// Performance requirements
-	MaxLatency   float64 // milliseconds
+	MaxLatency    float64 // milliseconds
 	MinThroughput float64 // bytes per second
 	MaxErrorRate  float64 // percentage (0.0-1.0)
-	
+
 	// Backend type restrictions
 	AllowedTypes    []string
 	DisallowedTypes []string
-	
+
 	// Health and priority preferences
 	RequireHealthy     bool
 	PreferHealthy      bool
 	PreferHighPriority bool
 	PreferLowLatency   bool
-	
+
 	// Load balancing
 	LoadBalance bool
-	
+
 	// Size constraints
 	MinAvailableStorage int64
-	
+
 	// Operation hints
 	OperationType string // "read", "write", "pin", etc.
 	BlockSize     int64
-	
+
 	// Exclusions
 	ExcludeBackends []string
 }

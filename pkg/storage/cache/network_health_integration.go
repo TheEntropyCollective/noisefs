@@ -17,10 +17,10 @@ type NetworkHealthManager struct {
 	gossiper      *HealthGossiper
 	exchanger     *BloomExchanger
 	shell         *shell.Shell
-	
+
 	// Configuration
 	config *NetworkHealthConfig
-	
+
 	// State
 	started bool
 	mu      sync.RWMutex
@@ -28,10 +28,10 @@ type NetworkHealthManager struct {
 
 // NetworkHealthConfig configures the network health system
 type NetworkHealthConfig struct {
-	EnableGossip         bool                  `json:"enable_gossip"`
-	EnableBloomExchange  bool                  `json:"enable_bloom_exchange"`
-	GossipConfig         *HealthGossipConfig   `json:"gossip_config,omitempty"`
-	BloomExchangeConfig  *BloomExchangeConfig  `json:"bloom_exchange_config,omitempty"`
+	EnableGossip        bool                 `json:"enable_gossip"`
+	EnableBloomExchange bool                 `json:"enable_bloom_exchange"`
+	GossipConfig        *HealthGossipConfig  `json:"gossip_config,omitempty"`
+	BloomExchangeConfig *BloomExchangeConfig `json:"bloom_exchange_config,omitempty"`
 }
 
 // DefaultNetworkHealthConfig returns default configuration
@@ -53,14 +53,14 @@ func NewNetworkHealthManager(
 	if config == nil {
 		config = DefaultNetworkHealthConfig()
 	}
-	
+
 	nhm := &NetworkHealthManager{
 		cache:         cache,
 		healthTracker: cache.GetHealthTracker(),
 		shell:         shell,
 		config:        config,
 	}
-	
+
 	// Initialize gossiper if enabled
 	if config.EnableGossip {
 		gossiper, err := NewHealthGossiper(config.GossipConfig, nhm.healthTracker, shell)
@@ -69,7 +69,7 @@ func NewNetworkHealthManager(
 		}
 		nhm.gossiper = gossiper
 	}
-	
+
 	// Initialize bloom exchanger if enabled
 	if config.EnableBloomExchange {
 		exchanger, err := NewBloomExchanger(config.BloomExchangeConfig, cache, shell)
@@ -78,7 +78,7 @@ func NewNetworkHealthManager(
 		}
 		nhm.exchanger = exchanger
 	}
-	
+
 	return nhm, nil
 }
 
@@ -86,18 +86,18 @@ func NewNetworkHealthManager(
 func (nhm *NetworkHealthManager) Start() error {
 	nhm.mu.Lock()
 	defer nhm.mu.Unlock()
-	
+
 	if nhm.started {
 		return fmt.Errorf("network health manager already started")
 	}
-	
+
 	// Start gossiper
 	if nhm.gossiper != nil {
 		if err := nhm.gossiper.Start(); err != nil {
 			return fmt.Errorf("failed to start gossiper: %w", err)
 		}
 	}
-	
+
 	// Start bloom exchanger
 	if nhm.exchanger != nil {
 		if err := nhm.exchanger.Start(); err != nil {
@@ -108,7 +108,7 @@ func (nhm *NetworkHealthManager) Start() error {
 			return fmt.Errorf("failed to start bloom exchanger: %w", err)
 		}
 	}
-	
+
 	nhm.started = true
 	return nil
 }
@@ -117,20 +117,20 @@ func (nhm *NetworkHealthManager) Start() error {
 func (nhm *NetworkHealthManager) Stop() {
 	nhm.mu.Lock()
 	defer nhm.mu.Unlock()
-	
+
 	if !nhm.started {
 		return
 	}
-	
+
 	// Stop components in reverse order
 	if nhm.exchanger != nil {
 		nhm.exchanger.Stop()
 	}
-	
+
 	if nhm.gossiper != nil {
 		nhm.gossiper.Stop()
 	}
-	
+
 	nhm.started = false
 }
 
@@ -138,28 +138,28 @@ func (nhm *NetworkHealthManager) Stop() {
 func (nhm *NetworkHealthManager) GetNetworkHealth() *NetworkHealthReport {
 	nhm.mu.RLock()
 	defer nhm.mu.RUnlock()
-	
+
 	report := &NetworkHealthReport{
 		Timestamp: time.Now(),
 		Enabled:   nhm.started,
 	}
-	
+
 	// Get gossip statistics
 	if nhm.gossiper != nil {
 		report.GossipStats = nhm.gossiper.GetNetworkHealthEstimate()
 	}
-	
+
 	// Get coordination statistics
 	if nhm.exchanger != nil {
 		report.CoordinationStats = nhm.exchanger.GetPeerCoordination()
 	}
-	
+
 	// Get local health statistics
 	report.LocalHealth = nhm.healthTracker.GetHealthSummary()
-	
+
 	// Calculate overall network health score
 	report.OverallScore = nhm.calculateOverallScore(report)
-	
+
 	return report
 }
 
@@ -186,11 +186,11 @@ type HealthSummary struct {
 func (bht *BlockHealthTracker) GetHealthSummary() *HealthSummary {
 	bht.mu.RLock()
 	defer bht.mu.RUnlock()
-	
+
 	summary := &HealthSummary{
 		TrackedBlocks: len(bht.blocks),
 	}
-	
+
 	totalValue := 0.0
 	for _, health := range bht.blocks {
 		hint := health.Hint
@@ -202,14 +202,14 @@ func (bht *BlockHealthTracker) GetHealthSummary() *HealthSummary {
 		}
 		totalValue += bht.calculateBlockValueInternal(hint)
 	}
-	
+
 	if summary.TrackedBlocks > 0 {
 		summary.AverageValue = totalValue / float64(summary.TrackedBlocks)
 	}
-	
+
 	// TODO: Integrate with opportunistic fetcher when available
 	summary.OpportunisticQueue = 0
-	
+
 	return summary
 }
 
@@ -217,15 +217,15 @@ func (bht *BlockHealthTracker) GetHealthSummary() *HealthSummary {
 func (nhm *NetworkHealthManager) calculateOverallScore(report *NetworkHealthReport) float64 {
 	score := 0.0
 	components := 0
-	
+
 	// Local health component (40% weight)
 	if report.LocalHealth != nil && report.LocalHealth.TrackedBlocks > 0 {
 		// Normalize AverageValue to 0-1 range (assuming max value of ~10)
-		localScore := math.Min(report.LocalHealth.AverageValue / 10.0, 1.0)
+		localScore := math.Min(report.LocalHealth.AverageValue/10.0, 1.0)
 		score += localScore * 0.4
 		components++
 	}
-	
+
 	// Network gossip component (30% weight)
 	if report.GossipStats != nil && report.GossipStats.PeerCount > 0 {
 		// Score based on peer participation
@@ -236,7 +236,7 @@ func (nhm *NetworkHealthManager) calculateOverallScore(report *NetworkHealthRepo
 		score += peerScore * 0.3
 		components++
 	}
-	
+
 	// Coordination component (30% weight)
 	if report.CoordinationStats != nil && report.CoordinationStats.ActivePeers > 0 {
 		// Use average category overlap as coordination metric
@@ -255,12 +255,12 @@ func (nhm *NetworkHealthManager) calculateOverallScore(report *NetworkHealthRepo
 		score += coordScore * 0.3
 		components++
 	}
-	
+
 	// Normalize by number of active components
 	if components > 0 {
 		return score
 	}
-	
+
 	return 0.0
 }
 
@@ -268,11 +268,11 @@ func (nhm *NetworkHealthManager) calculateOverallScore(report *NetworkHealthRepo
 func (nhm *NetworkHealthManager) UpdateFromNetworkHealth() {
 	nhm.mu.RLock()
 	defer nhm.mu.RUnlock()
-	
+
 	if !nhm.started {
 		return
 	}
-	
+
 	// Get network health estimate
 	if nhm.gossiper != nil {
 		networkEstimate := nhm.gossiper.GetNetworkHealthEstimate()
@@ -281,7 +281,7 @@ func (nhm *NetworkHealthManager) UpdateFromNetworkHealth() {
 			nhm.updateOpportunisticTargets(networkEstimate)
 		}
 	}
-	
+
 	// Update coordination
 	if nhm.exchanger != nil {
 		coordination := nhm.exchanger.GetPeerCoordination()
@@ -298,7 +298,7 @@ func (nhm *NetworkHealthManager) updateOpportunisticTargets(estimate *NetworkHea
 	if fetcher == nil {
 		return
 	}
-	
+
 	// If network has many low-replication blocks, prioritize fetching them
 	if estimate.LowReplicationBlocks > estimate.TotalNetworkBlocks/10 {
 		// Increase priority for low-replication blocks
@@ -328,7 +328,7 @@ func (ac *AltruisticCache) GetNetworkHealthManager(shell *shell.Shell) (*Network
 		EnableGossip:        ac.config.EnableAltruistic,
 		EnableBloomExchange: ac.config.EnableAltruistic,
 	}
-	
+
 	return NewNetworkHealthManager(ac, shell, config)
 }
 
@@ -336,10 +336,10 @@ func (ac *AltruisticCache) GetNetworkHealthManager(shell *shell.Shell) (*Network
 func (nhm *NetworkHealthManager) IntegrateWithPeerDiscovery(ctx context.Context) error {
 	// This would integrate with the existing P2P peer manager
 	// For now, we'll use a simple integration approach
-	
+
 	// Monitor for new peers and update health tracking
 	go nhm.peerDiscoveryLoop(ctx)
-	
+
 	return nil
 }
 
@@ -347,7 +347,7 @@ func (nhm *NetworkHealthManager) IntegrateWithPeerDiscovery(ctx context.Context)
 func (nhm *NetworkHealthManager) peerDiscoveryLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ctx.Done():

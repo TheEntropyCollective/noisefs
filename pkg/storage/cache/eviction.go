@@ -13,16 +13,16 @@ import (
 type EvictionPolicy interface {
 	// OnAccess is called when a block is accessed
 	OnAccess(cid string)
-	
+
 	// OnStore is called when a block is stored
 	OnStore(cid string, block *blocks.Block)
-	
+
 	// OnRemove is called when a block is removed
 	OnRemove(cid string)
-	
+
 	// SelectVictim selects a block for eviction
 	SelectVictim() (string, bool)
-	
+
 	// Clear resets the eviction policy state
 	Clear()
 }
@@ -46,7 +46,7 @@ func NewLRUEvictionPolicy() *LRUEvictionPolicy {
 func (p *LRUEvictionPolicy) OnAccess(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	// Remove from current position
 	if index, exists := p.accessMap[cid]; exists {
 		p.accessOrder = append(p.accessOrder[:index], p.accessOrder[index+1:]...)
@@ -55,7 +55,7 @@ func (p *LRUEvictionPolicy) OnAccess(cid string) {
 			p.accessMap[p.accessOrder[i]] = i
 		}
 	}
-	
+
 	// Add to end (most recently used)
 	p.accessOrder = append(p.accessOrder, cid)
 	p.accessMap[cid] = len(p.accessOrder) - 1
@@ -70,11 +70,11 @@ func (p *LRUEvictionPolicy) OnStore(cid string, block *blocks.Block) {
 func (p *LRUEvictionPolicy) OnRemove(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if index, exists := p.accessMap[cid]; exists {
 		p.accessOrder = append(p.accessOrder[:index], p.accessOrder[index+1:]...)
 		delete(p.accessMap, cid)
-		
+
 		// Update indices for moved elements
 		for i := index; i < len(p.accessOrder); i++ {
 			p.accessMap[p.accessOrder[i]] = i
@@ -86,11 +86,11 @@ func (p *LRUEvictionPolicy) OnRemove(cid string) {
 func (p *LRUEvictionPolicy) SelectVictim() (string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	if len(p.accessOrder) == 0 {
 		return "", false
 	}
-	
+
 	return p.accessOrder[0], true
 }
 
@@ -98,7 +98,7 @@ func (p *LRUEvictionPolicy) SelectVictim() (string, bool) {
 func (p *LRUEvictionPolicy) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	p.accessOrder = make([]string, 0)
 	p.accessMap = make(map[string]int)
 }
@@ -123,10 +123,10 @@ func NewLFUEvictionPolicy() *LFUEvictionPolicy {
 func (p *LFUEvictionPolicy) OnAccess(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	oldFreq := p.frequency[cid]
 	newFreq := oldFreq + 1
-	
+
 	// Remove from old frequency bucket
 	if oldFreq > 0 {
 		delete(p.freqToCIDs[oldFreq], cid)
@@ -134,14 +134,14 @@ func (p *LFUEvictionPolicy) OnAccess(cid string) {
 			delete(p.freqToCIDs, oldFreq)
 		}
 	}
-	
+
 	// Add to new frequency bucket
 	p.frequency[cid] = newFreq
 	if p.freqToCIDs[newFreq] == nil {
 		p.freqToCIDs[newFreq] = make(map[string]bool)
 	}
 	p.freqToCIDs[newFreq][cid] = true
-	
+
 	// Update minimum frequency
 	if oldFreq == p.minFreq && len(p.freqToCIDs[oldFreq]) == 0 {
 		p.minFreq = newFreq
@@ -157,7 +157,7 @@ func (p *LFUEvictionPolicy) OnStore(cid string, block *blocks.Block) {
 func (p *LFUEvictionPolicy) OnRemove(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	if freq, exists := p.frequency[cid]; exists {
 		delete(p.frequency, cid)
 		delete(p.freqToCIDs[freq], cid)
@@ -171,7 +171,7 @@ func (p *LFUEvictionPolicy) OnRemove(cid string) {
 func (p *LFUEvictionPolicy) SelectVictim() (string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Find minimum frequency with available blocks
 	for freq := p.minFreq; freq <= p.minFreq+10; freq++ {
 		if cids, exists := p.freqToCIDs[freq]; exists && len(cids) > 0 {
@@ -181,7 +181,7 @@ func (p *LFUEvictionPolicy) SelectVictim() (string, bool) {
 			}
 		}
 	}
-	
+
 	return "", false
 }
 
@@ -189,7 +189,7 @@ func (p *LFUEvictionPolicy) SelectVictim() (string, bool) {
 func (p *LFUEvictionPolicy) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	p.frequency = make(map[string]int)
 	p.freqToCIDs = make(map[int]map[string]bool)
 	p.minFreq = 0
@@ -197,10 +197,10 @@ func (p *LFUEvictionPolicy) Clear() {
 
 // TTLEvictionPolicy implements Time-To-Live eviction
 type TTLEvictionPolicy struct {
-	mu        sync.RWMutex
-	ttl       time.Duration
+	mu         sync.RWMutex
+	ttl        time.Duration
 	timestamps map[string]time.Time
-	heap      *TTLHeap
+	heap       *TTLHeap
 }
 
 // TTLEntry represents an entry in the TTL heap
@@ -250,10 +250,10 @@ func NewTTLEvictionPolicy(ttl time.Duration) *TTLEvictionPolicy {
 func (p *TTLEvictionPolicy) OnAccess(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	now := time.Now()
 	p.timestamps[cid] = now
-	
+
 	// Add to heap for expiration tracking
 	entry := &TTLEntry{
 		CID:       cid,
@@ -271,7 +271,7 @@ func (p *TTLEvictionPolicy) OnStore(cid string, block *blocks.Block) {
 func (p *TTLEvictionPolicy) OnRemove(cid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	delete(p.timestamps, cid)
 }
 
@@ -279,23 +279,23 @@ func (p *TTLEvictionPolicy) OnRemove(cid string) {
 func (p *TTLEvictionPolicy) SelectVictim() (string, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Clean up expired entries
 	for p.heap.Len() > 0 {
 		entry := (*p.heap)[0]
 		if entry.ExpiresAt.After(now) {
 			break
 		}
-		
+
 		// Remove expired entry
 		heap.Pop(p.heap)
 		if _, exists := p.timestamps[entry.CID]; exists {
 			return entry.CID, true
 		}
 	}
-	
+
 	return "", false
 }
 
@@ -303,18 +303,18 @@ func (p *TTLEvictionPolicy) SelectVictim() (string, bool) {
 func (p *TTLEvictionPolicy) Clear() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	
+
 	p.timestamps = make(map[string]time.Time)
 	p.heap = &TTLHeap{}
 }
 
 // AdaptiveEvictionPolicyImpl combines multiple eviction policies
 type AdaptiveEvictionPolicyImpl struct {
-	mu         sync.RWMutex
-	policies   []EvictionPolicy
-	weights    []float64
-	logger     *logging.Logger
-	stats      map[string]*EvictionStats
+	mu       sync.RWMutex
+	policies []EvictionPolicy
+	weights  []float64
+	logger   *logging.Logger
+	stats    map[string]*EvictionStats
 }
 
 // EvictionStats tracks eviction policy performance
@@ -331,7 +331,7 @@ func NewAdaptiveEvictionPolicy(logger *logging.Logger) *AdaptiveEvictionPolicyIm
 		NewLFUEvictionPolicy(),
 		NewTTLEvictionPolicy(30 * time.Minute),
 	}
-	
+
 	return &AdaptiveEvictionPolicyImpl{
 		policies: policies,
 		weights:  []float64{0.4, 0.4, 0.2}, // Initial weights
@@ -365,7 +365,7 @@ func (p *AdaptiveEvictionPolicyImpl) OnRemove(cid string) {
 func (p *AdaptiveEvictionPolicyImpl) SelectVictim() (string, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	// Simple weighted round-robin for now
 	// In a real implementation, this would use more sophisticated adaptation
 	for i, policy := range p.policies {
@@ -380,7 +380,7 @@ func (p *AdaptiveEvictionPolicyImpl) SelectVictim() (string, bool) {
 			}
 		}
 	}
-	
+
 	return "", false
 }
 
@@ -414,7 +414,7 @@ func NewEvictingCache(underlying Cache, policy EvictionPolicy, maxSize int, logg
 func (c *EvictingCache) Store(cid string, block *blocks.Block) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Check if we need to evict
 	if c.underlying.Size() >= c.maxSize {
 		if victim, ok := c.policy.SelectVictim(); ok {
@@ -431,15 +431,15 @@ func (c *EvictingCache) Store(cid string, block *blocks.Block) error {
 			}
 		}
 	}
-	
+
 	// Store the block
 	if err := c.underlying.Store(cid, block); err != nil {
 		return err
 	}
-	
+
 	// Notify policy
 	c.policy.OnStore(cid, block)
-	
+
 	return nil
 }
 
@@ -449,10 +449,10 @@ func (c *EvictingCache) Get(cid string) (*blocks.Block, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Notify policy of access
 	c.policy.OnAccess(cid)
-	
+
 	return block, nil
 }
 
@@ -466,10 +466,10 @@ func (c *EvictingCache) Remove(cid string) error {
 	if err := c.underlying.Remove(cid); err != nil {
 		return err
 	}
-	
+
 	// Notify policy
 	c.policy.OnRemove(cid)
-	
+
 	return nil
 }
 
