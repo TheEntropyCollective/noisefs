@@ -18,59 +18,59 @@ type NetworkSimulator struct {
 	// Network topology
 	peers       map[string]*SimulatedPeer
 	connections map[string]map[string]*Connection
-	
+
 	// Network conditions
-	baseLatency      time.Duration
-	latencyVariance  time.Duration
-	packetLossRate   float64
-	bandwidthLimit   int64 // bytes per second
+	baseLatency       time.Duration
+	latencyVariance   time.Duration
+	packetLossRate    float64
+	bandwidthLimit    int64 // bytes per second
 	networkPartitions map[string]bool
-	
+
 	// DHT simulation
-	dhtEnabled    bool
-	dhtNodes      map[string]*DHTNode
-	routingTable  map[string][]string
-	
+	dhtEnabled   bool
+	dhtNodes     map[string]*DHTNode
+	routingTable map[string][]string
+
 	// Gossip protocol simulation
-	gossipEnabled    bool
-	gossipFanout     int
-	gossipInterval   time.Duration
-	gossipMessages   []GossipMessage
-	
+	gossipEnabled  bool
+	gossipFanout   int
+	gossipInterval time.Duration
+	gossipMessages []GossipMessage
+
 	// Events and monitoring
-	eventHistory     []NetworkEvent
-	eventCallbacks   map[string]func(NetworkEvent)
-	
+	eventHistory   []NetworkEvent
+	eventCallbacks map[string]func(NetworkEvent)
+
 	// Advanced features
-	byzantine        bool // Enable byzantine fault simulation
-	byzantineRatio   float64
-	churnRate        float64 // Peer join/leave rate
-	lastChurnTime    time.Time
+	byzantine      bool // Enable byzantine fault simulation
+	byzantineRatio float64
+	churnRate      float64 // Peer join/leave rate
+	lastChurnTime  time.Time
 }
 
 // SimulatedPeer represents a peer in the network
 type SimulatedPeer struct {
-	ID              string
-	IP              string
-	Port            int
-	Online          bool
-	Capabilities    []string
-	StoredBlocks    map[string]*blocks.Block
-	Latency         time.Duration
-	Bandwidth       int64
-	Reliability     float64 // 0.0 to 1.0
-	LastSeen        time.Time
-	
+	ID           string
+	IP           string
+	Port         int
+	Online       bool
+	Capabilities []string
+	StoredBlocks map[string]*blocks.Block
+	Latency      time.Duration
+	Bandwidth    int64
+	Reliability  float64 // 0.0 to 1.0
+	LastSeen     time.Time
+
 	// Behavior simulation
-	Byzantine       bool
-	ResponseDelay   time.Duration
-	ErrorRate       float64
-	
+	Byzantine     bool
+	ResponseDelay time.Duration
+	ErrorRate     float64
+
 	// Resource constraints
-	StorageLimit    int64
-	StorageUsed     int64
-	CPULoad         float64
-	MemoryUsage     float64
+	StorageLimit int64
+	StorageUsed  int64
+	CPULoad      float64
+	MemoryUsage  float64
 }
 
 // Connection represents a connection between two peers
@@ -87,7 +87,7 @@ type Connection struct {
 
 // DHTNode represents a node in the DHT simulation
 type DHTNode struct {
-	PeerID      string
+	PeerID       string
 	RoutingTable map[string][]string
 	StoredKeys   map[string]string // key -> peer mapping
 	Queries      int64
@@ -119,32 +119,32 @@ type NetworkEvent struct {
 // NewNetworkSimulator creates a new network simulator
 func NewNetworkSimulator() *NetworkSimulator {
 	return &NetworkSimulator{
-		peers:            make(map[string]*SimulatedPeer),
-		connections:      make(map[string]map[string]*Connection),
+		peers:             make(map[string]*SimulatedPeer),
+		connections:       make(map[string]map[string]*Connection),
 		networkPartitions: make(map[string]bool),
-		dhtNodes:         make(map[string]*DHTNode),
-		routingTable:     make(map[string][]string),
-		gossipMessages:   make([]GossipMessage, 0),
-		eventHistory:     make([]NetworkEvent, 0),
-		eventCallbacks:   make(map[string]func(NetworkEvent)),
-		
+		dhtNodes:          make(map[string]*DHTNode),
+		routingTable:      make(map[string][]string),
+		gossipMessages:    make([]GossipMessage, 0),
+		eventHistory:      make([]NetworkEvent, 0),
+		eventCallbacks:    make(map[string]func(NetworkEvent)),
+
 		// Default network conditions
 		baseLatency:     time.Millisecond * 50,
 		latencyVariance: time.Millisecond * 20,
-		packetLossRate:  0.01, // 1%
+		packetLossRate:  0.01,    // 1%
 		bandwidthLimit:  1000000, // 1MB/s
-		
+
 		// DHT settings
 		dhtEnabled: true,
-		
+
 		// Gossip settings
 		gossipEnabled:  true,
 		gossipFanout:   6,
 		gossipInterval: time.Second * 30,
-		
+
 		// Byzantine settings
 		byzantine:      false,
-		byzantineRatio: 0.1, // 10% byzantine nodes
+		byzantineRatio: 0.1,  // 10% byzantine nodes
 		churnRate:      0.05, // 5% churn rate
 	}
 }
@@ -167,7 +167,7 @@ func (n *NetworkSimulator) AddPeer(peerID string) *SimulatedPeer {
 		Bandwidth:    n.bandwidthLimit,
 		Reliability:  0.95 + rand.Float64()*0.05, // 95-100%
 		LastSeen:     time.Now(),
-		StorageLimit: 1000000000, // 1GB
+		StorageLimit: 1000000000,            // 1GB
 		ErrorRate:    rand.Float64() * 0.02, // 0-2%
 	}
 
@@ -366,7 +366,7 @@ func (n *NetworkSimulator) SimulateBlockRetrieval(ctx context.Context, blockID s
 
 	// Select best peer based on network conditions
 	selectedPeer := n.selectBestPeer(requesterID, candidatePeers)
-	
+
 	// Simulate network retrieval
 	return n.simulateBlockTransfer(ctx, blockID, selectedPeer, requesterID)
 }
@@ -394,10 +394,10 @@ func (n *NetworkSimulator) SimulateBlockBroadcast(ctx context.Context, blockID s
 	}
 
 	n.recordEvent("block_broadcast", broadcasterID, "", map[string]interface{}{
-		"block_id":        blockID,
-		"target_peers":    len(connectedPeers),
+		"block_id":         blockID,
+		"target_peers":     len(connectedPeers),
 		"successful_sends": successCount,
-		"success_rate":    float64(successCount) / float64(len(connectedPeers)),
+		"success_rate":     float64(successCount) / float64(len(connectedPeers)),
 	}, successCount > 0, "")
 
 	if successCount == 0 {
@@ -530,17 +530,17 @@ func (n *NetworkSimulator) GetNetworkStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_peers":         len(n.peers),
-		"online_peers":        onlinePeers,
-		"total_connections":   totalConnections,
-		"byzantine_peers":     byzantinePeers,
-		"network_partitions":  len(n.networkPartitions),
-		"base_latency":        n.baseLatency,
-		"packet_loss_rate":    n.packetLossRate,
-		"bandwidth_limit":     n.bandwidthLimit,
-		"dht_enabled":         n.dhtEnabled,
-		"gossip_enabled":      n.gossipEnabled,
-		"event_count":         len(n.eventHistory),
+		"total_peers":        len(n.peers),
+		"online_peers":       onlinePeers,
+		"total_connections":  totalConnections,
+		"byzantine_peers":    byzantinePeers,
+		"network_partitions": len(n.networkPartitions),
+		"base_latency":       n.baseLatency,
+		"packet_loss_rate":   n.packetLossRate,
+		"bandwidth_limit":    n.bandwidthLimit,
+		"dht_enabled":        n.dhtEnabled,
+		"gossip_enabled":     n.gossipEnabled,
+		"event_count":        len(n.eventHistory),
 	}
 }
 
@@ -565,16 +565,16 @@ func (n *NetworkSimulator) ClearEventHistory() {
 func (n *NetworkSimulator) SyncBlockFromClient(blockID string, block *blocks.Block) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	
+
 	// Add block to all online peers for realism
 	for _, peer := range n.peers {
 		if peer.Online {
 			peer.StoredBlocks[blockID] = block
 		}
 	}
-	
+
 	n.recordEvent("block_sync", "mock_client", "", map[string]interface{}{
-		"block_id": blockID,
+		"block_id":     blockID,
 		"synced_peers": len(n.peers),
 	}, true, "")
 }
@@ -773,7 +773,7 @@ func (n *NetworkSimulator) propagateGossipMessage(message GossipMessage) {
 		newMessage := message
 		newMessage.TTL--
 		newMessage.Path = append(newMessage.Path, peerID)
-		
+
 		// Continue propagation from this peer
 		go func(msg GossipMessage, peer string) {
 			time.Sleep(n.generateRandomLatency() / 10)

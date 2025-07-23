@@ -1,9 +1,9 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"net"
-	"context"
 	"strings"
 	"time"
 )
@@ -23,12 +23,12 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 	if err == nil {
 		return nil
 	}
-	
+
 	// Check if it's already a StorageError
 	if storageErr, ok := err.(*StorageError); ok {
 		return storageErr
 	}
-	
+
 	// Classify common error types
 	switch {
 	case isNotFoundError(err):
@@ -40,7 +40,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	case isConnectionError(err):
 		return &StorageError{
 			Code:        ErrCodeConnectionFailed,
@@ -50,7 +50,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	case isTimeoutError(err):
 		return &StorageError{
 			Code:        ErrCodeTimeout,
@@ -60,7 +60,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	case isQuotaError(err):
 		return &StorageError{
 			Code:        ErrCodeQuotaExceeded,
@@ -70,7 +70,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	case isAuthError(err):
 		return &StorageError{
 			Code:        ErrCodeUnauthorized,
@@ -80,7 +80,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	case isIntegrityError(err):
 		return &StorageError{
 			Code:        ErrCodeIntegrityFailure,
@@ -90,7 +90,7 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 			Cause:       err,
 			Metadata:    map[string]interface{}{"operation": operation},
 		}
-		
+
 	default:
 		// Generic error
 		return &StorageError{
@@ -108,9 +108,9 @@ func (ec *ErrorClassifier) ClassifyError(err error, operation string, address *B
 func isNotFoundError(err error) bool {
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "not found") ||
-		   strings.Contains(errStr, "no such") ||
-		   strings.Contains(errStr, "does not exist") ||
-		   strings.Contains(errStr, "404")
+		strings.Contains(errStr, "no such") ||
+		strings.Contains(errStr, "does not exist") ||
+		strings.Contains(errStr, "404")
 }
 
 func isConnectionError(err error) bool {
@@ -118,13 +118,13 @@ func isConnectionError(err error) bool {
 	if _, ok := err.(net.Error); ok {
 		return true
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "connection") ||
-		   strings.Contains(errStr, "dial") ||
-		   strings.Contains(errStr, "connect") ||
-		   strings.Contains(errStr, "network") ||
-		   strings.Contains(errStr, "unreachable")
+		strings.Contains(errStr, "dial") ||
+		strings.Contains(errStr, "connect") ||
+		strings.Contains(errStr, "network") ||
+		strings.Contains(errStr, "unreachable")
 }
 
 func isTimeoutError(err error) bool {
@@ -132,56 +132,56 @@ func isTimeoutError(err error) bool {
 	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
-	
+
 	// Check for context deadline exceeded
 	if err == context.DeadlineExceeded {
 		return true
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "timeout") ||
-		   strings.Contains(errStr, "deadline") ||
-		   strings.Contains(errStr, "context deadline exceeded")
+		strings.Contains(errStr, "deadline") ||
+		strings.Contains(errStr, "context deadline exceeded")
 }
 
 func isQuotaError(err error) bool {
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "quota") ||
-		   strings.Contains(errStr, "limit") ||
-		   strings.Contains(errStr, "space") ||
-		   strings.Contains(errStr, "storage full") ||
-		   strings.Contains(errStr, "insufficient")
+		strings.Contains(errStr, "limit") ||
+		strings.Contains(errStr, "space") ||
+		strings.Contains(errStr, "storage full") ||
+		strings.Contains(errStr, "insufficient")
 }
 
 func isAuthError(err error) bool {
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "unauthorized") ||
-		   strings.Contains(errStr, "authentication") ||
-		   strings.Contains(errStr, "permission") ||
-		   strings.Contains(errStr, "forbidden") ||
-		   strings.Contains(errStr, "401") ||
-		   strings.Contains(errStr, "403")
+		strings.Contains(errStr, "authentication") ||
+		strings.Contains(errStr, "permission") ||
+		strings.Contains(errStr, "forbidden") ||
+		strings.Contains(errStr, "401") ||
+		strings.Contains(errStr, "403")
 }
 
 func isIntegrityError(err error) bool {
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "checksum") ||
-		   strings.Contains(errStr, "hash") ||
-		   strings.Contains(errStr, "integrity") ||
-		   strings.Contains(errStr, "corrupt") ||
-		   strings.Contains(errStr, "verification")
+		strings.Contains(errStr, "hash") ||
+		strings.Contains(errStr, "integrity") ||
+		strings.Contains(errStr, "corrupt") ||
+		strings.Contains(errStr, "verification")
 }
 
 // ErrorAggregator collects and analyzes multiple errors from different backends
 type ErrorAggregator struct {
-	errors []error
+	errors    []error
 	operation string
 }
 
 // NewErrorAggregator creates a new error aggregator
 func NewErrorAggregator(operation string) *ErrorAggregator {
 	return &ErrorAggregator{
-		errors: make([]error, 0),
+		errors:    make([]error, 0),
 		operation: operation,
 	}
 }
@@ -203,7 +203,7 @@ func (ea *ErrorAggregator) GetPrimaryError() error {
 	if len(ea.errors) == 0 {
 		return nil
 	}
-	
+
 	// Prioritize certain error types
 	for _, err := range ea.errors {
 		if storageErr, ok := err.(*StorageError); ok {
@@ -213,7 +213,7 @@ func (ea *ErrorAggregator) GetPrimaryError() error {
 			}
 		}
 	}
-	
+
 	// Return the first error if no high-priority errors found
 	return ea.errors[0]
 }
@@ -228,15 +228,15 @@ func (ea *ErrorAggregator) CreateAggregateError() error {
 	if len(ea.errors) == 0 {
 		return nil
 	}
-	
+
 	if len(ea.errors) == 1 {
 		return ea.errors[0]
 	}
-	
+
 	// Create an aggregate error
 	var backendTypes []string
 	var messages []string
-	
+
 	for _, err := range ea.errors {
 		if storageErr, ok := err.(*StorageError); ok {
 			backendTypes = append(backendTypes, storageErr.BackendType)
@@ -245,15 +245,15 @@ func (ea *ErrorAggregator) CreateAggregateError() error {
 			messages = append(messages, err.Error())
 		}
 	}
-	
+
 	return &StorageError{
 		Code:        "AGGREGATE_ERROR",
 		Message:     fmt.Sprintf("%s failed on multiple backends: %s", ea.operation, strings.Join(messages, "; ")),
 		BackendType: strings.Join(backendTypes, ","),
 		Cause:       ea.errors[0],
 		Metadata: map[string]interface{}{
-			"operation": ea.operation,
-			"error_count": len(ea.errors),
+			"operation":     ea.operation,
+			"error_count":   len(ea.errors),
 			"backend_types": backendTypes,
 		},
 	}
@@ -262,9 +262,9 @@ func (ea *ErrorAggregator) CreateAggregateError() error {
 // RetryableError wraps an error with retry information
 type RetryableError struct {
 	*StorageError
-	RetryAfter    time.Duration
-	MaxRetries    int
-	CurrentRetry  int
+	RetryAfter   time.Duration
+	MaxRetries   int
+	CurrentRetry int
 }
 
 // IsRetryable returns true if the error should be retried
@@ -285,12 +285,12 @@ func CreateRetryableError(err *StorageError, config *RetryConfig) *RetryableErro
 			MaxRetries:   0, // Not retryable
 		}
 	}
-	
+
 	retryAfter := config.BaseDelay
 	if err.Code == ErrCodeTimeout {
 		retryAfter = config.BaseDelay * 2 // Longer delay for timeouts
 	}
-	
+
 	return &RetryableError{
 		StorageError: err,
 		RetryAfter:   retryAfter,
@@ -311,14 +311,14 @@ func isRetryableErrorCode(code string) bool {
 
 // ErrorMetrics tracks error statistics for monitoring
 type ErrorMetrics struct {
-	TotalErrors        int64                    `json:"total_errors"`
-	ErrorsByCode       map[string]int64         `json:"errors_by_code"`
-	ErrorsByBackend    map[string]int64         `json:"errors_by_backend"`
-	ErrorsByOperation  map[string]int64         `json:"errors_by_operation"`
-	LastError          *StorageError            `json:"last_error,omitempty"`
-	LastErrorTime      time.Time                `json:"last_error_time"`
-	ErrorRate          float64                  `json:"error_rate"` // errors per operation
-	RecentErrors       []*StorageError          `json:"recent_errors"`
+	TotalErrors       int64            `json:"total_errors"`
+	ErrorsByCode      map[string]int64 `json:"errors_by_code"`
+	ErrorsByBackend   map[string]int64 `json:"errors_by_backend"`
+	ErrorsByOperation map[string]int64 `json:"errors_by_operation"`
+	LastError         *StorageError    `json:"last_error,omitempty"`
+	LastErrorTime     time.Time        `json:"last_error_time"`
+	ErrorRate         float64          `json:"error_rate"` // errors per operation
+	RecentErrors      []*StorageError  `json:"recent_errors"`
 }
 
 // NewErrorMetrics creates a new error metrics tracker
@@ -336,14 +336,14 @@ func (em *ErrorMetrics) RecordError(err *StorageError) {
 	em.TotalErrors++
 	em.ErrorsByCode[err.Code]++
 	em.ErrorsByBackend[err.BackendType]++
-	
+
 	if operation, ok := err.Metadata["operation"].(string); ok {
 		em.ErrorsByOperation[operation]++
 	}
-	
+
 	em.LastError = err
 	em.LastErrorTime = time.Now()
-	
+
 	// Keep recent errors (limit to last 100)
 	em.RecentErrors = append(em.RecentErrors, err)
 	if len(em.RecentErrors) > 100 {
@@ -361,14 +361,14 @@ func (em *ErrorMetrics) CalculateErrorRate(totalOperations int64) {
 // GetTopErrorCodes returns the most common error codes
 func (em *ErrorMetrics) GetTopErrorCodes(limit int) []ErrorCodeStat {
 	stats := make([]ErrorCodeStat, 0, len(em.ErrorsByCode))
-	
+
 	for code, count := range em.ErrorsByCode {
 		stats = append(stats, ErrorCodeStat{
 			Code:  code,
 			Count: count,
 		})
 	}
-	
+
 	// Sort by count (descending)
 	for i := 0; i < len(stats)-1; i++ {
 		for j := i + 1; j < len(stats); j++ {
@@ -377,11 +377,11 @@ func (em *ErrorMetrics) GetTopErrorCodes(limit int) []ErrorCodeStat {
 			}
 		}
 	}
-	
+
 	if len(stats) > limit {
 		stats = stats[:limit]
 	}
-	
+
 	return stats
 }
 

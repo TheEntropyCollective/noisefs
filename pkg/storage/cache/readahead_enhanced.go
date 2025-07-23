@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	
+
 	"github.com/TheEntropyCollective/noisefs/pkg/core/blocks"
 	"github.com/TheEntropyCollective/noisefs/pkg/core/descriptors"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
@@ -45,14 +45,14 @@ type SequentialAccessTracker struct {
 
 // FileAccessPattern tracks access pattern for a specific file
 type FileAccessPattern struct {
-	DescriptorCID   string
-	Descriptor      *descriptors.Descriptor
-	LastBlockIndex  int
-	LastAccessTime  time.Time
-	IsSequential    bool
-	Direction       int // 1 for forward, -1 for backward
-	AccessCount     int
-	HitCount        int // Number of times prefetch was useful
+	DescriptorCID  string
+	Descriptor     *descriptors.Descriptor
+	LastBlockIndex int
+	LastAccessTime time.Time
+	IsSequential   bool
+	Direction      int // 1 for forward, -1 for backward
+	AccessCount    int
+	HitCount       int // Number of times prefetch was useful
 }
 
 // NewSequentialAccessTracker creates a new sequential access tracker
@@ -69,19 +69,19 @@ func NewSequentialAccessTracker(maxPatterns int) *SequentialAccessTracker {
 func (sat *SequentialAccessTracker) TrackAccess(blockCID string) ([]string, bool) {
 	sat.mu.Lock()
 	defer sat.mu.Unlock()
-	
+
 	// Look up which file this block belongs to
 	descriptorCID, exists := sat.blockToFile[blockCID]
 	if !exists {
 		// Unknown block, no prefetch suggestions
 		return nil, false
 	}
-	
+
 	pattern, exists := sat.filePatterns[descriptorCID]
 	if !exists {
 		return nil, false
 	}
-	
+
 	// Find the block index in the descriptor
 	blockIndex := -1
 	for i, block := range pattern.Descriptor.Blocks {
@@ -90,15 +90,15 @@ func (sat *SequentialAccessTracker) TrackAccess(blockCID string) ([]string, bool
 			break
 		}
 	}
-	
+
 	if blockIndex == -1 {
 		return nil, false
 	}
-	
+
 	// Update access pattern
 	now := time.Now()
 	timeSinceLastAccess := now.Sub(pattern.LastAccessTime)
-	
+
 	// Detect sequential access
 	if pattern.AccessCount > 0 {
 		expectedIndex := pattern.LastBlockIndex + pattern.Direction
@@ -114,16 +114,16 @@ func (sat *SequentialAccessTracker) TrackAccess(blockCID string) ([]string, bool
 			pattern.IsSequential = false
 		}
 	}
-	
+
 	pattern.LastBlockIndex = blockIndex
 	pattern.LastAccessTime = now
 	pattern.AccessCount++
-	
+
 	// Generate prefetch suggestions if sequential
 	if pattern.IsSequential {
 		return sat.generatePrefetchList(pattern, blockIndex), true
 	}
-	
+
 	return nil, false
 }
 
@@ -131,12 +131,12 @@ func (sat *SequentialAccessTracker) TrackAccess(blockCID string) ([]string, bool
 func (sat *SequentialAccessTracker) RegisterDescriptor(descriptorCID string, desc *descriptors.Descriptor) {
 	sat.mu.Lock()
 	defer sat.mu.Unlock()
-	
+
 	// Clean up if we're at capacity
 	if len(sat.filePatterns) >= sat.maxPatterns {
 		sat.cleanupOldestPattern()
 	}
-	
+
 	// Create new pattern
 	pattern := &FileAccessPattern{
 		DescriptorCID:  descriptorCID,
@@ -145,10 +145,10 @@ func (sat *SequentialAccessTracker) RegisterDescriptor(descriptorCID string, des
 		Direction:      1,
 		IsSequential:   false,
 	}
-	
+
 	sat.filePatterns[descriptorCID] = pattern
 	sat.descriptorCache[descriptorCID] = desc
-	
+
 	// Map all blocks to this descriptor
 	for _, block := range desc.Blocks {
 		sat.blockToFile[block.DataCID] = descriptorCID
@@ -158,21 +158,21 @@ func (sat *SequentialAccessTracker) RegisterDescriptor(descriptorCID string, des
 // generatePrefetchList generates a list of blocks to prefetch
 func (sat *SequentialAccessTracker) generatePrefetchList(pattern *FileAccessPattern, currentIndex int) []string {
 	prefetchList := make([]string, 0, 4) // Default prefetch 4 blocks
-	
+
 	totalBlocks := len(pattern.Descriptor.Blocks)
-	
+
 	for i := 1; i <= 4; i++ {
 		nextIndex := currentIndex + (i * pattern.Direction)
-		
+
 		// Check bounds
 		if nextIndex < 0 || nextIndex >= totalBlocks {
 			break
 		}
-		
+
 		nextBlock := pattern.Descriptor.Blocks[nextIndex]
 		prefetchList = append(prefetchList, nextBlock.DataCID)
 	}
-	
+
 	return prefetchList
 }
 
@@ -180,14 +180,14 @@ func (sat *SequentialAccessTracker) generatePrefetchList(pattern *FileAccessPatt
 func (sat *SequentialAccessTracker) cleanupOldestPattern() {
 	var oldestCID string
 	var oldestTime time.Time
-	
+
 	for cid, pattern := range sat.filePatterns {
 		if oldestCID == "" || pattern.LastAccessTime.Before(oldestTime) {
 			oldestCID = cid
 			oldestTime = pattern.LastAccessTime
 		}
 	}
-	
+
 	if oldestCID != "" {
 		pattern := sat.filePatterns[oldestCID]
 		// Remove block mappings
@@ -223,29 +223,29 @@ func (w *EnhancedReadAheadWorker) ProcessReadAheadRequest(blockCID string) {
 	if !isSequential || len(prefetchList) == 0 {
 		return
 	}
-	
+
 	// Prefetch blocks asynchronously
 	for _, cid := range prefetchList {
 		// Check if already being prefetched
 		if _, loaded := w.prefetchMap.LoadOrStore(cid, true); loaded {
 			continue
 		}
-		
+
 		go func(blockCID string) {
 			defer w.prefetchMap.Delete(blockCID)
-			
+
 			// Check if already in cache
 			if w.cache.Has(blockCID) {
 				return
 			}
-			
+
 			// Fetch from IPFS
 			block, err := w.fetcher.RetrieveBlock(blockCID)
 			if err != nil {
 				// Log error but don't fail the whole operation
 				return
 			}
-			
+
 			// Store in cache
 			_ = w.cache.Store(blockCID, block)
 		}(cid)
@@ -260,7 +260,7 @@ func ExtractDescriptorCID(blockCID string) (string, bool) {
 	// 1. Store descriptor CID in block metadata
 	// 2. Use a naming convention
 	// 3. Maintain a separate index
-	
+
 	// For now, check if the CID contains a descriptor reference
 	if strings.Contains(blockCID, "_desc_") {
 		parts := strings.Split(blockCID, "_desc_")
@@ -268,7 +268,7 @@ func ExtractDescriptorCID(blockCID string) (string, bool) {
 			return parts[1], true
 		}
 	}
-	
+
 	return "", false
 }
 
@@ -328,10 +328,10 @@ func (c *ReadAheadStorageClient) StoreBlock(block *blocks.Block) (string, error)
 	if err != nil {
 		return "", err
 	}
-	
+
 	// Also store in cache
 	_ = c.cache.Store(address.ID, block)
-	
+
 	return address.ID, nil
 }
 

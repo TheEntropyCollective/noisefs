@@ -18,19 +18,19 @@ func init() {
 
 // MockBackend is a mock storage backend for testing
 type MockBackend struct {
-	id      string
-	config  *storage.BackendConfig
-	data    map[string]*blocks.Block
-	mutex   sync.RWMutex
+	id        string
+	config    *storage.BackendConfig
+	data      map[string]*blocks.Block
+	mutex     sync.RWMutex
 	connected bool
 }
 
 // NewMockBackend creates a new mock backend
 func NewMockBackend(id string, config *storage.BackendConfig) (storage.Backend, error) {
 	return &MockBackend{
-		id:     id,
-		config: config,
-		data:   make(map[string]*blocks.Block),
+		id:        id,
+		config:    config,
+		data:      make(map[string]*blocks.Block),
 		connected: true,
 	}, nil
 }
@@ -42,7 +42,7 @@ func (m *MockBackend) Put(ctx context.Context, block *blocks.Block) (*storage.Bl
 
 	// Check if block already exists
 	_, alreadyExists := m.data[block.ID]
-	
+
 	address := &storage.BlockAddress{
 		ID:             block.ID,
 		BackendType:    "mock",
@@ -50,7 +50,7 @@ func (m *MockBackend) Put(ctx context.Context, block *blocks.Block) (*storage.Bl
 		WasNewlyStored: !alreadyExists, // true if this is a new block, false if it already existed
 		Size:           int64(len(block.Data)),
 	}
-	
+
 	m.data[block.ID] = block
 	return address, nil
 }
@@ -64,7 +64,7 @@ func (m *MockBackend) Get(ctx context.Context, address *storage.BlockAddress) (*
 	if !exists {
 		return nil, fmt.Errorf("block not found: %s", address.ID)
 	}
-	
+
 	return block, nil
 }
 
@@ -129,9 +129,9 @@ func (m *MockBackend) Unpin(ctx context.Context, address *storage.BlockAddress) 
 // GetBackendInfo returns information about the backend
 func (m *MockBackend) GetBackendInfo() *storage.BackendInfo {
 	return &storage.BackendInfo{
-		Name:        m.id,
-		Type:        "mock",
-		Version:     "1.0.0",
+		Name:    m.id,
+		Type:    "mock",
+		Version: "1.0.0",
 		Capabilities: []string{
 			storage.CapabilityBatch,
 			storage.CapabilityContentAddress,
@@ -164,7 +164,7 @@ func (m *MockBackend) HealthCheck(ctx context.Context) *storage.HealthStatus {
 func (m *MockBackend) Connect(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	m.connected = true
 	return nil
 }
@@ -173,7 +173,7 @@ func (m *MockBackend) Connect(ctx context.Context) error {
 func (m *MockBackend) Disconnect(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	m.connected = false
 	return nil
 }
@@ -182,6 +182,6 @@ func (m *MockBackend) Disconnect(ctx context.Context) error {
 func (m *MockBackend) IsConnected() bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	return m.connected
 }

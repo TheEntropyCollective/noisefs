@@ -10,17 +10,17 @@ import (
 
 // Manager orchestrates operations across multiple storage backends using focused services
 type Manager struct {
-	config    *Config
-	factory   *BackendFactory
-	router    *Router
-	monitor   *HealthMonitor
-	
+	config  *Config
+	factory *BackendFactory
+	router  *Router
+	monitor *HealthMonitor
+
 	// Decomposed services
-	registry      BackendRegistry
-	lifecycle     BackendLifecycle
-	selector      BackendSelector
-	status        StatusAggregator
-	
+	registry  BackendRegistry
+	lifecycle BackendLifecycle
+	selector  BackendSelector
+	status    StatusAggregator
+
 	// State management
 	mutex         sync.RWMutex
 	started       bool
@@ -32,15 +32,15 @@ func NewManager(config *Config) (*Manager, error) {
 	if err := config.Validate(); err != nil {
 		return nil, NewConfigError("manager", "invalid configuration", err)
 	}
-	
+
 	factory := NewBackendFactory(config)
-	
+
 	// Create service instances
 	registry := NewBackendRegistry()
 	lifecycle := NewBackendLifecycle()
 	selector := NewBackendSelector(registry, config)
 	statusAggregator := NewStatusAggregator(registry, config)
-	
+
 	manager := &Manager{
 		config:        config,
 		factory:       factory,
@@ -50,13 +50,13 @@ func NewManager(config *Config) (*Manager, error) {
 		status:        statusAggregator,
 		errorReporter: NewDefaultErrorReporter(),
 	}
-	
+
 	// Initialize router with the manager facade
 	manager.router = NewRouter(manager, config.Distribution)
-	
+
 	// Initialize health monitor with the manager facade
 	manager.monitor = NewHealthMonitor(manager, config.HealthCheck)
-	
+
 	return manager, nil
 }
 
@@ -64,22 +64,22 @@ func NewManager(config *Config) (*Manager, error) {
 func (m *Manager) Start(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if m.started {
 		return NewStorageError(ErrCodeAlreadyExists, "manager already started", "manager", nil)
 	}
-	
+
 	// Create all enabled backends
 	backends, err := m.factory.CreateAllBackends()
 	if err != nil {
 		return NewBackendInitError("manager", err)
 	}
-	
+
 	// Add backends to registry
 	for name, backend := range backends {
 		m.registry.AddBackend(name, backend)
 	}
-	
+
 	// Connect to all backends using lifecycle service
 	if err := m.lifecycle.ConnectAllBackends(ctx, backends); err != nil {
 		// Remove unconnected backends from registry
@@ -91,11 +91,11 @@ func (m *Manager) Start(ctx context.Context) error {
 				m.registry.RemoveBackend(name)
 			}
 		}
-		
+
 		if len(connectedBackends) == 0 {
 			return NewNoBackendsError()
 		}
-		
+
 		// Report connection errors but continue if some backends connected
 		connectionErrors := m.lifecycle.GetConnectionErrors()
 		for _, err := range connectionErrors {
@@ -104,14 +104,14 @@ func (m *Manager) Start(ctx context.Context) error {
 			}
 		}
 	}
-	
+
 	// Start health monitoring
 	if m.config.HealthCheck.Enabled {
 		if err := m.monitor.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start health monitor: %w", err)
 		}
 	}
-	
+
 	m.started = true
 	return nil
 }
@@ -120,16 +120,16 @@ func (m *Manager) Start(ctx context.Context) error {
 func (m *Manager) Stop(ctx context.Context) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if !m.started {
 		return nil
 	}
-	
+
 	// Stop health monitoring
 	if m.monitor != nil {
 		m.monitor.Stop()
 	}
-	
+
 	// Disconnect from all backends using lifecycle service
 	backends := m.registry.GetAllBackends()
 	if err := m.lifecycle.DisconnectAllBackends(ctx, backends); err != nil {
@@ -140,12 +140,12 @@ func (m *Manager) Stop(ctx context.Context) error {
 		m.started = false
 		return err
 	}
-	
+
 	// Clear registry
 	for name := range backends {
 		m.registry.RemoveBackend(name)
 	}
-	
+
 	m.started = false
 	return nil
 }
@@ -155,7 +155,7 @@ func (m *Manager) Put(ctx context.Context, block *blocks.Block) (*BlockAddress, 
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Put(ctx, block)
 }
 
@@ -164,7 +164,7 @@ func (m *Manager) Get(ctx context.Context, address *BlockAddress) (*blocks.Block
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Get(ctx, address)
 }
 
@@ -173,7 +173,7 @@ func (m *Manager) Has(ctx context.Context, address *BlockAddress) (bool, error) 
 	if !m.started {
 		return false, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Has(ctx, address)
 }
 
@@ -182,7 +182,7 @@ func (m *Manager) Delete(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Delete(ctx, address)
 }
 
@@ -191,7 +191,7 @@ func (m *Manager) PutMany(ctx context.Context, blocks []*blocks.Block) ([]*Block
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.PutMany(ctx, blocks)
 }
 
@@ -200,7 +200,7 @@ func (m *Manager) GetMany(ctx context.Context, addresses []*BlockAddress) ([]*bl
 	if !m.started {
 		return nil, NewManagerNotStartedError()
 	}
-	
+
 	return m.router.GetMany(ctx, addresses)
 }
 
@@ -209,7 +209,7 @@ func (m *Manager) Pin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Pin(ctx, address)
 }
 
@@ -218,7 +218,7 @@ func (m *Manager) Unpin(ctx context.Context, address *BlockAddress) error {
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	return m.router.Unpin(ctx, address)
 }
 
@@ -287,50 +287,50 @@ func (m *Manager) GetRegistry() BackendRegistry {
 func (m *Manager) ReconfigureBackend(name string, newConfig *BackendConfig) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	if !m.started {
 		return NewManagerNotStartedError()
 	}
-	
+
 	// Validate new configuration
 	if err := newConfig.Validate(); err != nil {
 		return NewConfigError(name, "invalid backend configuration", err)
 	}
-	
+
 	// Check if backend exists
 	oldBackend, exists := m.registry.GetBackend(name)
 	if !exists {
 		return NewStorageError(ErrCodeNotFound, fmt.Sprintf("backend '%s' not found", name), name, nil)
 	}
-	
+
 	// Disconnect old backend
 	ctx := context.Background()
 	if err := m.lifecycle.DisconnectBackend(ctx, name, oldBackend); err != nil {
 		return NewConnectionError(name, err)
 	}
-	
+
 	// Remove from registry
 	m.registry.RemoveBackend(name)
-	
+
 	// Update configuration
 	m.config.Backends[name] = newConfig
-	
+
 	// Create new backend if enabled
 	if newConfig.Enabled {
 		newBackend, err := m.factory.CreateBackend(name)
 		if err != nil {
 			return NewBackendInitError(name, err)
 		}
-		
+
 		// Connect new backend
 		if err := m.lifecycle.ConnectBackend(ctx, name, newBackend); err != nil {
 			return err
 		}
-		
+
 		// Add to registry
 		m.registry.AddBackend(name, newBackend)
 	}
-	
+
 	return nil
 }
 
@@ -352,11 +352,11 @@ func (m *Manager) IsConnected() bool {
 
 func (m *Manager) GetBackendInfo() *BackendInfo {
 	backends := m.GetAvailableBackends()
-	
+
 	// Collect capabilities from all backends
 	capabilitySet := make(map[string]bool)
 	var backendNames []string
-	
+
 	for name, backend := range backends {
 		backendNames = append(backendNames, name)
 		info := backend.GetBackendInfo()
@@ -364,12 +364,12 @@ func (m *Manager) GetBackendInfo() *BackendInfo {
 			capabilitySet[cap] = true
 		}
 	}
-	
+
 	var capabilities []string
 	for cap := range capabilitySet {
 		capabilities = append(capabilities, cap)
 	}
-	
+
 	return &BackendInfo{
 		Name:         "NoiseFS Storage Manager",
 		Type:         "manager",

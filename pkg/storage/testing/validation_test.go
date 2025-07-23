@@ -396,7 +396,7 @@ func TestConditionSimulator(t *testing.T) {
 
 	t.Run("PredefinedConditions", func(t *testing.T) {
 		conditions := conditionSim.GetPredefinedConditions()
-		
+
 		// Check that predefined conditions exist
 		expectedConditions := []string{
 			"high_latency", "packet_loss", "bandwidth_limit",
@@ -614,7 +614,6 @@ func TestMockBackendAdapter(t *testing.T) {
 		}
 	})
 
-
 	t.Run("ComponentAccess", func(t *testing.T) {
 		adapter := NewIntegrationTestAdapter()
 		defer adapter.Stop()
@@ -670,7 +669,7 @@ func BenchmarkMockComponents(b *testing.B) {
 
 	b.Run("NetworkSimulator", func(b *testing.B) {
 		sim := NewNetworkSimulator()
-		
+
 		// Pre-populate with peers
 		for i := 0; i < 10; i++ {
 			sim.AddPeer(fmt.Sprintf("peer%d", i))
@@ -704,7 +703,7 @@ func BenchmarkMockComponents(b *testing.B) {
 	b.Run("MockBackendAdapter", func(b *testing.B) {
 		adapter := NewUnitTestAdapter()
 		defer adapter.Stop()
-		
+
 		ctx := context.Background()
 		testBlock := &blocks.Block{
 			Data: []byte("adapter benchmark test data"),
@@ -750,7 +749,7 @@ func TestMockInfrastructureIntegration(t *testing.T) {
 		}
 
 		addresses := make([]*storage.BlockAddress, len(testData))
-		
+
 		// Store blocks
 		for i, data := range testData {
 			block := &blocks.Block{Data: data}
@@ -768,9 +767,9 @@ func TestMockInfrastructureIntegration(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetWithPeerHint failed for block %d: %v", i, err)
 			}
-			
+
 			if string(block.Data) != string(testData[i]) {
-				t.Fatalf("Data mismatch for block %d: got %s, want %s", 
+				t.Fatalf("Data mismatch for block %d: got %s, want %s",
 					i, block.Data, testData[i])
 			}
 		}
@@ -787,11 +786,11 @@ func TestMockInfrastructureIntegration(t *testing.T) {
 		// Check adapter statistics
 		stats := adapter.GetAdapterStats()
 		adapterCalls := stats["adapter_calls"].(map[string]int64)
-		
+
 		if adapterCalls["Put"] != int64(len(testData)) {
 			t.Fatalf("Expected %d Put calls, got %d", len(testData), adapterCalls["Put"])
 		}
-		
+
 		// Verify health check under stress
 		health := adapter.HealthCheck(ctx)
 		if !health.Healthy {

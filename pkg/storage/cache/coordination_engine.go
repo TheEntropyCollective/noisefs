@@ -35,32 +35,32 @@ func (ce *CoordinationEngine) GenerateHints(
 ) *CoordinationHints {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
-	
+
 	hints := &CoordinationHints{
 		HighDemandBlocks:  make([]string, 0),
 		SuggestedBlocks:   make([]string, 0),
 		CoordinationScore: 0.0,
 	}
-	
+
 	if len(peerFilters) < ce.config.MinPeersForCoordination {
 		return hints
 	}
-	
+
 	// Analyze valuable blocks across peers
 	valuableBlocks := ce.analyzeValuableBlocks(peerFilters)
-	
+
 	// Find high-demand blocks (blocks wanted by multiple peers)
 	highDemand := ce.findHighDemandBlocks(valuableBlocks, len(peerFilters))
 	hints.HighDemandBlocks = highDemand
-	
+
 	// Generate suggestions based on coordination algorithm
 	suggestions := ce.generateBlockSuggestions(localFilters, peerFilters, valuableBlocks)
 	hints.SuggestedBlocks = suggestions
-	
+
 	// Calculate coordination score
 	hints.CoordinationScore = ce.calculateCoordinationScore(peerFilters)
 	ce.coordinationScore = hints.CoordinationScore
-	
+
 	return hints
 }
 
@@ -69,7 +69,7 @@ func (ce *CoordinationEngine) analyzeValuableBlocks(
 	peerFilters map[string]*PeerFilterSet,
 ) map[string][]string {
 	blockPeers := make(map[string][]string)
-	
+
 	// Collect all blocks that peers consider valuable
 	for peerID, filterSet := range peerFilters {
 		if _, exists := filterSet.Filters["valuable_blocks"]; exists {
@@ -82,7 +82,7 @@ func (ce *CoordinationEngine) analyzeValuableBlocks(
 			}
 		}
 	}
-	
+
 	return blockPeers
 }
 
@@ -95,9 +95,9 @@ func (ce *CoordinationEngine) findHighDemandBlocks(
 		blockID string
 		demand  int
 	}
-	
+
 	demands := make([]blockDemand, 0, len(blockPeers))
-	
+
 	// Calculate demand for each block
 	for blockID, peers := range blockPeers {
 		demandRatio := float64(len(peers)) / float64(totalPeers)
@@ -108,12 +108,12 @@ func (ce *CoordinationEngine) findHighDemandBlocks(
 			})
 		}
 	}
-	
+
 	// Sort by demand (descending)
 	sort.Slice(demands, func(i, j int) bool {
 		return demands[i].demand > demands[j].demand
 	})
-	
+
 	// Return top high-demand blocks
 	result := make([]string, 0, 10)
 	for i, bd := range demands {
@@ -122,7 +122,7 @@ func (ce *CoordinationEngine) findHighDemandBlocks(
 		}
 		result = append(result, bd.blockID)
 	}
-	
+
 	return result
 }
 
@@ -133,44 +133,44 @@ func (ce *CoordinationEngine) generateBlockSuggestions(
 	valuableBlocks map[string][]string,
 ) []string {
 	suggestions := make([]string, 0)
-	
+
 	// Use consistent hashing to assign blocks to peers
 	myPeerID := ce.generateLocalPeerID()
-	
+
 	// Score each valuable block for this peer
 	type blockScore struct {
 		blockID string
 		score   float64
 	}
-	
+
 	scores := make([]blockScore, 0)
-	
+
 	for blockID, interestedPeers := range valuableBlocks {
 		// Skip if ALL peers already have it (no coordination benefit)
 		if len(interestedPeers) >= len(peerFilters) {
 			continue
 		}
-		
+
 		// Calculate affinity score using consistent hashing
 		affinityScore := ce.calculateBlockAffinity(blockID, myPeerID)
-		
+
 		// Adjust score based on current coverage
 		coverageScore := 1.0 - (float64(len(interestedPeers)) / float64(len(peerFilters)))
-		
+
 		// Combined score
-		totalScore := affinityScore * 0.6 + coverageScore * 0.4
-		
+		totalScore := affinityScore*0.6 + coverageScore*0.4
+
 		scores = append(scores, blockScore{
 			blockID: blockID,
 			score:   totalScore,
 		})
 	}
-	
+
 	// Sort by score (descending)
 	sort.Slice(scores, func(i, j int) bool {
 		return scores[i].score > scores[j].score
 	})
-	
+
 	// Return top suggestions
 	for i, bs := range scores {
 		if i >= 20 { // Limit suggestions
@@ -178,7 +178,7 @@ func (ce *CoordinationEngine) generateBlockSuggestions(
 		}
 		suggestions = append(suggestions, bs.blockID)
 	}
-	
+
 	return suggestions
 }
 
@@ -187,18 +187,18 @@ func (ce *CoordinationEngine) calculateBlockAffinity(blockID, peerID string) flo
 	// Hash both IDs
 	blockHash := sha256.Sum256([]byte(blockID))
 	peerHash := sha256.Sum256([]byte(peerID))
-	
+
 	// Calculate distance in hash space
 	distance := 0
 	for i := 0; i < 32; i++ {
 		diff := int(blockHash[i]) - int(peerHash[i])
 		distance += diff * diff
 	}
-	
+
 	// Normalize to 0-1 (lower distance = higher affinity)
 	maxDistance := 255 * 255 * 32
 	affinity := 1.0 - (float64(distance) / float64(maxDistance))
-	
+
 	return affinity
 }
 
@@ -209,22 +209,22 @@ func (ce *CoordinationEngine) calculateCoordinationScore(
 	if len(peerFilters) < ce.config.MinPeersForCoordination {
 		return 0.0
 	}
-	
+
 	// Calculate overlap ratios between peers
 	totalOverlap := 0.0
 	comparisons := 0
-	
+
 	peerList := make([]string, 0, len(peerFilters))
 	for peerID := range peerFilters {
 		peerList = append(peerList, peerID)
 	}
-	
+
 	// Compare each pair of peers
 	for i := 0; i < len(peerList); i++ {
 		for j := i + 1; j < len(peerList); j++ {
 			peer1 := peerFilters[peerList[i]]
 			peer2 := peerFilters[peerList[j]]
-			
+
 			// Calculate overlap for valuable blocks
 			if f1, ok1 := peer1.Filters["valuable_blocks"]; ok1 {
 				if f2, ok2 := peer2.Filters["valuable_blocks"]; ok2 {
@@ -235,28 +235,28 @@ func (ce *CoordinationEngine) calculateCoordinationScore(
 			}
 		}
 	}
-	
+
 	if comparisons == 0 {
 		return 0.0
 	}
-	
+
 	// Average overlap ratio
 	avgOverlap := totalOverlap / float64(comparisons)
-	
+
 	// Good coordination means moderate overlap (not too high, not too low)
 	// Optimal overlap is around 30-50%
 	optimalOverlap := 0.4
 	deviation := math.Abs(avgOverlap - optimalOverlap)
-	
+
 	// Score peaks at optimal overlap
 	score := 1.0 - (deviation / optimalOverlap)
 	if score < 0 {
 		score = 0
 	}
-	
+
 	// Debug: uncomment for testing
 	// fmt.Printf("avgOverlap: %f, deviation: %f, score: %f, comparisons: %d\n", avgOverlap, deviation, score, comparisons)
-	
+
 	return score
 }
 
@@ -265,17 +265,17 @@ func (ce *CoordinationEngine) estimateFilterOverlap(f1, f2 *bloom.BloomFilter) f
 	// Get element counts (approximated)
 	size1 := f1.ApproximatedSize()
 	size2 := f2.ApproximatedSize()
-	
+
 	// If either filter is empty, no overlap
 	if size1 == 0 || size2 == 0 {
 		return 0.0
 	}
-	
+
 	// Special case: identical filters (same memory address)
 	if f1 == f2 {
 		return 1.0
 	}
-	
+
 	minSize := float64(size1)
 	if float64(size2) < minSize {
 		minSize = float64(size2)
@@ -284,30 +284,30 @@ func (ce *CoordinationEngine) estimateFilterOverlap(f1, f2 *bloom.BloomFilter) f
 	if float64(size2) > maxSize {
 		maxSize = float64(size2)
 	}
-	
-	// If sizes are identical but capacities differ significantly, 
+
+	// If sizes are identical but capacities differ significantly,
 	// treat as different coordination groups
 	cap1 := float64(f1.Cap())
 	cap2 := float64(f2.Cap())
 	capacityRatio := math.Min(cap1, cap2) / math.Max(cap1, cap2)
-	
+
 	// If sizes are identical AND capacities are similar, assume moderate overlap
 	if size1 == size2 && capacityRatio > 0.1 {
 		return 0.45 // Moderate overlap for same-sized filters with similar capacity
 	}
-	
+
 	// For different sizes, estimate based on both element count and capacity
 	elementRatio := minSize / maxSize
-	
+
 	// capacityRatio already calculated above
 	// Use it for overlap estimation
-	
+
 	// Overlap estimate: weighted by both element and capacity ratios
 	overlapRatio := (elementRatio + capacityRatio) / 2 * 0.6
-	
+
 	// Debug: uncomment for testing
 	// fmt.Printf("elementRatio: %f, capacityRatio: %f, overlapRatio: %f\n", elementRatio, capacityRatio, overlapRatio)
-	
+
 	// Ensure reasonable bounds
 	if overlapRatio > 1.0 {
 		overlapRatio = 1.0
@@ -315,7 +315,7 @@ func (ce *CoordinationEngine) estimateFilterOverlap(f1, f2 *bloom.BloomFilter) f
 	if overlapRatio < 0.0 {
 		overlapRatio = 0.0
 	}
-	
+
 	return overlapRatio
 }
 
@@ -331,14 +331,14 @@ func (ce *CoordinationEngine) generateLocalPeerID() string {
 func (ce *CoordinationEngine) GetCoordinationMetrics() *CoordinationMetrics {
 	ce.mu.RLock()
 	defer ce.mu.RUnlock()
-	
+
 	metrics := &CoordinationMetrics{
-		CoordinationScore:     ce.coordinationScore,
-		AssignedBlocks:        len(ce.peerAssignments[ce.generateLocalPeerID()]),
-		TotalTrackedBlocks:    len(ce.blockAssignments),
-		AverageBlockCoverage:  0.0,
+		CoordinationScore:    ce.coordinationScore,
+		AssignedBlocks:       len(ce.peerAssignments[ce.generateLocalPeerID()]),
+		TotalTrackedBlocks:   len(ce.blockAssignments),
+		AverageBlockCoverage: 0.0,
 	}
-	
+
 	// Calculate average coverage
 	if len(ce.blockAssignments) > 0 {
 		totalCoverage := 0
@@ -347,7 +347,7 @@ func (ce *CoordinationEngine) GetCoordinationMetrics() *CoordinationMetrics {
 		}
 		metrics.AverageBlockCoverage = float64(totalCoverage) / float64(len(ce.blockAssignments))
 	}
-	
+
 	return metrics
 }
 
@@ -366,14 +366,14 @@ func (ce *CoordinationEngine) UpdateAssignments(
 ) {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
-	
+
 	// Clear old assignments for this peer
 	if oldBlocks, exists := ce.peerAssignments[peerID]; exists {
 		for _, blockID := range oldBlocks {
 			ce.removeAssignment(blockID, peerID)
 		}
 	}
-	
+
 	// Add new assignments
 	ce.peerAssignments[peerID] = assignedBlocks
 	for _, blockID := range assignedBlocks {
@@ -385,13 +385,13 @@ func (ce *CoordinationEngine) UpdateAssignments(
 func (ce *CoordinationEngine) removeAssignment(blockID, peerID string) {
 	peers := ce.blockAssignments[blockID]
 	newPeers := make([]string, 0, len(peers))
-	
+
 	for _, p := range peers {
 		if p != peerID {
 			newPeers = append(newPeers, p)
 		}
 	}
-	
+
 	if len(newPeers) > 0 {
 		ce.blockAssignments[blockID] = newPeers
 	} else {
@@ -403,7 +403,7 @@ func (ce *CoordinationEngine) removeAssignment(blockID, peerID string) {
 func (ce *CoordinationEngine) GetBlockAssignments(blockID string) []string {
 	ce.mu.RLock()
 	defer ce.mu.RUnlock()
-	
+
 	assignments := ce.blockAssignments[blockID]
 	result := make([]string, len(assignments))
 	copy(result, assignments)
@@ -414,7 +414,7 @@ func (ce *CoordinationEngine) GetBlockAssignments(blockID string) []string {
 func (ce *CoordinationEngine) GetPeerAssignments(peerID string) []string {
 	ce.mu.RLock()
 	defer ce.mu.RUnlock()
-	
+
 	assignments := ce.peerAssignments[peerID]
 	result := make([]string, len(assignments))
 	copy(result, assignments)

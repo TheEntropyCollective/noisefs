@@ -14,22 +14,22 @@ type SampledStatsConfig struct {
 	// SampleRate is the probability of recording a sample (0.0-1.0)
 	// Default: 0.1 (10% sampling rate)
 	SampleRate float64 `json:"sample_rate"`
-	
+
 	// PopularitySampleRate is the rate for popularity tracking
 	// Default: 0.05 (5% sampling rate for popularity)
 	PopularitySampleRate float64 `json:"popularity_sample_rate"`
-	
+
 	// LatencySampleRate is the rate for latency measurements
 	// Default: 0.1 (10% sampling rate for latency)
 	LatencySampleRate float64 `json:"latency_sample_rate"`
-	
+
 	// MinSampleInterval prevents too frequent sampling
 	// Default: 100ms
 	MinSampleInterval time.Duration `json:"min_sample_interval"`
-	
+
 	// UseApproximation enables probabilistic data structures
 	UseApproximation bool `json:"use_approximation"`
-	
+
 	// MaxPopularBlocks limits the popular blocks map size
 	MaxPopularBlocks int `json:"max_popular_blocks"`
 }
@@ -50,35 +50,35 @@ func DefaultSampledStatsConfig() *SampledStatsConfig {
 type SampledCacheStats struct {
 	mu     sync.RWMutex
 	config *SampledStatsConfig
-	
+
 	// Atomic counters for high-frequency operations
-	hits          int64
-	misses        int64
-	stores        int64
-	removals      int64
-	evictions     int64
-	currentSize   int64
-	
+	hits        int64
+	misses      int64
+	stores      int64
+	removals    int64
+	evictions   int64
+	currentSize int64
+
 	// Sampled statistics
-	bytesStored      int64
-	bytesRetrieved   int64
-	bytesEvicted     int64
-	maxSize          int64
-	
+	bytesStored    int64
+	bytesRetrieved int64
+	bytesEvicted   int64
+	maxSize        int64
+
 	// Latency tracking (sampled)
 	totalGetLatency   time.Duration
 	totalStoreLatency time.Duration
 	latencySamples    int64
-	
+
 	// Popularity tracking (sampled and capped)
-	popularBlocks     map[string]int64
-	mostPopularCID    string
-	mostPopularCount  int64
-	
+	popularBlocks    map[string]int64
+	mostPopularCID   string
+	mostPopularCount int64
+
 	// Timing
-	startTime    time.Time
-	lastReset    time.Time
-	
+	startTime time.Time
+	lastReset time.Time
+
 	// Sampling state (counter-based for performance)
 	// Using global atomic counter instead of per-instance RNG
 }
@@ -88,7 +88,7 @@ func NewSampledCacheStats(config *SampledStatsConfig) *SampledCacheStats {
 	if config == nil {
 		config = DefaultSampledStatsConfig()
 	}
-	
+
 	return &SampledCacheStats{
 		config:        config,
 		startTime:     time.Now(),
@@ -108,16 +108,16 @@ func (s *SampledCacheStats) shouldSample(rate float64) bool {
 	if rate <= 0.0 {
 		return false
 	}
-	
+
 	// Use atomic counter-based sampling instead of RNG for better performance
 	counter := atomic.AddInt64(&samplingCounter, 1)
-	
+
 	// Convert rate to interval (e.g., 0.1 = every 10th operation)
 	interval := int64(1.0 / rate)
 	if interval <= 1 {
 		return true
 	}
-	
+
 	return counter%interval == 0
 }
 
@@ -125,7 +125,7 @@ func (s *SampledCacheStats) shouldSample(rate float64) bool {
 func (s *SampledCacheStats) RecordHit(cid string, latency time.Duration) {
 	// Always increment atomic counters
 	atomic.AddInt64(&s.hits, 1)
-	
+
 	// Sample latency measurements
 	if s.shouldSample(s.config.LatencySampleRate) {
 		s.mu.Lock()
@@ -133,7 +133,7 @@ func (s *SampledCacheStats) RecordHit(cid string, latency time.Duration) {
 		s.latencySamples++
 		s.mu.Unlock()
 	}
-	
+
 	// Sample popularity tracking
 	if s.shouldSample(s.config.PopularitySampleRate) {
 		s.mu.Lock()
@@ -146,7 +146,7 @@ func (s *SampledCacheStats) RecordHit(cid string, latency time.Duration) {
 func (s *SampledCacheStats) RecordMiss(cid string, latency time.Duration) {
 	// Always increment atomic counters
 	atomic.AddInt64(&s.misses, 1)
-	
+
 	// Sample latency measurements
 	if s.shouldSample(s.config.LatencySampleRate) {
 		s.mu.Lock()
@@ -161,7 +161,7 @@ func (s *SampledCacheStats) RecordStore(cid string, block *blocks.Block, latency
 	// Always increment atomic counters
 	atomic.AddInt64(&s.stores, 1)
 	atomic.AddInt64(&s.currentSize, 1)
-	
+
 	// Sample byte tracking and latency
 	if s.shouldSample(s.config.SampleRate) {
 		s.mu.Lock()
@@ -175,7 +175,7 @@ func (s *SampledCacheStats) RecordStore(cid string, block *blocks.Block, latency
 func (s *SampledCacheStats) RecordRemoval(cid string, blockSize int64) {
 	atomic.AddInt64(&s.removals, 1)
 	atomic.AddInt64(&s.currentSize, -1)
-	
+
 	// Remove from popularity tracking if present
 	s.mu.Lock()
 	delete(s.popularBlocks, cid)
@@ -187,14 +187,14 @@ func (s *SampledCacheStats) RecordRemoval(cid string, blockSize int64) {
 func (s *SampledCacheStats) RecordEviction(cid string, blockSize int64) {
 	atomic.AddInt64(&s.evictions, 1)
 	atomic.AddInt64(&s.currentSize, -1)
-	
+
 	// Sample byte tracking
 	if s.shouldSample(s.config.SampleRate) {
 		s.mu.Lock()
 		s.bytesEvicted += blockSize
 		s.mu.Unlock()
 	}
-	
+
 	// Remove from popularity tracking if present
 	s.mu.Lock()
 	delete(s.popularBlocks, cid)
@@ -205,15 +205,15 @@ func (s *SampledCacheStats) RecordEviction(cid string, blockSize int64) {
 func (s *SampledCacheStats) updatePopularity(cid string) {
 	// Scale the increment to account for sampling rate
 	increment := int64(1.0 / s.config.PopularitySampleRate)
-	
+
 	s.popularBlocks[cid] += increment
-	
+
 	// Check if this becomes the most popular
 	if s.popularBlocks[cid] > s.mostPopularCount {
 		s.mostPopularCID = cid
 		s.mostPopularCount = s.popularBlocks[cid]
 	}
-	
+
 	// Limit the size of popular blocks map
 	if len(s.popularBlocks) > s.config.MaxPopularBlocks {
 		s.trimPopularBlocks()
@@ -227,14 +227,14 @@ func (s *SampledCacheStats) trimPopularBlocks() {
 	for _, count := range s.popularBlocks {
 		counts = append(counts, count)
 	}
-	
+
 	// Simple approach: remove blocks with count <= 1
 	for cid, count := range s.popularBlocks {
 		if count <= 1 && len(s.popularBlocks) > s.config.MaxPopularBlocks/2 {
 			delete(s.popularBlocks, cid)
 		}
 	}
-	
+
 	// If still too large, remove half randomly
 	if len(s.popularBlocks) > s.config.MaxPopularBlocks {
 		toRemove := len(s.popularBlocks) - s.config.MaxPopularBlocks/2
@@ -255,7 +255,7 @@ func (s *SampledCacheStats) trimPopularBlocks() {
 func (s *SampledCacheStats) GetSnapshot() CacheStats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	// Load atomic values
 	hits := atomic.LoadInt64(&s.hits)
 	misses := atomic.LoadInt64(&s.misses)
@@ -263,13 +263,13 @@ func (s *SampledCacheStats) GetSnapshot() CacheStats {
 	removals := atomic.LoadInt64(&s.removals)
 	evictions := atomic.LoadInt64(&s.evictions)
 	currentSize := atomic.LoadInt64(&s.currentSize)
-	
+
 	totalRequests := hits + misses
 	var hitRate float64
 	if totalRequests > 0 {
 		hitRate = float64(hits) / float64(totalRequests)
 	}
-	
+
 	// Calculate average latencies from samples
 	var avgGetLatency, avgStoreLatency time.Duration
 	if s.latencySamples > 0 {
@@ -278,35 +278,35 @@ func (s *SampledCacheStats) GetSnapshot() CacheStats {
 	if stores > 0 && s.totalStoreLatency > 0 {
 		avgStoreLatency = s.totalStoreLatency / time.Duration(stores)
 	}
-	
+
 	// Deep copy popular blocks
 	popularBlocks := make(map[string]int64)
 	for cid, count := range s.popularBlocks {
 		popularBlocks[cid] = count
 	}
-	
+
 	return CacheStats{
-		Hits:                hits,
-		Misses:              misses,
-		TotalRequests:       totalRequests,
-		HitRate:             hitRate,
-		Stores:              stores,
-		Removals:            removals,
-		Evictions:           evictions,
-		CurrentSize:         currentSize,
-		MaxSize:             s.maxSize,
-		BytesStored:         s.bytesStored,
-		BytesRetrieved:      s.bytesRetrieved,
-		BytesEvicted:        s.bytesEvicted,
-		AvgGetLatency:       avgGetLatency,
-		AvgStoreLatency:     avgStoreLatency,
-		TotalGetLatency:     s.totalGetLatency,
-		TotalStoreLatency:   s.totalStoreLatency,
-		StartTime:           s.startTime,
-		LastReset:           s.lastReset,
-		PopularBlocks:       popularBlocks,
-		MostPopularCID:      s.mostPopularCID,
-		MostPopularCount:    s.mostPopularCount,
+		Hits:              hits,
+		Misses:            misses,
+		TotalRequests:     totalRequests,
+		HitRate:           hitRate,
+		Stores:            stores,
+		Removals:          removals,
+		Evictions:         evictions,
+		CurrentSize:       currentSize,
+		MaxSize:           s.maxSize,
+		BytesStored:       s.bytesStored,
+		BytesRetrieved:    s.bytesRetrieved,
+		BytesEvicted:      s.bytesEvicted,
+		AvgGetLatency:     avgGetLatency,
+		AvgStoreLatency:   avgStoreLatency,
+		TotalGetLatency:   s.totalGetLatency,
+		TotalStoreLatency: s.totalStoreLatency,
+		StartTime:         s.startTime,
+		LastReset:         s.lastReset,
+		PopularBlocks:     popularBlocks,
+		MostPopularCID:    s.mostPopularCID,
+		MostPopularCount:  s.mostPopularCount,
 	}
 }
 
@@ -321,7 +321,7 @@ func (s *SampledCacheStats) SetMaxSize(maxSize int64) {
 func (s *SampledCacheStats) Reset() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Reset atomic counters
 	atomic.StoreInt64(&s.hits, 0)
 	atomic.StoreInt64(&s.misses, 0)
@@ -329,7 +329,7 @@ func (s *SampledCacheStats) Reset() {
 	atomic.StoreInt64(&s.removals, 0)
 	atomic.StoreInt64(&s.evictions, 0)
 	atomic.StoreInt64(&s.currentSize, 0)
-	
+
 	// Reset sampled data
 	s.bytesStored = 0
 	s.bytesRetrieved = 0
@@ -347,9 +347,9 @@ func (s *SampledCacheStats) Reset() {
 func (s *SampledCacheStats) GetEfficiency() map[string]interface{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	totalOps := atomic.LoadInt64(&s.hits) + atomic.LoadInt64(&s.misses) + atomic.LoadInt64(&s.stores)
-	
+
 	return map[string]interface{}{
 		"total_operations":       totalOps,
 		"latency_samples":        s.latencySamples,
@@ -380,24 +380,24 @@ func NewSampledStatisticsCache(underlying Cache, config *SampledStatsConfig, log
 // Store adds a block to the cache with sampled statistics tracking
 func (c *SampledStatisticsCache) Store(cid string, block *blocks.Block) error {
 	start := time.Now()
-	
+
 	err := c.underlying.Store(cid, block)
 	latency := time.Since(start)
-	
+
 	if err == nil {
 		c.stats.RecordStore(cid, block, latency)
 	}
-	
+
 	return err
 }
 
 // Get retrieves a block from the cache with sampled statistics tracking
 func (c *SampledStatisticsCache) Get(cid string) (*blocks.Block, error) {
 	start := time.Now()
-	
+
 	block, err := c.underlying.Get(cid)
 	latency := time.Since(start)
-	
+
 	if err == nil {
 		c.stats.RecordHit(cid, latency)
 		// Sample bytes retrieved
@@ -409,7 +409,7 @@ func (c *SampledStatisticsCache) Get(cid string) (*blocks.Block, error) {
 	} else {
 		c.stats.RecordMiss(cid, latency)
 	}
-	
+
 	return block, err
 }
 
@@ -425,12 +425,12 @@ func (c *SampledStatisticsCache) Remove(cid string) error {
 	if block, err := c.underlying.Get(cid); err == nil {
 		blockSize = int64(block.Size())
 	}
-	
+
 	err := c.underlying.Remove(cid)
 	if err == nil {
 		c.stats.RecordRemoval(cid, blockSize)
 	}
-	
+
 	return err
 }
 
@@ -460,13 +460,13 @@ func (c *SampledStatisticsCache) Clear() {
 // GetStats returns the current cache statistics
 func (c *SampledStatisticsCache) GetStats() *Stats {
 	snapshot := c.stats.GetSnapshot()
-	
+
 	// Calculate hit rate
 	var hitRate float64
 	if snapshot.Hits+snapshot.Misses > 0 {
 		hitRate = float64(snapshot.Hits) / float64(snapshot.Hits+snapshot.Misses)
 	}
-	
+
 	return &Stats{
 		Hits:      snapshot.Hits,
 		Misses:    snapshot.Misses,
@@ -490,22 +490,22 @@ func (c *SampledStatisticsCache) GetEfficiencyStats() map[string]interface{} {
 func (c *SampledStatisticsCache) LogStats() {
 	snapshot := c.stats.GetSnapshot()
 	efficiency := c.stats.GetEfficiency()
-	
+
 	c.logger.Info("Sampled cache statistics", map[string]interface{}{
-		"hit_rate":           snapshot.HitRate,
-		"total_requests":     snapshot.TotalRequests,
-		"hits":               snapshot.Hits,
-		"misses":             snapshot.Misses,
-		"current_size":       snapshot.CurrentSize,
-		"max_size":           snapshot.MaxSize,
-		"stores":             snapshot.Stores,
-		"evictions":          snapshot.Evictions,
-		"bytes_stored":       snapshot.BytesStored,
-		"bytes_retrieved":    snapshot.BytesRetrieved,
-		"avg_get_latency":    snapshot.AvgGetLatency.String(),
-		"avg_store_latency":  snapshot.AvgStoreLatency.String(),
-		"most_popular_cid":   snapshot.MostPopularCID,
+		"hit_rate":            snapshot.HitRate,
+		"total_requests":      snapshot.TotalRequests,
+		"hits":                snapshot.Hits,
+		"misses":              snapshot.Misses,
+		"current_size":        snapshot.CurrentSize,
+		"max_size":            snapshot.MaxSize,
+		"stores":              snapshot.Stores,
+		"evictions":           snapshot.Evictions,
+		"bytes_stored":        snapshot.BytesStored,
+		"bytes_retrieved":     snapshot.BytesRetrieved,
+		"avg_get_latency":     snapshot.AvgGetLatency.String(),
+		"avg_store_latency":   snapshot.AvgStoreLatency.String(),
+		"most_popular_cid":    snapshot.MostPopularCID,
 		"sampling_efficiency": efficiency["sampling_efficiency"],
-		"latency_samples":    efficiency["latency_samples"],
+		"latency_samples":     efficiency["latency_samples"],
 	})
 }

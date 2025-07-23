@@ -10,45 +10,45 @@ import (
 
 // WriteBackCache implements a cache with write-back capabilities
 type WriteBackCache struct {
-	underlying     Cache
-	logger         *logging.Logger
-	
+	underlying Cache
+	logger     *logging.Logger
+
 	// Write-back state
-	mu             sync.RWMutex
-	writeBuffer    map[string]*BufferedWrite
-	bufferSize     int
-	flushInterval  time.Duration
-	flushQueue     chan string
-	stopChan       chan struct{}
-	wg             sync.WaitGroup
-	
+	mu            sync.RWMutex
+	writeBuffer   map[string]*BufferedWrite
+	bufferSize    int
+	flushInterval time.Duration
+	flushQueue    chan string
+	stopChan      chan struct{}
+	wg            sync.WaitGroup
+
 	// Statistics
 	stats WriteBackStats
 }
 
 // WriteBackStats tracks write-back performance metrics
 type WriteBackStats struct {
-	mu                    sync.RWMutex
-	BufferedWrites        int64
-	FlushedWrites         int64
-	BufferHits            int64
-	BufferSize            int64
-	FlushLatency          time.Duration
-	TotalFlushLatency     time.Duration
-	FlushErrors           int64
-	CoalescedWrites       int64
+	mu                sync.RWMutex
+	BufferedWrites    int64
+	FlushedWrites     int64
+	BufferHits        int64
+	BufferSize        int64
+	FlushLatency      time.Duration
+	TotalFlushLatency time.Duration
+	FlushErrors       int64
+	CoalescedWrites   int64
 }
 
 // WriteBackStatsSnapshot represents a snapshot of write-back statistics without mutex
 type WriteBackStatsSnapshot struct {
-	BufferedWrites        int64         `json:"buffered_writes"`
-	FlushedWrites         int64         `json:"flushed_writes"`
-	BufferHits            int64         `json:"buffer_hits"`
-	BufferSize            int64         `json:"buffer_size"`
-	FlushLatency          time.Duration `json:"flush_latency"`
-	TotalFlushLatency     time.Duration `json:"total_flush_latency"`
-	FlushErrors           int64         `json:"flush_errors"`
-	CoalescedWrites       int64         `json:"coalesced_writes"`
+	BufferedWrites    int64         `json:"buffered_writes"`
+	FlushedWrites     int64         `json:"flushed_writes"`
+	BufferHits        int64         `json:"buffer_hits"`
+	BufferSize        int64         `json:"buffer_size"`
+	FlushLatency      time.Duration `json:"flush_latency"`
+	TotalFlushLatency time.Duration `json:"total_flush_latency"`
+	FlushErrors       int64         `json:"flush_errors"`
+	CoalescedWrites   int64         `json:"coalesced_writes"`
 }
 
 // BufferedWrite represents a write operation in the buffer
@@ -62,10 +62,10 @@ type BufferedWrite struct {
 
 // WriteBackConfig configures write-back behavior
 type WriteBackConfig struct {
-	BufferSize     int
-	FlushInterval  time.Duration
+	BufferSize      int
+	FlushInterval   time.Duration
 	MaxFlushRetries int
-	FlushWorkers   int
+	FlushWorkers    int
 }
 
 // NewWriteBackCache creates a new write-back cache
@@ -114,11 +114,11 @@ func (c *WriteBackCache) Store(cid string, block *blocks.Block) error {
 		existing.Block = block
 		existing.Timestamp = time.Now()
 		existing.Dirty = true
-		
+
 		c.updateStats(func(stats *WriteBackStats) {
 			stats.CoalescedWrites++
 		})
-		
+
 		c.logger.Debug("Coalesced write in buffer", map[string]interface{}{
 			"cid": cid,
 		})
@@ -173,12 +173,12 @@ func (c *WriteBackCache) Get(cid string) (*blocks.Block, error) {
 func (c *WriteBackCache) Has(cid string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	// Check buffer first
 	if _, exists := c.writeBuffer[cid]; exists {
 		return true
 	}
-	
+
 	// Check underlying cache
 	return c.underlying.Has(cid)
 }
@@ -187,10 +187,10 @@ func (c *WriteBackCache) Has(cid string) bool {
 func (c *WriteBackCache) Remove(cid string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	// Remove from buffer if present
 	delete(c.writeBuffer, cid)
-	
+
 	// Remove from underlying cache
 	return c.underlying.Remove(cid)
 }
@@ -209,7 +209,7 @@ func (c *WriteBackCache) IncrementPopularity(cid string) error {
 func (c *WriteBackCache) Size() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	return c.underlying.Size() + len(c.writeBuffer)
 }
 
@@ -217,7 +217,7 @@ func (c *WriteBackCache) Size() int {
 func (c *WriteBackCache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.writeBuffer = make(map[string]*BufferedWrite)
 	c.underlying.Clear()
 }
@@ -260,17 +260,17 @@ func (c *WriteBackCache) Flush() error {
 func (c *WriteBackCache) Close() error {
 	// Signal workers to stop
 	close(c.stopChan)
-	
+
 	// Flush all pending writes
 	if err := c.Flush(); err != nil {
 		c.logger.Warn("Error during final flush", map[string]interface{}{
 			"error": err.Error(),
 		})
 	}
-	
+
 	// Wait for workers to finish
 	c.wg.Wait()
-	
+
 	return nil
 }
 
@@ -278,7 +278,7 @@ func (c *WriteBackCache) Close() error {
 func (c *WriteBackCache) GetStats() WriteBackStatsSnapshot {
 	c.stats.mu.RLock()
 	defer c.stats.mu.RUnlock()
-	
+
 	return WriteBackStatsSnapshot{
 		BufferedWrites:    c.stats.BufferedWrites,
 		FlushedWrites:     c.stats.FlushedWrites,
@@ -315,14 +315,14 @@ func (c *WriteBackCache) flushWorker(id int) {
 // flushSingle flushes a single buffered write
 func (c *WriteBackCache) flushSingle(cid string) {
 	start := time.Now()
-	
+
 	c.mu.Lock()
 	buffered, exists := c.writeBuffer[cid]
 	if !exists || !buffered.Dirty {
 		c.mu.Unlock()
 		return
 	}
-	
+
 	// Create a copy to avoid holding the lock during flush
 	block := buffered.Block
 	c.mu.Unlock()
@@ -332,14 +332,14 @@ func (c *WriteBackCache) flushSingle(cid string) {
 		c.mu.Lock()
 		buffered.FlushAttempts++
 		c.mu.Unlock()
-		
+
 		c.updateStats(func(stats *WriteBackStats) {
 			stats.FlushErrors++
 		})
-		
+
 		c.logger.Warn("Failed to flush buffered write", map[string]interface{}{
-			"cid":   cid,
-			"error": err.Error(),
+			"cid":      cid,
+			"error":    err.Error(),
 			"attempts": buffered.FlushAttempts,
 		})
 		return

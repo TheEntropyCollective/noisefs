@@ -26,16 +26,16 @@ const (
 type AltruisticCacheConfig struct {
 	// MinPersonalCache is the guaranteed space for personal blocks
 	MinPersonalCache int64 `json:"min_personal_cache"`
-	
+
 	// EnableAltruistic allows disabling altruistic caching entirely
 	EnableAltruistic bool `json:"enable_altruistic"`
-	
+
 	// EvictionCooldown prevents thrashing by limiting major evictions
 	EvictionCooldown time.Duration `json:"eviction_cooldown"`
-	
+
 	// Optional advanced settings
 	AltruisticBandwidthMB int `json:"altruistic_bandwidth_mb,omitempty"`
-	
+
 	// Eviction strategy configuration
 	EvictionStrategy      string  `json:"eviction_strategy,omitempty"` // "LRU", "LFU", "ValueBased", "Adaptive"
 	EnablePredictive      bool    `json:"enable_predictive,omitempty"`
@@ -49,12 +49,12 @@ type BlockMetadata struct {
 	Origin       BlockOrigin
 	CachedAt     time.Time
 	LastAccessed time.Time
-	
+
 	// Performance optimization: cached scores with TTL
-	cachedScores    map[string]float64 // strategy name -> score
-	scoreExpiry     map[string]time.Time // strategy name -> expiry
-	scoresCacheTTL  time.Duration // configurable TTL (default 5min)
-	scoreMutex      sync.RWMutex // protect score cache
+	cachedScores   map[string]float64   // strategy name -> score
+	scoreExpiry    map[string]time.Time // strategy name -> expiry
+	scoresCacheTTL time.Duration        // configurable TTL (default 5min)
+	scoreMutex     sync.RWMutex         // protect score cache
 }
 
 // DefaultScoreCacheTTL is the default time-to-live for cached scores
@@ -77,17 +77,17 @@ func NewBlockMetadata(blockInfo *BlockInfo, origin BlockOrigin) *BlockMetadata {
 func (bm *BlockMetadata) GetCachedScore(strategyName string) (float64, bool) {
 	bm.scoreMutex.RLock()
 	defer bm.scoreMutex.RUnlock()
-	
+
 	score, exists := bm.cachedScores[strategyName]
 	if !exists {
 		return 0, false
 	}
-	
+
 	expiry, expiryExists := bm.scoreExpiry[strategyName]
 	if !expiryExists || time.Now().After(expiry) {
 		return 0, false
 	}
-	
+
 	return score, true
 }
 
@@ -95,13 +95,13 @@ func (bm *BlockMetadata) GetCachedScore(strategyName string) (float64, bool) {
 func (bm *BlockMetadata) SetCachedScore(strategyName string, score float64) {
 	bm.scoreMutex.Lock()
 	defer bm.scoreMutex.Unlock()
-	
+
 	if bm.cachedScores == nil {
 		bm.cachedScores = make(map[string]float64)
 		bm.scoreExpiry = make(map[string]time.Time)
 		bm.scoresCacheTTL = DefaultScoreCacheTTL
 	}
-	
+
 	bm.cachedScores[strategyName] = score
 	bm.scoreExpiry[strategyName] = time.Now().Add(bm.scoresCacheTTL)
 }
@@ -110,7 +110,7 @@ func (bm *BlockMetadata) SetCachedScore(strategyName string, score float64) {
 func (bm *BlockMetadata) ClearCachedScores() {
 	bm.scoreMutex.Lock()
 	defer bm.scoreMutex.Unlock()
-	
+
 	bm.cachedScores = make(map[string]float64)
 	bm.scoreExpiry = make(map[string]time.Time)
 }
@@ -136,35 +136,35 @@ func (bm *BlockMetadata) ClearCachedScores() {
 type AltruisticCache struct {
 	// Embedded base cache (typically AdaptiveCache)
 	baseCache Cache
-	
+
 	// Configuration
 	config *AltruisticCacheConfig
-	
+
 	// Block categorization
 	personalBlocks   map[string]*BlockMetadata
 	altruisticBlocks map[string]*BlockMetadata
-	
+
 	// Space tracking
-	personalSize     int64
-	altruisticSize   int64
-	totalCapacity    int64
-	
+	personalSize   int64
+	altruisticSize int64
+	totalCapacity  int64
+
 	// Anti-thrashing
 	lastMajorEviction time.Time
 	recentlyEvicted   map[string]time.Time // Track recently evicted blocks
 	evictionHistory   []string             // Order of evictions
-	
+
 	// Eviction strategies
-	evictionStrategy EvictionStrategy
-	healthTracker    *BlockHealthTracker
+	evictionStrategy  EvictionStrategy
+	healthTracker     *BlockHealthTracker
 	predictiveEvictor *PredictiveEvictionIntegration
-	
+
 	// Metrics (atomic counters for thread safety)
 	altruisticHits   int64
 	altruisticMisses int64
 	personalHits     int64
 	personalMisses   int64
-	
+
 	// Synchronization
 	mu sync.RWMutex
 }
@@ -174,7 +174,7 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 	if config.EvictionCooldown == 0 {
 		config.EvictionCooldown = 5 * time.Minute
 	}
-	
+
 	ac := &AltruisticCache{
 		baseCache:        baseCache,
 		config:           config,
@@ -184,13 +184,13 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 		recentlyEvicted:  make(map[string]time.Time),
 		evictionHistory:  make([]string, 0, 100),
 	}
-	
+
 	// Initialize eviction strategy
 	ac.evictionStrategy = ac.createEvictionStrategy()
-	
+
 	// Initialize health tracker
 	ac.healthTracker = NewBlockHealthTracker(nil)
-	
+
 	// Initialize predictive eviction if enabled
 	if config.EnablePredictive {
 		predictiveConfig := &PredictiveEvictorConfig{
@@ -201,14 +201,14 @@ func NewAltruisticCache(baseCache Cache, config *AltruisticCacheConfig, totalCap
 		}
 		ac.predictiveEvictor = NewPredictiveEvictionIntegration(ac, predictiveConfig)
 	}
-	
+
 	return ac
 }
 
 // createEvictionStrategy creates the configured eviction strategy
 func (ac *AltruisticCache) createEvictionStrategy() EvictionStrategy {
 	var base EvictionStrategy
-	
+
 	switch ac.config.EvictionStrategy {
 	case "LRU":
 		base = &LRUEvictionStrategy{}
@@ -222,12 +222,12 @@ func (ac *AltruisticCache) createEvictionStrategy() EvictionStrategy {
 		// Default to LRU
 		base = &LRUEvictionStrategy{}
 	}
-	
+
 	// Wrap with gradual eviction if enabled
 	if ac.config.EnableGradualEviction {
 		base = NewGradualEvictionStrategy(base)
 	}
-	
+
 	return base
 }
 
@@ -249,19 +249,19 @@ func (ac *AltruisticCache) Store(cid string, block *blocks.Block) error {
 func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, origin BlockOrigin) error {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	
+
 	blockSize := int64(block.Size())
-	
+
 	// Check if altruistic caching is disabled
 	if origin == AltruisticBlock && !ac.config.EnableAltruistic {
 		return fmt.Errorf("altruistic caching is disabled")
 	}
-	
+
 	// Handle personal blocks
 	if origin == PersonalBlock {
 		// Check if we need to evict altruistic blocks
 		available := ac.getAvailableSpace()
-		
+
 		// Always evict if we don't have enough space for the current block
 		if available < blockSize {
 			spaceNeeded := blockSize - available
@@ -269,12 +269,12 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 				return fmt.Errorf("failed to make space for personal block: %w", err)
 			}
 		}
-		
+
 		// Store in base cache
 		if err := ac.baseCache.Store(cid, block); err != nil {
 			return err
 		}
-		
+
 		// Track as personal
 		metadata := &BlockMetadata{
 			BlockInfo: &BlockInfo{
@@ -286,19 +286,19 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 			CachedAt:     time.Now(),
 			LastAccessed: time.Now(),
 		}
-		
+
 		// If block was previously altruistic, update tracking
 		if _, wasAltruistic := ac.altruisticBlocks[cid]; wasAltruistic {
 			ac.altruisticSize -= blockSize
 			delete(ac.altruisticBlocks, cid)
 		}
-		
+
 		ac.personalBlocks[cid] = metadata
 		ac.personalSize += blockSize
-		
+
 	} else {
 		// Handle altruistic blocks
-		
+
 		// Check anti-thrashing: don't re-add recently evicted blocks
 		if evictTime, wasEvicted := ac.recentlyEvicted[cid]; wasEvicted {
 			if time.Since(evictTime) < ac.config.EvictionCooldown {
@@ -307,16 +307,16 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 			// Clean up old eviction record
 			delete(ac.recentlyEvicted, cid)
 		}
-		
+
 		if !ac.canAcceptAltruistic(blockSize) {
 			return fmt.Errorf("insufficient space for altruistic block")
 		}
-		
+
 		// Store in base cache
 		if err := ac.baseCache.Store(cid, block); err != nil {
 			return err
 		}
-		
+
 		// Track as altruistic
 		metadata := &BlockMetadata{
 			BlockInfo: &BlockInfo{
@@ -328,11 +328,11 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 			CachedAt:     time.Now(),
 			LastAccessed: time.Now(),
 		}
-		
+
 		ac.altruisticBlocks[cid] = metadata
 		ac.altruisticSize += blockSize
 	}
-	
+
 	// Update health tracker with block info
 	if ac.healthTracker != nil {
 		hint := BlockHint{
@@ -341,7 +341,7 @@ func (ac *AltruisticCache) StoreWithOrigin(cid string, block *blocks.Block, orig
 		}
 		ac.healthTracker.UpdateBlockHealth(cid, hint)
 	}
-	
+
 	return nil
 }
 
@@ -360,12 +360,12 @@ func (ac *AltruisticCache) Get(cid string) (*blocks.Block, error) {
 		ac.mu.RUnlock()
 		return nil, err
 	}
-	
+
 	// Check if we need to update metadata
 	_, isPersonal := ac.personalBlocks[cid]
 	_, isAltruistic := ac.altruisticBlocks[cid]
 	ac.mu.RUnlock()
-	
+
 	// If we found the block and need to update metadata, acquire write lock
 	if isPersonal || isAltruistic {
 		ac.mu.Lock()
@@ -382,15 +382,15 @@ func (ac *AltruisticCache) Get(cid string) (*blocks.Block, error) {
 		}
 		ac.mu.Unlock()
 	}
-	
+
 	// Record access for predictive eviction
 	if ac.predictiveEvictor != nil {
 		ac.predictiveEvictor.RecordBlockAccess(cid)
 	}
-	
+
 	// Update health tracker
 	ac.healthTracker.RecordRequest(cid)
-	
+
 	return block, nil
 }
 
@@ -403,12 +403,12 @@ func (ac *AltruisticCache) Has(cid string) bool {
 func (ac *AltruisticCache) Remove(cid string) error {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	
+
 	// Remove from base cache
 	if err := ac.baseCache.Remove(cid); err != nil {
 		return err
 	}
-	
+
 	// Update tracking
 	if metadata, isPersonal := ac.personalBlocks[cid]; isPersonal {
 		ac.personalSize -= int64(metadata.Size)
@@ -417,7 +417,7 @@ func (ac *AltruisticCache) Remove(cid string) error {
 		ac.altruisticSize -= int64(metadata.Size)
 		delete(ac.altruisticBlocks, cid)
 	}
-	
+
 	return nil
 }
 
@@ -440,13 +440,13 @@ func (ac *AltruisticCache) Size() int {
 func (ac *AltruisticCache) Clear() {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	
+
 	ac.baseCache.Clear()
 	ac.personalBlocks = make(map[string]*BlockMetadata)
 	ac.altruisticBlocks = make(map[string]*BlockMetadata)
 	ac.personalSize = 0
 	ac.altruisticSize = 0
-	
+
 	// Reset atomic counters
 	atomic.StoreInt64(&ac.personalHits, 0)
 	atomic.StoreInt64(&ac.personalMisses, 0)
@@ -457,7 +457,7 @@ func (ac *AltruisticCache) Clear() {
 // GetStats returns extended cache statistics
 func (ac *AltruisticCache) GetStats() *Stats {
 	baseStats := ac.baseCache.GetStats()
-	
+
 	// Extend with altruistic stats
 	return &Stats{
 		Hits:      baseStats.Hits,
@@ -476,18 +476,18 @@ func (ac *AltruisticCache) GetStats() *Stats {
 func (ac *AltruisticCache) GetAltruisticStats() *AltruisticStats {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()
-	
+
 	return &AltruisticStats{
-		PersonalBlocks:    len(ac.personalBlocks),
-		AltruisticBlocks:  len(ac.altruisticBlocks),
-		PersonalSize:      ac.personalSize,
-		AltruisticSize:    ac.altruisticSize,
-		TotalCapacity:     ac.totalCapacity,
-		PersonalHits:      atomic.LoadInt64(&ac.personalHits),
-		PersonalMisses:    atomic.LoadInt64(&ac.personalMisses),
-		AltruisticHits:    atomic.LoadInt64(&ac.altruisticHits),
-		AltruisticMisses:  atomic.LoadInt64(&ac.altruisticMisses),
-		FlexPoolUsage:     ac.getFlexPoolUsage(),
+		PersonalBlocks:   len(ac.personalBlocks),
+		AltruisticBlocks: len(ac.altruisticBlocks),
+		PersonalSize:     ac.personalSize,
+		AltruisticSize:   ac.altruisticSize,
+		TotalCapacity:    ac.totalCapacity,
+		PersonalHits:     atomic.LoadInt64(&ac.personalHits),
+		PersonalMisses:   atomic.LoadInt64(&ac.personalMisses),
+		AltruisticHits:   atomic.LoadInt64(&ac.altruisticHits),
+		AltruisticMisses: atomic.LoadInt64(&ac.altruisticMisses),
+		FlexPoolUsage:    ac.getFlexPoolUsage(),
 	}
 }
 
@@ -514,7 +514,7 @@ func (ac *AltruisticCache) getAvailableSpace() int64 {
 func (ac *AltruisticCache) canAcceptAltruistic(size int64) bool {
 	// Ensure personal can always reach minimum
 	spaceAfterAdd := ac.totalCapacity - ac.personalSize - ac.altruisticSize - size
-	return ac.personalSize + spaceAfterAdd >= ac.config.MinPersonalCache
+	return ac.personalSize+spaceAfterAdd >= ac.config.MinPersonalCache
 }
 
 func (ac *AltruisticCache) getFlexPoolUsage() float64 {
@@ -522,12 +522,12 @@ func (ac *AltruisticCache) getFlexPoolUsage() float64 {
 	if flexPoolSize <= 0 {
 		return 0
 	}
-	
+
 	flexPoolUsed := ac.personalSize + ac.altruisticSize - ac.config.MinPersonalCache
 	if flexPoolUsed < 0 {
 		flexPoolUsed = 0
 	}
-	
+
 	return float64(flexPoolUsed) / float64(flexPoolSize)
 }
 
@@ -536,32 +536,32 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 	if !ac.lastMajorEviction.IsZero() && time.Since(ac.lastMajorEviction) < ac.config.EvictionCooldown {
 		return fmt.Errorf("eviction cooldown active")
 	}
-	
+
 	// Use eviction strategy to select candidates
 	candidates := ac.evictionStrategy.SelectEvictionCandidates(
 		ac.altruisticBlocks,
 		needed,
 		ac.healthTracker,
 	)
-	
+
 	freed := int64(0)
 	for _, metadata := range candidates {
 		if freed >= needed {
 			break
 		}
-		
+
 		if err := ac.baseCache.Remove(metadata.CID); err != nil {
 			continue // Skip blocks that can't be removed
 		}
-		
+
 		freed += int64(metadata.Size)
 		ac.altruisticSize -= int64(metadata.Size)
 		delete(ac.altruisticBlocks, metadata.CID)
-		
+
 		// Track eviction for anti-thrashing
 		ac.recentlyEvicted[metadata.CID] = time.Now()
 		ac.evictionHistory = append(ac.evictionHistory, metadata.CID)
-		
+
 		// Limit history size
 		if len(ac.evictionHistory) > 1000 {
 			// Remove oldest entries
@@ -570,39 +570,38 @@ func (ac *AltruisticCache) evictAltruisticBlocks(needed int64) error {
 			ac.evictionHistory = ac.evictionHistory[1:]
 		}
 	}
-	
+
 	// Consider it a major eviction if we freed significantly more than needed
 	// or if we evicted many blocks (more than 1)
-	if freed >= needed + needed/4 || len(candidates) > 1 {
+	if freed >= needed+needed/4 || len(candidates) > 1 {
 		ac.lastMajorEviction = time.Now()
 	}
-	
+
 	if freed < needed {
 		return fmt.Errorf("insufficient space freed: need %d, freed %d", needed, freed)
 	}
-	
+
 	return nil
 }
-
 
 // ShouldCacheAltruistic checks if an altruistic block should be cached
 // Returns false if the block was recently evicted or space constraints prevent it
 func (ac *AltruisticCache) ShouldCacheAltruistic(cid string, size int64) bool {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()
-	
+
 	// Check if disabled
 	if !ac.config.EnableAltruistic {
 		return false
 	}
-	
+
 	// Check anti-thrashing
 	if evictTime, wasEvicted := ac.recentlyEvicted[cid]; wasEvicted {
 		if time.Since(evictTime) < ac.config.EvictionCooldown {
 			return false
 		}
 	}
-	
+
 	// Check space constraints
 	return ac.canAcceptAltruistic(size)
 }
@@ -611,7 +610,7 @@ func (ac *AltruisticCache) ShouldCacheAltruistic(cid string, size int64) bool {
 func (ac *AltruisticCache) GetEvictionHistory() []string {
 	ac.mu.RLock()
 	defer ac.mu.RUnlock()
-	
+
 	history := make([]string, len(ac.evictionHistory))
 	copy(history, ac.evictionHistory)
 	return history
@@ -626,7 +625,7 @@ func (ac *AltruisticCache) UpdateBlockHealth(cid string, hint BlockHint) {
 func (ac *AltruisticCache) SetEvictionStrategy(strategy string) {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	
+
 	ac.config.EvictionStrategy = strategy
 	ac.evictionStrategy = ac.createEvictionStrategy()
 }
@@ -636,7 +635,7 @@ func (ac *AltruisticCache) PerformPreEviction() error {
 	if ac.predictiveEvictor == nil {
 		return nil
 	}
-	
+
 	return ac.predictiveEvictor.PerformPreEviction()
 }
 

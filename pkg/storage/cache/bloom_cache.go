@@ -29,7 +29,7 @@ func NewBloomFilter(expectedItems int, falsePositiveRate float64) *BloomFilter {
 	// Calculate optimal size and hash functions
 	size := uint(-float64(expectedItems) * math.Log(falsePositiveRate) / (math.Log(2) * math.Log(2)))
 	hashFns := uint(float64(size) * math.Log(2) / float64(expectedItems))
-	
+
 	// Ensure minimum values
 	if size < 64 {
 		size = 64
@@ -40,7 +40,7 @@ func NewBloomFilter(expectedItems int, falsePositiveRate float64) *BloomFilter {
 	if hashFns > 10 {
 		hashFns = 10 // Practical limit
 	}
-	
+
 	return &BloomFilter{
 		bitArray: make([]bool, size),
 		size:     size,
@@ -52,7 +52,7 @@ func NewBloomFilter(expectedItems int, falsePositiveRate float64) *BloomFilter {
 func (bf *BloomFilter) Add(item string) {
 	bf.mutex.Lock()
 	defer bf.mutex.Unlock()
-	
+
 	hashes := bf.getHashes(item)
 	for i := uint(0); i < bf.hashFns; i++ {
 		index := (hashes[0] + i*hashes[1]) % bf.size
@@ -64,7 +64,7 @@ func (bf *BloomFilter) Add(item string) {
 func (bf *BloomFilter) Contains(item string) bool {
 	bf.mutex.RLock()
 	defer bf.mutex.RUnlock()
-	
+
 	hashes := bf.getHashes(item)
 	for i := uint(0); i < bf.hashFns; i++ {
 		index := (hashes[0] + i*hashes[1]) % bf.size
@@ -78,11 +78,11 @@ func (bf *BloomFilter) Contains(item string) bool {
 // getHashes generates two hash values for double hashing
 func (bf *BloomFilter) getHashes(item string) [2]uint {
 	hash := sha256.Sum256([]byte(item))
-	
+
 	// Split hash into two 32-bit values
 	h1 := binary.BigEndian.Uint32(hash[:4])
 	h2 := binary.BigEndian.Uint32(hash[4:8])
-	
+
 	return [2]uint{uint(h1), uint(h2)}
 }
 
@@ -90,7 +90,7 @@ func (bf *BloomFilter) getHashes(item string) [2]uint {
 func (bf *BloomFilter) Clear() {
 	bf.mutex.Lock()
 	defer bf.mutex.Unlock()
-	
+
 	for i := range bf.bitArray {
 		bf.bitArray[i] = false
 	}
@@ -100,25 +100,25 @@ func (bf *BloomFilter) Clear() {
 func (bf *BloomFilter) EstimateCount() int {
 	bf.mutex.RLock()
 	defer bf.mutex.RUnlock()
-	
+
 	setBits := 0
 	for _, bit := range bf.bitArray {
 		if bit {
 			setBits++
 		}
 	}
-	
+
 	if setBits == 0 {
 		return 0
 	}
-	
+
 	// Estimate using -m * ln(1 - X/m) / k
 	// where m = filter size, X = set bits, k = hash functions
 	ratio := float64(setBits) / float64(bf.size)
 	if ratio >= 1.0 {
 		return int(bf.size) // Filter is likely full
 	}
-	
+
 	estimate := -float64(bf.size) * math.Log(1-ratio) / float64(bf.hashFns)
 	return int(estimate)
 }
@@ -127,20 +127,20 @@ func (bf *BloomFilter) EstimateCount() int {
 func (ac *AdaptiveCache) CreateCacheHint() *CacheBloomHint {
 	ac.mutex.RLock()
 	defer ac.mutex.RUnlock()
-	
+
 	// Create Bloom filter sized for current cache contents
 	itemCount := len(ac.items)
 	if itemCount == 0 {
 		itemCount = 100 // Minimum size
 	}
-	
+
 	filter := NewBloomFilter(itemCount*2, 0.01) // 1% false positive rate
-	
+
 	// Add all cached CIDs to the filter
 	for cid := range ac.items {
 		filter.Add(cid)
 	}
-	
+
 	return &CacheBloomHint{
 		Filter:        filter,
 		EstimatedSize: itemCount,
@@ -154,12 +154,12 @@ func (hint *CacheBloomHint) QueryCacheHint(cid string) bool {
 	if hint.Filter == nil {
 		return false
 	}
-	
+
 	// Check if hint is too old (older than 1 hour)
 	if time.Since(hint.CreatedAt) > time.Hour {
 		return false
 	}
-	
+
 	return hint.Filter.Contains(cid)
 }
 
@@ -168,7 +168,7 @@ func MergeHints(hints []*CacheBloomHint) *CacheBloomHint {
 	if len(hints) == 0 {
 		return nil
 	}
-	
+
 	// Find the largest estimated size for optimal parameters
 	maxSize := 0
 	for _, hint := range hints {
@@ -176,11 +176,11 @@ func MergeHints(hints []*CacheBloomHint) *CacheBloomHint {
 			maxSize = hint.EstimatedSize
 		}
 	}
-	
+
 	// Create merged filter
 	mergedFilter := NewBloomFilter(maxSize*len(hints), 0.05) // Slightly higher FP rate
 	totalSize := 0
-	
+
 	// Add all items from all filters (approximate)
 	for _, hint := range hints {
 		if hint.Filter != nil {
@@ -189,7 +189,7 @@ func MergeHints(hints []*CacheBloomHint) *CacheBloomHint {
 			totalSize += hint.EstimatedSize
 		}
 	}
-	
+
 	return &CacheBloomHint{
 		Filter:        mergedFilter,
 		EstimatedSize: totalSize,
@@ -202,22 +202,22 @@ func MergeHints(hints []*CacheBloomHint) *CacheBloomHint {
 func (ac *AdaptiveCache) UpdateCacheExchangeWithBloom() {
 	ac.cacheExchange.mutex.Lock()
 	defer ac.cacheExchange.mutex.Unlock()
-	
+
 	// Create current cache hint
 	hint := ac.CreateCacheHint()
-	
+
 	// In a real implementation, this would:
 	// 1. Send hint to connected peers
 	// 2. Receive hints from peers
 	// 3. Use hints to make smart prefetching decisions
 	// 4. Avoid querying peers that definitely don't have content
-	
+
 	// For now, we'll store it for demonstration
 	ac.cacheExchange.LastExchange = time.Now()
-	
+
 	// Use hint to demonstrate functionality
 	_ = hint
-	
+
 	// Example usage: before requesting a block, check peer hints
 	// if peerHint.QueryCacheHint(cid) { requestFromPeer(peer, cid) }
 }

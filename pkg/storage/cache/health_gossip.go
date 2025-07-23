@@ -18,36 +18,36 @@ import (
 type HealthGossipConfig struct {
 	// Gossip interval for periodic broadcasts
 	GossipInterval time.Duration `json:"gossip_interval"`
-	
+
 	// Maximum peers to gossip with per round
 	MaxGossipPeers int `json:"max_gossip_peers"`
-	
+
 	// Bloom filter parameters
-	BloomFilterSize       uint    `json:"bloom_filter_size"`
-	BloomFilterHashFuncs  uint    `json:"bloom_filter_hash_funcs"`
-	BloomFalsePositive    float64 `json:"bloom_false_positive"`
-	
+	BloomFilterSize      uint    `json:"bloom_filter_size"`
+	BloomFilterHashFuncs uint    `json:"bloom_filter_hash_funcs"`
+	BloomFalsePositive   float64 `json:"bloom_false_positive"`
+
 	// Privacy parameters
 	EnableDifferentialPrivacy bool    `json:"enable_differential_privacy"`
-	PrivacyEpsilon           float64 `json:"privacy_epsilon"`
-	
+	PrivacyEpsilon            float64 `json:"privacy_epsilon"`
+
 	// Aggregation parameters
-	AggregationWindow        time.Duration `json:"aggregation_window"`
-	MinBlocksForGossip       int          `json:"min_blocks_for_gossip"`
+	AggregationWindow  time.Duration `json:"aggregation_window"`
+	MinBlocksForGossip int           `json:"min_blocks_for_gossip"`
 }
 
 // DefaultHealthGossipConfig returns default configuration
 func DefaultHealthGossipConfig() *HealthGossipConfig {
 	return &HealthGossipConfig{
-		GossipInterval:           5 * time.Minute,
-		MaxGossipPeers:          5,
-		BloomFilterSize:         10000,
-		BloomFilterHashFuncs:    5,
-		BloomFalsePositive:      0.01,
+		GossipInterval:            5 * time.Minute,
+		MaxGossipPeers:            5,
+		BloomFilterSize:           10000,
+		BloomFilterHashFuncs:      5,
+		BloomFalsePositive:        0.01,
 		EnableDifferentialPrivacy: true,
-		PrivacyEpsilon:          1.0,
-		AggregationWindow:       15 * time.Minute,
-		MinBlocksForGossip:      10,
+		PrivacyEpsilon:            1.0,
+		AggregationWindow:         15 * time.Minute,
+		MinBlocksForGossip:        10,
 	}
 }
 
@@ -55,19 +55,19 @@ func DefaultHealthGossipConfig() *HealthGossipConfig {
 type HealthGossipMessage struct {
 	// Timestamp of the message
 	Timestamp time.Time `json:"timestamp"`
-	
+
 	// Bloom filter of low-replication blocks
 	LowReplicationFilter []byte `json:"low_replication_filter"`
-	
+
 	// Bloom filter of high-entropy blocks
 	HighEntropyFilter []byte `json:"high_entropy_filter"`
-	
+
 	// Aggregate statistics (with noise for privacy)
 	AggregateStats *AggregateHealthStats `json:"aggregate_stats"`
-	
+
 	// Peer ID (anonymized)
 	PeerID string `json:"peer_id"`
-	
+
 	// Message version for compatibility
 	Version int `json:"version"`
 }
@@ -76,16 +76,16 @@ type HealthGossipMessage struct {
 type AggregateHealthStats struct {
 	// Total blocks tracked (with noise)
 	TotalBlocks int64 `json:"total_blocks"`
-	
+
 	// Replication buckets (with noise)
-	LowReplicationCount  int64 `json:"low_replication_count"`
+	LowReplicationCount    int64 `json:"low_replication_count"`
 	MediumReplicationCount int64 `json:"medium_replication_count"`
-	HighReplicationCount int64 `json:"high_replication_count"`
-	
+	HighReplicationCount   int64 `json:"high_replication_count"`
+
 	// Average metrics (with noise)
 	AveragePopularity float64 `json:"average_popularity"`
 	AverageEntropy    float64 `json:"average_entropy"`
-	
+
 	// Geographic diversity (anonymized regions)
 	RegionCounts map[string]int64 `json:"region_counts"`
 }
@@ -95,19 +95,19 @@ type HealthGossiper struct {
 	config        *HealthGossipConfig
 	healthTracker *BlockHealthTracker
 	shell         *shell.Shell
-	
+
 	// Gossip state
 	localBloomFilter    *bloom.BloomFilter
 	peerHealthEstimates map[string]*PeerHealthEstimate
 	lastGossipTime      time.Time
-	
+
 	// Privacy state
 	noiseGenerator *LaplaceNoise
-	
+
 	// Metrics
 	gossipsSent     int64
 	gossipsReceived int64
-	
+
 	// Control
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -128,29 +128,29 @@ func NewHealthGossiper(config *HealthGossipConfig, healthTracker *BlockHealthTra
 	if config == nil {
 		config = DefaultHealthGossipConfig()
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	hg := &HealthGossiper{
 		config:              config,
 		healthTracker:       healthTracker,
-		shell:              shell,
+		shell:               shell,
 		peerHealthEstimates: make(map[string]*PeerHealthEstimate),
-		ctx:                ctx,
-		cancel:             cancel,
+		ctx:                 ctx,
+		cancel:              cancel,
 	}
-	
+
 	// Initialize noise generator for differential privacy
 	if config.EnableDifferentialPrivacy {
 		hg.noiseGenerator = NewLaplaceNoise(config.PrivacyEpsilon)
 	}
-	
+
 	// Initialize local bloom filter
 	hg.localBloomFilter = bloom.NewWithEstimates(
 		uint(config.BloomFilterSize),
 		config.BloomFalsePositive,
 	)
-	
+
 	return hg, nil
 }
 
@@ -158,15 +158,15 @@ func NewHealthGossiper(config *HealthGossipConfig, healthTracker *BlockHealthTra
 func (hg *HealthGossiper) Start() error {
 	hg.mu.Lock()
 	defer hg.mu.Unlock()
-	
+
 	// Subscribe to gossip topic
 	hg.wg.Add(1)
 	go hg.gossipLoop()
-	
+
 	// Subscribe to incoming gossip
 	hg.wg.Add(1)
 	go hg.receiveLoop()
-	
+
 	return nil
 }
 
@@ -179,10 +179,10 @@ func (hg *HealthGossiper) Stop() {
 // gossipLoop periodically sends health gossip
 func (hg *HealthGossiper) gossipLoop() {
 	defer hg.wg.Done()
-	
+
 	ticker := time.NewTicker(hg.config.GossipInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -200,20 +200,20 @@ func (hg *HealthGossiper) gossipLoop() {
 func (hg *HealthGossiper) sendGossip() error {
 	hg.mu.Lock()
 	defer hg.mu.Unlock()
-	
+
 	// Skip if shell is nil (testing scenario)
 	if hg.shell == nil {
 		return nil
 	}
-	
+
 	// Get current block health data
 	blockHints := hg.healthTracker.GetAllBlockHints()
-	
+
 	// Check if we have enough blocks to gossip
 	if len(blockHints) < hg.config.MinBlocksForGossip {
 		return nil
 	}
-	
+
 	// Create bloom filters
 	lowRepFilter := bloom.NewWithEstimates(
 		uint(hg.config.BloomFilterSize),
@@ -223,46 +223,46 @@ func (hg *HealthGossiper) sendGossip() error {
 		uint(hg.config.BloomFilterSize),
 		hg.config.BloomFalsePositive,
 	)
-	
+
 	// Populate filters and calculate stats
 	stats := hg.calculateAggregateStats(blockHints, lowRepFilter, highEntropyFilter)
-	
+
 	// Marshal bloom filters
 	lowRepData, err := lowRepFilter.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal low rep filter: %w", err)
 	}
-	
+
 	highEntropyData, err := highEntropyFilter.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal high entropy filter: %w", err)
 	}
-	
+
 	// Create gossip message
 	msg := &HealthGossipMessage{
 		Timestamp:            time.Now(),
 		LowReplicationFilter: lowRepData,
 		HighEntropyFilter:    highEntropyData,
 		AggregateStats:       stats,
-		PeerID:              hg.anonymizePeerID(),
-		Version:             1,
+		PeerID:               hg.anonymizePeerID(),
+		Version:              1,
 	}
-	
+
 	// Serialize message
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal gossip message: %w", err)
 	}
-	
+
 	// Publish to gossip topic
 	topic := "noisefs-health-gossip"
 	if err := hg.shell.PubSubPublish(topic, string(data)); err != nil {
 		return fmt.Errorf("failed to publish gossip: %w", err)
 	}
-	
+
 	hg.gossipsSent++
 	hg.lastGossipTime = time.Now()
-	
+
 	return nil
 }
 
@@ -275,10 +275,10 @@ func (hg *HealthGossiper) calculateAggregateStats(
 	stats := &AggregateHealthStats{
 		RegionCounts: make(map[string]int64),
 	}
-	
+
 	var totalPopularity float64
 	var totalEntropy float64
-	
+
 	for blockID, hint := range hints {
 		// Add to appropriate bloom filters
 		switch hint.ReplicationBucket {
@@ -290,17 +290,17 @@ func (hg *HealthGossiper) calculateAggregateStats(
 		default:
 			stats.HighReplicationCount++
 		}
-		
+
 		if hint.HighEntropy {
 			highEntropyFilter.AddString(blockID)
 		}
-		
+
 		// Accumulate metrics
 		totalPopularity += hint.NoisyRequestRate
 		if hint.HighEntropy {
 			totalEntropy += 1.0
 		}
-		
+
 		// Count regions (anonymized)
 		// MissingRegions is an int representing count, not a slice
 		if hint.MissingRegions > 0 {
@@ -316,15 +316,15 @@ func (hg *HealthGossiper) calculateAggregateStats(
 			stats.RegionCounts[regionBucket]++
 		}
 	}
-	
+
 	stats.TotalBlocks = int64(len(hints))
-	
+
 	// Calculate averages
 	if stats.TotalBlocks > 0 {
 		stats.AveragePopularity = totalPopularity / float64(stats.TotalBlocks)
 		stats.AverageEntropy = totalEntropy / float64(stats.TotalBlocks)
 	}
-	
+
 	// Add differential privacy noise if enabled
 	if hg.config.EnableDifferentialPrivacy && hg.noiseGenerator != nil {
 		stats.TotalBlocks = hg.noiseGenerator.AddNoiseInt64(stats.TotalBlocks)
@@ -333,7 +333,7 @@ func (hg *HealthGossiper) calculateAggregateStats(
 		stats.HighReplicationCount = hg.noiseGenerator.AddNoiseInt64(stats.HighReplicationCount)
 		stats.AveragePopularity = hg.noiseGenerator.AddNoiseFloat64(stats.AveragePopularity)
 		stats.AverageEntropy = hg.noiseGenerator.AddNoiseFloat64(stats.AverageEntropy)
-		
+
 		// Ensure counts don't go negative (clamp to 0)
 		if stats.TotalBlocks < 0 {
 			stats.TotalBlocks = 0
@@ -347,7 +347,7 @@ func (hg *HealthGossiper) calculateAggregateStats(
 		if stats.HighReplicationCount < 0 {
 			stats.HighReplicationCount = 0
 		}
-		
+
 		// Add noise to region counts
 		for region := range stats.RegionCounts {
 			stats.RegionCounts[region] = hg.noiseGenerator.AddNoiseInt64(stats.RegionCounts[region])
@@ -357,19 +357,19 @@ func (hg *HealthGossiper) calculateAggregateStats(
 			}
 		}
 	}
-	
+
 	return stats
 }
 
 // receiveLoop handles incoming gossip messages
 func (hg *HealthGossiper) receiveLoop() {
 	defer hg.wg.Done()
-	
+
 	// Skip if shell is nil (testing scenario)
 	if hg.shell == nil {
 		return
 	}
-	
+
 	topic := "noisefs-health-gossip"
 	sub, err := hg.shell.PubSubSubscribe(topic)
 	if err != nil {
@@ -377,7 +377,7 @@ func (hg *HealthGossiper) receiveLoop() {
 		return
 	}
 	defer sub.Cancel()
-	
+
 	for {
 		select {
 		case <-hg.ctx.Done():
@@ -390,7 +390,7 @@ func (hg *HealthGossiper) receiveLoop() {
 				}
 				continue
 			}
-			
+
 			// Process gossip message
 			if err := hg.processGossip(msg.Data); err != nil {
 				fmt.Printf("Failed to process gossip: %v\n", err)
@@ -405,25 +405,25 @@ func (hg *HealthGossiper) processGossip(data []byte) error {
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return fmt.Errorf("failed to unmarshal gossip: %w", err)
 	}
-	
+
 	// Validate message
 	if msg.Version != 1 {
 		return fmt.Errorf("unsupported gossip version: %d", msg.Version)
 	}
-	
+
 	if time.Since(msg.Timestamp) > 10*time.Minute {
 		return fmt.Errorf("gossip message too old")
 	}
-	
+
 	hg.mu.Lock()
 	defer hg.mu.Unlock()
-	
+
 	// Update peer health estimate
 	estimate := &PeerHealthEstimate{
 		LastUpdate:     msg.Timestamp,
 		AggregateStats: msg.AggregateStats,
 	}
-	
+
 	// Unmarshal bloom filters
 	if len(msg.LowReplicationFilter) > 0 {
 		filter := &bloom.BloomFilter{}
@@ -431,20 +431,20 @@ func (hg *HealthGossiper) processGossip(data []byte) error {
 			estimate.LowReplicationBlocks = filter
 		}
 	}
-	
+
 	if len(msg.HighEntropyFilter) > 0 {
 		filter := &bloom.BloomFilter{}
 		if err := filter.UnmarshalBinary(msg.HighEntropyFilter); err == nil {
 			estimate.HighEntropyBlocks = filter
 		}
 	}
-	
+
 	hg.peerHealthEstimates[msg.PeerID] = estimate
 	hg.gossipsReceived++
-	
+
 	// Update local health tracker with network-wide information
 	hg.updateHealthFromGossip(estimate)
-	
+
 	return nil
 }
 
@@ -459,27 +459,27 @@ func (hg *HealthGossiper) updateHealthFromGossip(estimate *PeerHealthEstimate) {
 func (hg *HealthGossiper) GetNetworkHealthEstimate() *NetworkHealthEstimate {
 	hg.mu.RLock()
 	defer hg.mu.RUnlock()
-	
+
 	estimate := &NetworkHealthEstimate{
 		Timestamp:       time.Now(),
 		PeerCount:       len(hg.peerHealthEstimates),
 		GossipsSent:     hg.gossipsSent,
 		GossipsReceived: hg.gossipsReceived,
 	}
-	
+
 	// Aggregate stats from all peers
 	for _, peerEstimate := range hg.peerHealthEstimates {
 		if time.Since(peerEstimate.LastUpdate) > hg.config.AggregationWindow {
 			continue // Skip old estimates
 		}
-		
+
 		if peerEstimate.AggregateStats != nil {
 			estimate.TotalNetworkBlocks += peerEstimate.AggregateStats.TotalBlocks
 			estimate.LowReplicationBlocks += peerEstimate.AggregateStats.LowReplicationCount
 			estimate.HighEntropyBlocks += peerEstimate.AggregateStats.HighReplicationCount
 		}
 	}
-	
+
 	return estimate
 }
 
@@ -544,7 +544,7 @@ func (ln *LaplaceNoise) generateLaplace() float64 {
 	max := big.NewInt(1 << 53)
 	n, _ := rand.Int(rand.Reader, max)
 	u := float64(n.Int64()) / float64(max.Int64())
-	
+
 	// Ensure u is in (0, 1) to avoid log(0)
 	if u == 0.0 {
 		u = 1e-10
@@ -552,11 +552,11 @@ func (ln *LaplaceNoise) generateLaplace() float64 {
 	if u == 1.0 {
 		u = 1.0 - 1e-10
 	}
-	
+
 	// Transform to Laplace distribution
 	// scale = sensitivity / epsilon
 	scale := 1.0 / ln.epsilon
-	
+
 	// Laplace CDF inverse
 	if u < 0.5 {
 		return scale * math.Log(2*u)
