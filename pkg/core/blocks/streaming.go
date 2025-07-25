@@ -27,7 +27,7 @@ func NewStreamingSplitter(blockSize int) (*StreamingSplitter, error) {
 	if blockSize <= 0 {
 		return nil, errors.New("block size must be positive")
 	}
-	
+
 	return &StreamingSplitter{
 		blockSize: blockSize,
 	}, nil
@@ -43,14 +43,14 @@ func (s *StreamingSplitter) SplitWithContext(ctx context.Context, reader io.Read
 	if reader == nil {
 		return errors.New("reader cannot be nil")
 	}
-	
+
 	if processor == nil {
 		return errors.New("processor cannot be nil")
 	}
-	
+
 	buffer := make([]byte, s.blockSize)
 	blockIndex := 0
-	
+
 	for {
 		// Check for context cancellation
 		select {
@@ -58,35 +58,35 @@ func (s *StreamingSplitter) SplitWithContext(ctx context.Context, reader io.Read
 			return ctx.Err()
 		default:
 		}
-		
+
 		n, err := reader.Read(buffer)
 		if n > 0 {
 			// Always create full-sized blocks with padding for optimal cache efficiency
 			blockData := make([]byte, s.blockSize)
 			copy(blockData, buffer[:n])
 			// Remaining bytes are zero-padded automatically
-			
+
 			block, blockErr := NewBlock(blockData)
 			if blockErr != nil {
 				return blockErr
 			}
-			
+
 			if procErr := processor.ProcessBlock(blockIndex, block); procErr != nil {
 				return procErr
 			}
-			
+
 			blockIndex++
 		}
-		
+
 		if err == io.EOF {
 			break
 		}
-		
+
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -100,15 +100,15 @@ func (s *StreamingSplitter) SplitWithProgressAndContext(ctx context.Context, rea
 	if reader == nil {
 		return errors.New("reader cannot be nil")
 	}
-	
+
 	if processor == nil {
 		return errors.New("processor cannot be nil")
 	}
-	
+
 	buffer := make([]byte, s.blockSize)
 	blockIndex := 0
 	bytesProcessed := int64(0)
-	
+
 	for {
 		// Check for context cancellation
 		select {
@@ -116,40 +116,40 @@ func (s *StreamingSplitter) SplitWithProgressAndContext(ctx context.Context, rea
 			return ctx.Err()
 		default:
 		}
-		
+
 		n, err := reader.Read(buffer)
 		if n > 0 {
 			// Always create full-sized blocks with padding for optimal cache efficiency
 			blockData := make([]byte, s.blockSize)
 			copy(blockData, buffer[:n])
 			// Remaining bytes are zero-padded automatically
-			
+
 			block, blockErr := NewBlock(blockData)
 			if blockErr != nil {
 				return blockErr
 			}
-			
+
 			if procErr := processor.ProcessBlock(blockIndex, block); procErr != nil {
 				return procErr
 			}
-			
+
 			blockIndex++
 			bytesProcessed += int64(n)
-			
+
 			if progress != nil {
 				progress(bytesProcessed, blockIndex)
 			}
 		}
-		
+
 		if err == io.EOF {
 			break
 		}
-		
+
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -169,7 +169,7 @@ func NewStreamingAssembler(writer io.Writer) (*StreamingAssembler, error) {
 	if writer == nil {
 		return nil, errors.New("writer cannot be nil")
 	}
-	
+
 	return &StreamingAssembler{
 		writer:        writer,
 		blockBuffer:   make(map[int]*Block),
@@ -192,22 +192,22 @@ func (a *StreamingAssembler) AddBlock(blockIndex int, block *Block) error {
 	if block == nil {
 		return errors.New("block cannot be nil")
 	}
-	
+
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	
+
 	if a.complete {
 		return errors.New("assembly already complete")
 	}
-	
+
 	if blockIndex < 0 {
 		return errors.New("block index cannot be negative")
 	}
-	
+
 	if _, exists := a.blockBuffer[blockIndex]; exists {
 		return errors.New("block already exists")
 	}
-	
+
 	a.blockBuffer[blockIndex] = block
 	return a.writeSequentialBlocks()
 }
@@ -219,21 +219,21 @@ func (a *StreamingAssembler) writeSequentialBlocks() error {
 		if !exists {
 			break
 		}
-		
+
 		if _, err := a.writer.Write(block.Data); err != nil {
 			return err
 		}
-		
+
 		delete(a.blockBuffer, a.nextIndex)
 		a.nextIndex++
 		a.writtenBlocks++
-		
+
 		if a.totalBlocks > 0 && a.writtenBlocks >= a.totalBlocks {
 			a.complete = true
 			break
 		}
 	}
-	
+
 	return nil
 }
 
@@ -248,17 +248,17 @@ func (a *StreamingAssembler) IsComplete() bool {
 func (a *StreamingAssembler) Finalize() error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	
+
 	if a.complete {
 		return nil
 	}
-	
+
 	indices := make([]int, 0, len(a.blockBuffer))
 	for index := range a.blockBuffer {
 		indices = append(indices, index)
 	}
 	sort.Ints(indices)
-	
+
 	for _, index := range indices {
 		block := a.blockBuffer[index]
 		if _, err := a.writer.Write(block.Data); err != nil {
@@ -267,7 +267,7 @@ func (a *StreamingAssembler) Finalize() error {
 		delete(a.blockBuffer, index)
 		a.writtenBlocks++
 	}
-	
+
 	a.complete = true
 	return nil
 }
@@ -288,11 +288,11 @@ func NewStreamingXORProcessor(provider RandomizerProvider, downstream BlockProce
 	if provider == nil {
 		return nil, errors.New("randomizer provider cannot be nil")
 	}
-	
+
 	if downstream == nil {
 		return nil, errors.New("downstream processor cannot be nil")
 	}
-	
+
 	return &StreamingXORProcessor{
 		provider:   provider,
 		downstream: downstream,
@@ -304,17 +304,17 @@ func (p *StreamingXORProcessor) ProcessBlock(blockIndex int, block *Block) error
 	if block == nil {
 		return errors.New("block cannot be nil")
 	}
-	
+
 	randomizer1, randomizer2, err := p.provider.GetRandomizers(blockIndex)
 	if err != nil {
 		return err
 	}
-	
+
 	xorBlock, err := block.XOR(randomizer1, randomizer2)
 	if err != nil {
 		return err
 	}
-	
+
 	return p.downstream.ProcessBlock(blockIndex, xorBlock)
 }
 
@@ -329,7 +329,7 @@ func NewSimpleRandomizerProvider(randomizer1, randomizer2 *Block) (*SimpleRandom
 	if randomizer1 == nil || randomizer2 == nil {
 		return nil, errors.New("randomizers cannot be nil")
 	}
-	
+
 	return &SimpleRandomizerProvider{
 		randomizer1: randomizer1,
 		randomizer2: randomizer2,

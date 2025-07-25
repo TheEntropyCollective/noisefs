@@ -102,6 +102,81 @@ func (m *DirectoryManifest) AddEntry(entry DirectoryEntry) error {
 	return nil
 }
 
+// RemoveEntry removes an entry from the directory manifest by encrypted name
+func (m *DirectoryManifest) RemoveEntry(encryptedName []byte) error {
+	if len(encryptedName) == 0 {
+		return errors.New("encrypted name cannot be empty")
+	}
+	
+	for i, entry := range m.Entries {
+		if bytes.Equal(entry.EncryptedName, encryptedName) {
+			// Remove entry by replacing with the last entry and shrinking slice
+			m.Entries[i] = m.Entries[len(m.Entries)-1]
+			m.Entries = m.Entries[:len(m.Entries)-1]
+			m.ModifiedAt = time.Now()
+			return nil
+		}
+	}
+	
+	return errors.New("entry not found")
+}
+
+// UpdateEntry updates an existing entry in the directory manifest
+func (m *DirectoryManifest) UpdateEntry(encryptedName []byte, newEntry DirectoryEntry) error {
+	if len(encryptedName) == 0 {
+		return errors.New("encrypted name cannot be empty")
+	}
+	if len(newEntry.EncryptedName) == 0 {
+		return errors.New("new entry encrypted name cannot be empty")
+	}
+	if newEntry.CID == "" {
+		return errors.New("new entry CID cannot be empty")
+	}
+	if newEntry.Type != FileType && newEntry.Type != DirectoryType {
+		return errors.New("invalid entry type")
+	}
+	
+	for i, entry := range m.Entries {
+		if bytes.Equal(entry.EncryptedName, encryptedName) {
+			m.Entries[i] = newEntry
+			m.ModifiedAt = time.Now()
+			return nil
+		}
+	}
+	
+	return errors.New("entry not found")
+}
+
+// FindEntryByName finds an entry by encrypted name and returns its index and the entry
+func (m *DirectoryManifest) FindEntryByName(encryptedName []byte) (int, *DirectoryEntry, error) {
+	if len(encryptedName) == 0 {
+		return -1, nil, errors.New("encrypted name cannot be empty")
+	}
+	
+	for i, entry := range m.Entries {
+		if bytes.Equal(entry.EncryptedName, encryptedName) {
+			return i, &entry, nil
+		}
+	}
+	
+	return -1, nil, errors.New("entry not found")
+}
+
+// HasEntry checks if an entry exists by encrypted name
+func (m *DirectoryManifest) HasEntry(encryptedName []byte) bool {
+	if len(encryptedName) == 0 {
+		return false
+	}
+	
+	for _, entry := range m.Entries {
+		if bytes.Equal(entry.EncryptedName, encryptedName) {
+			return true
+		}
+	}
+	
+	return false
+}
+
 // Marshal serializes the manifest using JSON and gzip compression
 func (m *DirectoryManifest) Marshal() ([]byte, error) {
 	// First, encode with JSON

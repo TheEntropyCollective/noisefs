@@ -19,19 +19,19 @@ func (a *Assembler) Assemble(blocks []*Block) ([]byte, error) {
 	if len(blocks) == 0 {
 		return []byte{}, nil // Empty file
 	}
-	
+
 	var buffer bytes.Buffer
-	
+
 	for _, block := range blocks {
 		if block == nil {
 			return nil, errors.New("nil block in assembly")
 		}
-		
+
 		if _, err := buffer.Write(block.Data); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	return buffer.Bytes(), nil
 }
 
@@ -40,22 +40,20 @@ func (a *Assembler) AssembleToWriter(blocks []*Block, writer io.Writer) error {
 	if len(blocks) == 0 {
 		return nil // Empty file - nothing to write
 	}
-	
+
 	if writer == nil {
 		return errors.New("writer cannot be nil")
 	}
-	
+
 	for _, block := range blocks {
 		if block == nil {
 			return errors.New("nil block in assembly")
 		}
-		
+
 		if _, err := writer.Write(block.Data); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
-
-
