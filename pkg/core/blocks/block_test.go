@@ -33,28 +33,28 @@ func TestNewBlock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			block, err := NewBlock(tt.data)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("NewBlock() error = nil, wantErr %v", tt.wantErr)
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("NewBlock() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if block == nil {
 				t.Error("NewBlock() returned nil block")
 				return
 			}
-			
+
 			if !bytes.Equal(block.Data, tt.data) {
 				t.Errorf("NewBlock() data = %v, want %v", block.Data, tt.data)
 			}
-			
+
 			// Verify the ID is correct SHA-256 hash
 			expectedHash := sha256.Sum256(tt.data)
 			expectedID := hex.EncodeToString(expectedHash[:])
@@ -91,28 +91,28 @@ func TestNewRandomBlock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			block, err := NewRandomBlock(tt.size)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("NewRandomBlock() error = nil, wantErr %v", tt.wantErr)
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("NewRandomBlock() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if block == nil {
 				t.Error("NewRandomBlock() returned nil block")
 				return
 			}
-			
+
 			if len(block.Data) != tt.size {
 				t.Errorf("NewRandomBlock() size = %v, want %v", len(block.Data), tt.size)
 			}
-			
+
 			// Verify the data appears random (not all zeros)
 			allZeros := true
 			for _, b := range block.Data {
@@ -128,27 +128,26 @@ func TestNewRandomBlock(t *testing.T) {
 	}
 }
 
-
 func TestBlockVerifyIntegrity(t *testing.T) {
 	data := []byte("test data")
-	
+
 	// Create a block normally
 	block, err := NewBlock(data)
 	if err != nil {
 		t.Fatalf("Failed to create block: %v", err)
 	}
-	
+
 	// Should verify correctly
 	if !block.VerifyIntegrity() {
 		t.Error("Block.VerifyIntegrity() = false, want true for valid block")
 	}
-	
+
 	// Corrupt the ID
 	block.ID = "invalid_id"
 	if block.VerifyIntegrity() {
 		t.Error("Block.VerifyIntegrity() = true, want false for corrupted ID")
 	}
-	
+
 	// Corrupt the data but fix the ID
 	block.Data = []byte("corrupted data")
 	if block.VerifyIntegrity() {
@@ -162,7 +161,7 @@ func TestBlockSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create block: %v", err)
 	}
-	
+
 	if block.Size() != len(data) {
 		t.Errorf("Block.Size() = %v, want %v", block.Size(), len(data))
 	}
@@ -215,31 +214,31 @@ func TestBlockXOR(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create data block: %v", err)
 			}
-			
+
 			rand1Block, err := NewBlock(tt.rand1)
 			if err != nil {
 				t.Fatalf("Failed to create randomizer1 block: %v", err)
 			}
-			
+
 			rand2Block, err := NewBlock(tt.rand2)
 			if err != nil {
 				t.Fatalf("Failed to create randomizer2 block: %v", err)
 			}
-			
+
 			result, err := dataBlock.XOR(rand1Block, rand2Block)
-			
+
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Block.XOR() error = nil, wantErr %v", tt.wantErr)
 				}
 				return
 			}
-			
+
 			if err != nil {
 				t.Errorf("Block.XOR() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			
+
 			if !bytes.Equal(result.Data, tt.want) {
 				t.Errorf("Block.XOR() = %v, want %v", result.Data, tt.want)
 			}
@@ -252,41 +251,40 @@ func TestXORReversibility(t *testing.T) {
 	original := []byte("original data123")
 	randomizer1 := []byte("random key1!!!!!")
 	randomizer2 := []byte("random key2!!!!!")
-	
+
 	if len(original) != len(randomizer1) || len(original) != len(randomizer2) {
 		t.Fatal("Test data must be same length")
 	}
-	
+
 	origBlock, err := NewBlock(original)
 	if err != nil {
 		t.Fatalf("Failed to create original block: %v", err)
 	}
-	
+
 	rand1Block, err := NewBlock(randomizer1)
 	if err != nil {
 		t.Fatalf("Failed to create randomizer1 block: %v", err)
 	}
-	
+
 	rand2Block, err := NewBlock(randomizer2)
 	if err != nil {
 		t.Fatalf("Failed to create randomizer2 block: %v", err)
 	}
-	
+
 	// Encrypt: original XOR randomizer1 XOR randomizer2
 	encrypted, err := origBlock.XOR(rand1Block, rand2Block)
 	if err != nil {
 		t.Fatalf("Failed to XOR encrypt: %v", err)
 	}
-	
+
 	// Decrypt: encrypted XOR randomizer1 XOR randomizer2
 	decrypted, err := encrypted.XOR(rand1Block, rand2Block)
 	if err != nil {
 		t.Fatalf("Failed to XOR decrypt: %v", err)
 	}
-	
+
 	// Should get back original data
 	if !bytes.Equal(decrypted.Data, original) {
 		t.Errorf("XOR is not reversible: got %v, want %v", decrypted.Data, original)
 	}
 }
-

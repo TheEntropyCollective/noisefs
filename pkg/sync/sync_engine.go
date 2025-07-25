@@ -10,19 +10,21 @@ import (
 	"time"
 
 	noisefs "github.com/TheEntropyCollective/noisefs/pkg/core/client"
+	"github.com/TheEntropyCollective/noisefs/pkg/core/crypto"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage"
 	"github.com/TheEntropyCollective/noisefs/pkg/storage/cache"
 )
 
 // SyncEngine coordinates bi-directional synchronization between local and remote directories
 type SyncEngine struct {
-	stateStore       *SyncStateStore
-	fileWatcher      *FileWatcher
-	remoteMonitor    *RemoteChangeMonitor
-	conflictResolver *ConflictResolver
-	directoryManager *storage.DirectoryManager
-	noisefsClient    *noisefs.Client
-	config           *SyncConfig
+	stateStore        *SyncStateStore
+	fileWatcher       *FileWatcher
+	remoteMonitor     *RemoteChangeMonitor
+	conflictResolver  *ConflictResolver
+	directoryManager  *storage.DirectoryManager
+	manifestUpdateMgr *ManifestUpdateManager
+	noisefsClient     *noisefs.Client
+	config            *SyncConfig
 
 	// Channels for coordinating events
 	localEventChan  chan SyncEvent
@@ -90,6 +92,7 @@ func NewSyncEngine(
 	fileWatcher *FileWatcher,
 	remoteMonitor *RemoteChangeMonitor,
 	directoryManager *storage.DirectoryManager,
+	encryptionKey *crypto.EncryptionKey,
 	config *SyncConfig,
 ) (*SyncEngine, error) {
 	if stateStore == nil {
@@ -103,6 +106,9 @@ func NewSyncEngine(
 	}
 	if directoryManager == nil {
 		return nil, fmt.Errorf("directory manager cannot be nil")
+	}
+	if encryptionKey == nil {
+		return nil, fmt.Errorf("encryption key cannot be nil")
 	}
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
@@ -124,6 +130,18 @@ func NewSyncEngine(
 		syncOpChan:       make(chan SyncOperation, 100),
 		stats:            &SyncEngineStats{},
 	}
+
+	// Create manifest update manager
+	manifestUpdateMgr, err := NewManifestUpdateManager(
+		directoryManager,
+		stateStore,
+		encryptionKey,
+		DefaultManifestUpdateConfig(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create manifest update manager: %w", err)
+	}
+	engine.manifestUpdateMgr = manifestUpdateMgr
 
 	// Create NoiseFS client from directory manager's storage manager
 	// Use memory cache for sync operations
@@ -724,8 +742,34 @@ func (se *SyncEngine) executeUpload(session *SyncSession, op SyncOperation) erro
 
 	fmt.Printf("Successfully uploaded: %s -> %s (CID: %s)\n", op.LocalPath, op.RemotePath, descriptorCID)
 
-	// TODO: Store the mapping of remote path to descriptor CID in the sync state
-	// This would allow us to track which files exist remotely and their CIDs
+	// Update parent directory manifest with the new file
+	result, err := se.manifestUpdateMgr.UpdateAfterFileOperation(
+		session.SyncID,
+		op.RemotePath,
+		ManifestOpAdd,
+		descriptorCID,
+		"", // No old CID for new files
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update directory manifest: %w", err)
+	}
+
+	fmt.Printf("Updated directory manifest: %s (new CID: %s)\n", filepath.Dir(op.RemotePath), result.NewCID)
+
+	// Propagate the changes up the directory tree
+	dirPath := filepath.Dir(op.RemotePath)
+	propagateResult, err := se.manifestUpdateMgr.PropagateToAncestors(
+		session.SyncID,
+		dirPath,
+		result.NewCID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to propagate manifest updates: %w", err)
+	}
+
+	if len(propagateResult.UpdatedPaths) > 0 {
+		fmt.Printf("Propagated updates to ancestor directories: %v\n", propagateResult.UpdatedPaths)
+	}
 
 	return nil
 }
@@ -782,8 +826,35 @@ func (se *SyncEngine) executeDelete(session *SyncSession, op SyncOperation) erro
 		}
 	}
 
-	// TODO: Implement remote deletion logic
-	fmt.Printf("Deleting: %s\n", op.LocalPath)
+	// Update parent directory manifest to remove the file
+	result, err := se.manifestUpdateMgr.UpdateAfterFileOperation(
+		session.SyncID,
+		op.RemotePath,
+		ManifestOpRemove,
+		"", // No new CID for removals
+		"", // TODO: Get old CID from sync state if needed
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update directory manifest after deletion: %w", err)
+	}
+
+	fmt.Printf("Deleting: %s (updated directory manifest: %s)\n", op.LocalPath, result.NewCID)
+
+	// Propagate the changes up the directory tree
+	dirPath := filepath.Dir(op.RemotePath)
+	propagateResult, err := se.manifestUpdateMgr.PropagateToAncestors(
+		session.SyncID,
+		dirPath,
+		result.NewCID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to propagate manifest updates after deletion: %w", err)
+	}
+
+	if len(propagateResult.UpdatedPaths) > 0 {
+		fmt.Printf("Propagated deletion updates to ancestor directories: %v\n", propagateResult.UpdatedPaths)
+	}
+
 	return nil
 }
 
@@ -823,6 +894,13 @@ func (se *SyncEngine) Stop() error {
 		se.StopSync(syncID)
 	}
 	se.mu.Unlock()
+
+	// Stop manifest update manager
+	if se.manifestUpdateMgr != nil {
+		if err := se.manifestUpdateMgr.Stop(); err != nil {
+			fmt.Printf("Warning: failed to stop manifest update manager: %v\n", err)
+		}
+	}
 
 	// Close channels
 	close(se.localEventChan)
