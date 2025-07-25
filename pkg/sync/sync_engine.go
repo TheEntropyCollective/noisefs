@@ -42,14 +42,15 @@ type SyncEngine struct {
 
 // SyncSession represents an active sync session
 type SyncSession struct {
-	SyncID     string
-	LocalPath  string
-	RemotePath string
-	State      *SyncState
-	LastSync   time.Time
-	Status     SyncStatus
-	Progress   *SyncProgress
-	mu         sync.RWMutex
+	SyncID      string
+	LocalPath   string
+	RemotePath  string
+	ManifestCID string
+	State       *SyncState
+	LastSync    time.Time
+	Status      SyncStatus
+	Progress    *SyncProgress
+	mu          sync.RWMutex
 }
 
 // SyncStatus represents the current status of a sync session
@@ -172,12 +173,13 @@ func (se *SyncEngine) StartSync(syncID, localPath, remotePath, manifestCID strin
 
 	// Create sync session
 	session := &SyncSession{
-		SyncID:     syncID,
-		LocalPath:  localPath,
-		RemotePath: remotePath,
-		State:      state,
-		LastSync:   time.Now(),
-		Status:     StatusIdle,
+		SyncID:      syncID,
+		LocalPath:   localPath,
+		RemotePath:  remotePath,
+		ManifestCID: manifestCID,
+		State:       state,
+		LastSync:    time.Now(),
+		Status:      StatusIdle,
 		Progress: &SyncProgress{
 			StartTime: time.Now(),
 		},
@@ -477,13 +479,14 @@ func (se *SyncEngine) GetSyncStatus(syncID string) (*SyncSession, error) {
 	defer session.mu.RUnlock()
 
 	return &SyncSession{
-		SyncID:     session.SyncID,
-		LocalPath:  session.LocalPath,
-		RemotePath: session.RemotePath,
-		State:      session.State,
-		LastSync:   session.LastSync,
-		Status:     session.Status,
-		Progress:   session.Progress,
+		SyncID:      session.SyncID,
+		LocalPath:   session.LocalPath,
+		RemotePath:  session.RemotePath,
+		ManifestCID: session.ManifestCID,
+		State:       session.State,
+		LastSync:    session.LastSync,
+		Status:      session.Status,
+		Progress:    session.Progress,
 	}, nil
 }
 
@@ -496,13 +499,14 @@ func (se *SyncEngine) ListActiveSyncs() []*SyncSession {
 	for _, session := range se.activeSyncs {
 		session.mu.RLock()
 		sessions = append(sessions, &SyncSession{
-			SyncID:     session.SyncID,
-			LocalPath:  session.LocalPath,
-			RemotePath: session.RemotePath,
-			State:      session.State,
-			LastSync:   session.LastSync,
-			Status:     session.Status,
-			Progress:   session.Progress,
+			SyncID:      session.SyncID,
+			LocalPath:   session.LocalPath,
+			RemotePath:  session.RemotePath,
+			ManifestCID: session.ManifestCID,
+			State:       session.State,
+			LastSync:    session.LastSync,
+			Status:      session.Status,
+			Progress:    session.Progress,
 		})
 		session.mu.RUnlock()
 	}
@@ -538,14 +542,62 @@ func (se *SyncEngine) performInitialSync(session *SyncSession) {
 	session.Status = StatusSyncing
 	session.mu.Unlock()
 
-	// Initial sync logic would go here
-	// For now, just mark as idle
-	time.Sleep(100 * time.Millisecond) // Simulate work
+	// Create directory scanner
+	scanner := NewDirectoryScanner(se.directoryManager)
 
+	// Perform initial scan
+	ctx := context.Background()
+	
+	scanResult, err := scanner.PerformInitialScan(ctx, session.LocalPath, session.RemotePath, session.ManifestCID, session.State)
+	if err != nil {
+		session.mu.Lock()
+		session.Status = StatusError
+		session.mu.Unlock()
+		fmt.Printf("Initial sync failed for session %s: %v\n", session.SyncID, err)
+		return
+	}
+
+	// Update session state with scan results
+	session.State.LocalSnapshot = scanResult.LocalSnapshot
+	session.State.RemoteSnapshot = scanResult.RemoteSnapshot
+	session.State.LastSync = time.Now()
+
+	// Save updated state
+	if err := se.stateStore.SaveState(session.SyncID, session.State); err != nil {
+		fmt.Printf("Failed to save state for session %s: %v\n", session.SyncID, err)
+		// Continue anyway - we'll try again later
+	}
+
+	// Generate sync operations from detected changes
+	operations := scanner.GenerateSyncOperations(session.SyncID, scanResult.Changes, session.LocalPath, session.RemotePath)
+
+	// Queue operations for processing
+	for _, op := range operations {
+		// Add to pending operations
+		if err := se.stateStore.AddPendingOperation(session.SyncID, op); err != nil {
+			fmt.Printf("Failed to add pending operation: %v\n", err)
+			continue
+		}
+
+		// Queue for processing
+		select {
+		case se.syncOpChan <- op:
+		default:
+			fmt.Printf("Sync operation queue full, dropping operation %s\n", op.ID)
+		}
+	}
+
+	// Update session progress
 	session.mu.Lock()
 	session.Status = StatusIdle
 	session.LastSync = time.Now()
+	session.Progress.TotalOperations = len(operations)
+	session.Progress.CompletedOperations = 0
+	session.Progress.CurrentOperation = "Initial sync completed"
 	session.mu.Unlock()
+
+	fmt.Printf("Initial sync completed for session %s: found %d changes, generated %d operations\n", 
+		session.SyncID, len(scanResult.Changes), len(operations))
 }
 
 // processSyncOperations processes queued sync operations
